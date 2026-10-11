@@ -1,0 +1,16 @@
+# Default: normalize text files.
+* text=auto
+
+# Shell scripts must keep LF endings, or Linux fails at the shebang with
+# "bash\r: No such file or directory" after a Windows checkout.
+*.sh text eol=lf
+
+# Windows scripts keep CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary formats.
+*.png binary
+*.jpg binary
+*.woff2 binary
