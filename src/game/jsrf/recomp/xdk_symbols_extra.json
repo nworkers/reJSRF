@@ -1,0 +1,10 @@
+{
+  "comment": "XDK functions XbSymbolDatabase does not identify in this build. Names and roles from jsrf-recomp (MIT), experiments/d3d8_boundary/inferred_names.json; inferred, not yet confirmed on our side.",
+  "symbols": [
+    {"library": "D3D8", "name": "D3DDevice_GetRasterStatus", "address": "0x0018D660", "kind": "function"},
+    {"library": "D3D8", "name": "D3DTexture_GetLevelDesc", "address": "0x0018E5D0", "kind": "function"},
+    {"library": "D3D8", "name": "Direct3D_GetAdapterCount", "address": "0x00199820", "kind": "function"},
+    {"library": "D3D8", "name": "Direct3D_CheckDeviceMultiSampleType", "address": "0x00199AE0", "kind": "function"},
+    {"library": "D3D8", "name": "D3D_FreeContiguousMemory", "address": "0x00199B60", "kind": "function"}
+  ]
+}

@@ -20,12 +20,17 @@ namespace rexbox::recomp
 constexpr uint32_t kStopUnimplementedKernel = 1;
 constexpr uint32_t kStopUnresolvedCall = 2;
 constexpr uint32_t kStopThreadExit = 3;
+constexpr uint32_t kStopUnimplementedHle = 4;
 
 void AttachBridge(runtime::GuestMemory* memory, runtime::HleRegistry* registry);
 
 // The HLE binding at `va`, or nullptr (what recomp_lookup_manual returns).
 using BridgeFunction = void (*)();
 BridgeFunction RecompLookupManual(uint32_t va);
+
+// The XDK function (library, name) behind the last kStopUnimplementedHle on
+// this thread, or nullptrs; clears it.
+void TakeStopSymbol(const char** library, const char** name);
 
 // The VA that caused the last stop on this thread; clears it.
 runtime::GuestAddress TakeStopTarget();

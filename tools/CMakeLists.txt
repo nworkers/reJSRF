@@ -1,6 +1,10 @@
 add_executable(rexbox_xbe_info xbe_info/main.cpp)
 target_link_libraries(rexbox_xbe_info PRIVATE rexbox_xbe rexbox_hle_kernel)
 
+# XDK symbol identification for regenerate.py.
+add_executable(rexbox_xdk_symbols xdk_symbols/main.cpp)
+target_link_libraries(rexbox_xdk_symbols PRIVATE libXbSymbolDatabase)
+
 # Kernel HLE checks that need no game data (run in CI).
 add_executable(rexbox_kernel_probe kernel_probe/main.cpp)
 target_link_libraries(rexbox_kernel_probe PRIVATE rexbox_hle_kernel)

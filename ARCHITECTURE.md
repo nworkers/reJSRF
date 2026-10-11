@@ -1,6 +1,6 @@
 # reJSRF 아키텍처
 
-현재 구현된 코드의 구조를 기록한다. 결정의 근거는 [설계 i001](docs/design/20261012-i001-project-bootstrap.md), [i002](docs/design/20261012-i002-recomp-pipeline.md), [i003](docs/design/20261012-i003-kernel-hle.md)에 있다.
+현재 구현된 코드의 구조를 기록한다. 결정의 근거는 [설계 i001](docs/design/20261012-i001-project-bootstrap.md), [i002](docs/design/20261012-i002-recomp-pipeline.md), [i003](docs/design/20261012-i003-kernel-hle.md), [i006](docs/design/20261012-i006-xdk-symbol-binding.md)에 있다.
 
 ## 1. 레이어와 CMake 타깃
 
@@ -34,13 +34,14 @@ flowchart BT
 | `rexbox_platform` | `include/rexbox/platform/`, `src/platform/<os>/` | 가상 메모리, `RunGuarded`/`RaiseStop`, `CreateHostThread` | Win32 구현 |
 | `rexbox_xbe` | `src/rexbox/xbe/` | XBE 파싱 | 구현 |
 | `rexbox_runtime` | `src/rexbox/runtime/` | `GuestMemory`(based 모델, 스칼라 접근), `GuestHeap`(페이지 할당자), `HleRegistry`, `GuestCpu`·`GuestExecutor` 계약, `Environment`, `HleCall`, 커널 thunk 합성 주소 | 구현 |
-| `rexbox_recomp` | `src/rexbox/recomp/` | 생성 코드 ABI 전역·콜백, `RecompExecutor`(게스트 스레드 = 호스트 스레드, `CallGuest`, 스레드별 보고) | 구현 |
+| `rexbox_recomp` | `src/rexbox/recomp/` | 생성 코드 ABI 전역·콜백, `RecompExecutor`(게스트 스레드 = 호스트 스레드, `CallGuest`, 스레드별 보고), XDK override 진입점 `rexbox_hle_enter` | 구현 |
 | `rexbox_hle_kernel` | `src/rexbox/hle/kernel/` | 커널 export 103개(아래 표) | 부팅이 닿은 서비스 |
 | `rexbox_hle_xapi`, `_d3d8`, `_dsound`, `_xinput` | `src/rexbox/hle/<module>/` | XDK 라이브러리 HLE | 등록 진입점만 |
 | `rejsrf_game` | `src/game/jsrf/` | 프로파일, 생성된 lookup 노출, 디컴파일 함수, 함수 탐색 seed(`recomp/seed_functions.json`) | 디컴파일 1개, seed 10개 |
 | `rejsrf_recomp` | `gen/jsrf_us/gen/` (gitignore) | lift된 C 8,721개 함수 | `gen/`이 있을 때만 |
 | `rejsrf` | `src/app/` | 부팅 orchestration과 스레드 보고 | D3D8 초기화까지 |
 | `rexbox_xbe_info` | `tools/xbe_info/` | XBE 정보 | 구현 |
+| `rexbox_xdk_symbols` | `tools/xdk_symbols/` | XbSymbolDatabase로 XDK 함수·변수 식별 → JSON (`regenerate.py`가 사용) | 구현 |
 | `rexbox_kernel_probe` | `tools/kernel_probe/` | 게임 없이 커널 export 검사(27개, CI) | 구현 |
 | `rejsrf_decomp_check` | `tools/decomp_check/` | 디컴파일 함수와 lift 본문 비교 | 구현 |
 
@@ -65,12 +66,15 @@ flowchart BT
 ```mermaid
 flowchart LR
     XBE["roms/.../default_eng.xbe"] --> REGEN["scripts/recomp/regenerate.py"]
-    SEEDS["src/game/jsrf/recomp/*.json (seeds)"] --> REGEN
+    SEEDS["src/game/jsrf/recomp/*.json (seeds, hle_libraries, extra symbols)"] --> REGEN
+    SYM["rexbox_xdk_symbols (XbSymbolDatabase)"] --> REGEN
     DECOMP["src/game/jsrf/decomp/*.c"] --> REGEN
     REGEN --> TOOLS["third_party/xboxrecomp tools"]
     TOOLS --> GEN["gen/jsrf_us/gen/*.c + recomp_types.h"]
     GEN --> CMAKE["CMake: rejsrf_recomp<br/>ABI header hash must match the pin"]
 ```
+
+* HLE 대상 라이브러리(`hle_libraries.json`, 지금은 D3D8·D3D8LTCG)의 함수마다 `rexbox_hle_overrides.c`에 override `sub_X`가 생성된다. override는 `rexbox_hle_enter(slot)`로 같은 이름의 HLE export를 부르고, 없으면 실행을 멈춰 `stopped at unimplemented XDK function <library> <name>`을 보고한다. 원본은 `sub_X_gen`으로 남는다(`REXBOX_HLE_FALLBACK=lifted`이면 원본을 실행하고 기록하는 진단 모드).
 
 ## 3. 실행 흐름
 
@@ -104,13 +108,14 @@ sequenceDiagram
 * MSVC: 전역 `/utf-8 /permissive- /EHa`, `NOMINMAX WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS`; 우리 타깃 `/W4`; 생성 코드 `/w /bigobj /MP`. 게스트 스레드의 호스트 스택은 64 MiB.
 * `REJSRF_RECOMP_GEN_DIR`(기본 `gen/jsrf_us/gen`)이 없으면 `rejsrf_recomp`와 `rejsrf_decomp_check`를 만들지 않는다(CI). `rexbox_kernel_probe`는 항상 빌드되고 CI에서 실행된다.
 * 라이선스 가드 `REJSRF_COPYLEFT_PATHS`는 모든 우리 타깃과 `rejsrf_recomp`에 적용된다.
-* 실행 시 환경 변수: `REJSRF_HDD_ROOT`(HDD 루트, 기본 `./hdd`), `REXBOX_TRACE_FILES`(모든 파일 열기 기록).
+* 실행 시 환경 변수: `REJSRF_HDD_ROOT`(HDD 루트, 기본 `./hdd`), `REXBOX_TRACE_FILES`(모든 파일 열기 기록), `REXBOX_HLE_FALLBACK=lifted`(미구현 XDK 함수의 원본 실행, 진단용).
+* `third_party/XbSymbolDatabase`(submodule)는 `rexbox_xdk_symbols`용으로 라이브러리만 빌드된다. 생성 코드를 처음 만들 때는 도구를 먼저 빌드해야 한다.
 
 ---
 
 # reJSRF Architecture
 
-This records the structure of the code as implemented now. The reasons are in [design i001](docs/design/20261012-i001-project-bootstrap.md), [i002](docs/design/20261012-i002-recomp-pipeline.md) and [i003](docs/design/20261012-i003-kernel-hle.md).
+This records the structure of the code as implemented now. The reasons are in [design i001](docs/design/20261012-i001-project-bootstrap.md), [i002](docs/design/20261012-i002-recomp-pipeline.md) [i003](docs/design/20261012-i003-kernel-hle.md) and [i006](docs/design/20261012-i006-xdk-symbol-binding.md).
 
 ## 1. Layers and CMake targets
 
@@ -118,7 +123,7 @@ The diagrams and tables above apply. In short: `rexbox_platform` (virtual memory
 
 ## 2. Generating the recompiled code
 
-`scripts/recomp/regenerate.py` runs the pinned xboxrecomp tools on the user's XBE, passing the committed function seeds (`src/game/jsrf/recomp/*.json`) to the disassembler and the decompiled `sub_X` definitions to the lifter; CMake checks the generated ABI header against the pin.
+`scripts/recomp/regenerate.py` runs the pinned xboxrecomp tools on the user's XBE, passing the committed function seeds (`src/game/jsrf/recomp/*.json`) to the disassembler and the decompiled `sub_X` definitions to the lifter; CMake checks the generated ABI header against the pin. It also runs `rexbox_xdk_symbols` (XbSymbolDatabase) and, for every function of the libraries in `hle_libraries.json` (now D3D8 and D3D8LTCG), generates an override `sub_X` in `rexbox_hle_overrides.c` that calls the HLE export of the same name through `rexbox_hle_enter(slot)`, or stops and reports `stopped at unimplemented XDK function <library> <name>`; the original stays as `sub_X_gen` (`REXBOX_HLE_FALLBACK=lifted` runs and logs it instead, a diagnostic mode).
 
 ## 3. Execution flow
 
@@ -138,4 +143,5 @@ The app builds guest memory, places the XBE, creates the heap and installs the E
 * MSVC: `/utf-8 /permissive- /EHa` and `NOMINMAX WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS` globally; `/W4` on our targets; `/w /bigobj /MP` for generated code. Guest threads get 64 MiB host stacks.
 * Without `REJSRF_RECOMP_GEN_DIR` (default `gen/jsrf_us/gen`), `rejsrf_recomp` and `rejsrf_decomp_check` are not created (CI). `rexbox_kernel_probe` is always built and runs in CI.
 * The license guard `REJSRF_COPYLEFT_PATHS` applies to all our targets and to `rejsrf_recomp`.
-* Run-time environment variables: `REJSRF_HDD_ROOT` (HDD root, default `./hdd`) and `REXBOX_TRACE_FILES` (log every file open).
+* Run-time environment variables: `REJSRF_HDD_ROOT` (HDD root, default `./hdd`), `REXBOX_TRACE_FILES` (log every file open) and `REXBOX_HLE_FALLBACK=lifted` (run the original of an unimplemented XDK function; diagnostic).
+* `third_party/XbSymbolDatabase` (submodule) is built, library only, for `rexbox_xdk_symbols`; the tool must be built before generating code for the first time.

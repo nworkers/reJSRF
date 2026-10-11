@@ -40,3 +40,15 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## XbSymbolDatabase
+
+* 출처 / Source: https://github.com/Cxbx-Reloaded/XbSymbolDatabase
+* 라이선스 / License: MIT (Copyright (c) 2023 The XbSymbolDatabase authors). 전문은 `third_party/XbSymbolDatabase/LICENSE`. / Full text in `third_party/XbSymbolDatabase/LICENSE`.
+* 포함 방식 / How included: git submodule `third_party/XbSymbolDatabase` (`20eced544726f5558c5a408458f38a086cc4e543`). 라이브러리 `libXbSymbolDatabase`만 빌드해 도구 `rexbox_xdk_symbols`에 링크한다. 게임 실행 파일에는 들어가지 않는다. / Only the `libXbSymbolDatabase` library is built, linked into the `rexbox_xdk_symbols` tool; it does not enter the game executable.
+
+## jsrf-recomp (data)
+
+* 출처 / Source: https://github.com/andeecollard/jsrf-recomp, `experiments/d3d8_boundary/inferred_names.json`
+* 라이선스 / License: MIT (Copyright (c) 2026 sp00nz; jsrf-recomp is a fork of xboxrecomp).
+* 사용 / Use: `src/game/jsrf/recomp/xdk_symbols_extra.json`의 D3D8 함수 이름과 주소 5개 / five D3D8 function names and addresses in `src/game/jsrf/recomp/xdk_symbols_extra.json`.
