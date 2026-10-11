@@ -32,6 +32,11 @@ void rexbox_recomp_reset_thread(uint32_t esp, uint32_t fs_base);
 void rexbox_recomp_get_gprs(RexboxRecompGprs* out);
 void rexbox_recomp_set_gprs(const RexboxRecompGprs* in);
 
+/* One register by x86 encoding index (0 = eax ... 7 = edi). */
+uint32_t rexbox_recomp_get_gpr(int index);
+void rexbox_recomp_set_gpr(int index, uint32_t value);
+uint32_t rexbox_recomp_get_fs_base(void);
+
 /* The most recent indirect-call target on this thread, 0 if none. */
 uint32_t rexbox_recomp_last_icall(void);
 

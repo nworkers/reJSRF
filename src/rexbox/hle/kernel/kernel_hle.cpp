@@ -1,5 +1,7 @@
 #include "rexbox/hle/kernel/kernel_hle.h"
 
+#include "kernel_internal.h"
+#include "kernel_vfs.h"
 #include "rexbox/hle/kernel/kernel_exports.h"
 #include "rexbox/runtime/guest_memory.h"
 #include "rexbox/runtime/hle_registry.h"
@@ -9,32 +11,47 @@
 namespace rexbox::hle::kernel
 {
 
-void RegisterKernelHle(runtime::HleRegistry& /*registry*/)
+void RegisterKernelHle(runtime::HleRegistry& registry)
 {
-    // No kernel services are implemented yet; they arrive one subsystem at a
-    // time (memory, file I/O, threads and sync, HAL), each in its own file.
+    RegisterDataExports(registry);
+    RegisterThreadExports(registry);
+    RegisterSyncExports(registry);
+    RegisterMemoryExports(registry);
+    RegisterObjectExports(registry);
+    RegisterRtlExports(registry);
+    RegisterHalExports(registry);
+    RegisterFileExports(registry);
+    RegisterCryptoExports(registry);
+}
+
+void InitializeKernel(const KernelConfig& config)
+{
+    InitializeKernelData();
+    VfsInitialize(config.game_directory, config.hdd_root);
 }
 
 std::vector<uint32_t> BindKernelImports(const xbe::XbeImage& image, runtime::GuestMemory& memory,
                                         runtime::HleRegistry& registry)
 {
     std::vector<uint32_t> missing;
+    const auto& data_exports = State().data_exports;
     runtime::GuestAddress slot = image.kernel_thunk_address();
     for (const uint32_t ordinal : image.kernel_imports())
     {
-        const runtime::GuestAddress thunk = runtime::KernelThunkVa(ordinal);
-        if (memory.IsValid(slot, 4))
-        {
-            uint8_t* bytes = memory.Translate(slot);
-            bytes[0] = static_cast<uint8_t>(thunk);
-            bytes[1] = static_cast<uint8_t>(thunk >> 8);
-            bytes[2] = static_cast<uint8_t>(thunk >> 16);
-            bytes[3] = static_cast<uint8_t>(thunk >> 24);
-        }
         const char* name = KernelExportName(ordinal);
-        if (name == nullptr || !registry.BindGuestAddress(thunk, name))
+        const auto data = name != nullptr ? data_exports.find(name) : data_exports.end();
+        if (data != data_exports.end())
         {
-            missing.push_back(ordinal);
+            memory.Write32(slot, data->second);
+        }
+        else
+        {
+            const runtime::GuestAddress thunk = runtime::KernelThunkVa(ordinal);
+            memory.Write32(slot, thunk);
+            if (name == nullptr || !registry.BindGuestAddress(thunk, name))
+            {
+                missing.push_back(ordinal);
+            }
         }
         slot += 4;
     }

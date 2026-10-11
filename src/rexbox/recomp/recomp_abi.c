@@ -99,6 +99,36 @@ void rexbox_recomp_set_gprs(const RexboxRecompGprs* in)
     g_edi = in->edi;
 }
 
+static uint32_t* gpr_slot(int index)
+{
+    switch (index)
+    {
+    case 0: return &g_eax;
+    case 1: return &g_ecx;
+    case 2: return &g_edx;
+    case 3: return &g_ebx;
+    case 4: return &g_esp;
+    case 5: return &g_ebp;
+    case 6: return &g_esi;
+    default: return &g_edi;
+    }
+}
+
+uint32_t rexbox_recomp_get_gpr(int index)
+{
+    return *gpr_slot(index);
+}
+
+void rexbox_recomp_set_gpr(int index, uint32_t value)
+{
+    *gpr_slot(index) = value;
+}
+
+uint32_t rexbox_recomp_get_fs_base(void)
+{
+    return g_fs_base;
+}
+
 uint32_t rexbox_recomp_last_icall(void)
 {
     if (g_icall_count == 0)

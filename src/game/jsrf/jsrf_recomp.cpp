@@ -1,17 +1,17 @@
 #include "rejsrf/jsrf_profile.h"
 
 #if defined(REJSRF_HAS_RECOMP)
-extern "C" void xbe_entry_point(void);
+extern "C" rejsrf::RecompiledFunction recomp_lookup(uint32_t xbox_va);
 extern "C" int recomp_dispatch_init(void);
 #endif
 
 namespace rejsrf
 {
 
-RecompiledFunction RecompiledEntry()
+RecompiledLookup RecompiledLookupFunction()
 {
 #if defined(REJSRF_HAS_RECOMP)
-    return &xbe_entry_point;
+    return &recomp_lookup;
 #else
     return nullptr;
 #endif

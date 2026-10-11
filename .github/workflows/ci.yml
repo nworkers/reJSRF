@@ -39,6 +39,10 @@ jobs:
         shell: powershell
         run: .\scripts\build_win32_x86.ps1 -Configuration ${{ matrix.configuration }}
 
+      - name: Probe - kernel HLE
+        shell: powershell
+        run: .\build\win32_x86\tools\${{ matrix.configuration }}\rexbox_kernel_probe.exe
+
       - name: Smoke - app rejects a non-XBE file
         shell: powershell
         run: |

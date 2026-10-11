@@ -1,21 +1,20 @@
 # reJSRF 아키텍처
 
-현재 구현된 코드의 구조를 기록한다. 결정의 근거는 [설계 i001](docs/design/20261012-i001-project-bootstrap.md), [설계 i002](docs/design/20261012-i002-recomp-pipeline.md)에 있다.
+현재 구현된 코드의 구조를 기록한다. 결정의 근거는 [설계 i001](docs/design/20261012-i001-project-bootstrap.md), [i002](docs/design/20261012-i002-recomp-pipeline.md), [i003](docs/design/20261012-i003-kernel-hle.md)에 있다.
 
 ## 1. 레이어와 CMake 타깃
 
 ```mermaid
 flowchart BT
-    PLAT["rexbox_platform<br/>virtual memory, RunGuarded"]
+    PLAT["rexbox_platform<br/>virtual memory, RunGuarded, host threads"]
     XBE["rexbox_xbe"]
-    RT["rexbox_runtime<br/>GuestMemory, HleRegistry, kernel thunk VAs"]
-    REC["rexbox_recomp<br/>lifter ABI adapter"]
+    RT["rexbox_runtime<br/>GuestMemory, GuestHeap, HleRegistry,<br/>GuestCpu/GuestExecutor contract, Environment, HleCall"]
+    REC["rexbox_recomp<br/>lifter ABI adapter, RecompExecutor"]
     HLE["rexbox_hle_kernel / xapi / d3d8 / dsound / xinput"]
-    GAME["rejsrf_game<br/>profile, entry, decomp/"]
+    GAME["rejsrf_game<br/>profile, lookup, decomp/"]
     GEN["rejsrf_recomp<br/>lifted C (only when gen/ exists)"]
     APP["rejsrf (exe)"]
-    INFO["rexbox_xbe_info (exe)"]
-    CHECK["rejsrf_decomp_check (exe)"]
+    TOOLS["rexbox_xbe_info, rexbox_kernel_probe,<br/>rejsrf_decomp_check (exe)"]
 
     RT --> XBE
     RT --> PLAT
@@ -26,40 +25,52 @@ flowchart BT
     GEN --> REC
     APP --> GAME
     APP --> HLE
-    INFO --> XBE
-    INFO --> HLE
-    CHECK --> GAME
+    TOOLS --> HLE
+    TOOLS --> GAME
 ```
 
 | 타깃 | 경로 | 책임 | 상태 |
 |---|---|---|---|
-| `rexbox_platform` | `include/rexbox/platform/`, `src/platform/<os>/` | OS 계약: 가상 메모리, `RunGuarded`/`RaiseStop`(guarded 실행) | Win32 구현 |
+| `rexbox_platform` | `include/rexbox/platform/`, `src/platform/<os>/` | 가상 메모리, `RunGuarded`/`RaiseStop`, `CreateHostThread` | Win32 구현 |
 | `rexbox_xbe` | `src/rexbox/xbe/` | XBE 파싱 | 구현 |
-| `rexbox_runtime` | `src/rexbox/runtime/` | `GuestMemory`(based 모델), `LoadXbeIntoGuestMemory`, `HleRegistry`, 커널 thunk 합성 주소 계약(`kernel_thunks.h`) | 구현 |
-| `rexbox_recomp` | `include/rexbox/recomp/`, `src/rexbox/recomp/` | 생성 코드 ABI 어댑터: 레지스터·상태 전역 정의, `recomp_lookup_manual/kernel`, 로그, 부팅 준비, guarded 실행과 정지 보고 | 구현 |
-| `rexbox_hle_kernel` | `src/rexbox/hle/kernel/` | export 이름 표, thunk 슬롯에 합성 주소 쓰기와 바인딩 | 구현 0개 |
+| `rexbox_runtime` | `src/rexbox/runtime/` | `GuestMemory`(based 모델, 스칼라 접근), `GuestHeap`(페이지 할당자), `HleRegistry`, `GuestCpu`·`GuestExecutor` 계약, `Environment`, `HleCall`, 커널 thunk 합성 주소 | 구현 |
+| `rexbox_recomp` | `src/rexbox/recomp/` | 생성 코드 ABI 전역·콜백, `RecompExecutor`(게스트 스레드 = 호스트 스레드, `CallGuest`, 스레드별 보고) | 구현 |
+| `rexbox_hle_kernel` | `src/rexbox/hle/kernel/` | 커널 export 103개(아래 표) | 부팅이 닿은 서비스 |
 | `rexbox_hle_xapi`, `_d3d8`, `_dsound`, `_xinput` | `src/rexbox/hle/<module>/` | XDK 라이브러리 HLE | 등록 진입점만 |
-| `rejsrf_game` | `include/rejsrf/`, `src/game/jsrf/` | 프로파일(변형 식별, 1차 변형), 재컴파일 진입점, 디컴파일 함수(`decomp/`) | 디컴파일 1개 |
-| `rejsrf_recomp` | `gen/jsrf_us/gen/` (gitignore) | lift된 C 8,716개 함수, `/w /bigobj` | `gen/`이 있을 때만 |
-| `rejsrf` | `src/app/` | 로드 → 식별 → 배치 → HLE → 부팅 준비 → 실행 → 보고 | 첫 커널 호출까지 |
-| `rexbox_xbe_info` | `tools/xbe_info/` | XBE 정보 출력 | 구현 |
-| `rejsrf_decomp_check` | `tools/decomp_check/` | 디컴파일 함수와 `_gen` lift 본문 비교 | 구현 |
+| `rejsrf_game` | `src/game/jsrf/` | 프로파일, 생성된 lookup 노출, 디컴파일 함수, 함수 탐색 seed(`recomp/seed_functions.json`) | 디컴파일 1개, seed 10개 |
+| `rejsrf_recomp` | `gen/jsrf_us/gen/` (gitignore) | lift된 C 8,721개 함수 | `gen/`이 있을 때만 |
+| `rejsrf` | `src/app/` | 부팅 orchestration과 스레드 보고 | D3D8 초기화까지 |
+| `rexbox_xbe_info` | `tools/xbe_info/` | XBE 정보 | 구현 |
+| `rexbox_kernel_probe` | `tools/kernel_probe/` | 게임 없이 커널 export 검사(27개, CI) | 구현 |
+| `rejsrf_decomp_check` | `tools/decomp_check/` | 디컴파일 함수와 lift 본문 비교 | 구현 |
 
-* `rejsrf_game` ↔ `rejsrf_recomp`는 서로 심볼을 참조하는 정적 라이브러리 순환이다(생성 코드가 디컴파일 `sub_X`를 부르고, 게임이 생성된 진입점을 부른다). CMake에 양방향을 선언해 GNU ld에서도 해결되게 했다.
+### 커널 HLE 파일
+
+| 파일 | 내용 |
+|---|---|
+| `kernel_hle.cpp` | 등록, 초기화, thunk 슬롯 바인딩(함수 → 합성 주소, 데이터 → 변수 주소) |
+| `kernel_state.cpp`, `kernel_internal.h` | 디스패처 잠금, 핸들 표, 구조체 오프셋, 공용 도우미 |
+| `kernel_thread.cpp` | KPCR/ETHREAD/스택/TLS 구성, `PsCreateSystemThreadEx`, 종료, 일시정지, 우선순위, 초기 스레드 |
+| `kernel_sync.cpp` | 이벤트, 세마포어, 뮤턴트, 타이머, 대기 |
+| `kernel_memory.cpp` | 가상·연속·시스템 메모리, 풀 |
+| `kernel_object.cpp` | `NtClose`, `Ob*` |
+| `kernel_rtl.cpp` | 크리티컬 섹션, 문자열, 시간 변환, 상태 코드 |
+| `kernel_hal.cpp` | IRQL, 시간, 인터럽트·DPC(전달 안 함), PCI, AV, 비휘발 설정, `DbgPrint` |
+| `kernel_crypto.cpp` | `XcSHA*` (SHA-1) |
+| `kernel_file.cpp`, `kernel_vfs.*` | 파일·디렉터리·장치·볼륨·IOCTL, Xbox 이름공간 → 호스트 디렉터리 |
+| `kernel_data.cpp` | 데이터 export, `KeTickCount` 갱신 스레드, 커널 시간 |
 
 ## 2. 재컴파일 코드 생성
 
 ```mermaid
 flowchart LR
     XBE["roms/.../default_eng.xbe"] --> REGEN["scripts/recomp/regenerate.py"]
+    SEEDS["src/game/jsrf/recomp/*.json (seeds)"] --> REGEN
     DECOMP["src/game/jsrf/decomp/*.c"] --> REGEN
-    REGEN --> TOOLS["third_party/xboxrecomp tools<br/>parse, disasm, func_id, abi, recomp"]
+    REGEN --> TOOLS["third_party/xboxrecomp tools"]
     TOOLS --> GEN["gen/jsrf_us/gen/*.c + recomp_types.h"]
     GEN --> CMAKE["CMake: rejsrf_recomp<br/>ABI header hash must match the pin"]
 ```
-
-* 디컴파일 파일의 `void sub_X(void)` 정의는 `--exclude-manual`로 lifter에 전달된다. `extern void sub_X_gen(void);` 선언이 있으면 lift 본문은 `sub_X_gen`으로 생성된다.
-* CMake는 `gen/`의 `recomp_types.h`가 고정된 xboxrecomp 템플릿과 같은지 SHA-256으로 확인한다.
 
 ## 3. 실행 흐름
 
@@ -67,81 +78,64 @@ flowchart LR
 sequenceDiagram
     participant App as rejsrf main
     participant K as hle::kernel
-    participant R as recomp runtime
-    participant G as lifted code
-    participant Reg as HleRegistry
-    App->>K: BindKernelImports (slots := 0xFE000000 + ordinal*4)
-    App->>R: Attach, PrepareBoot (offset, code range, stack, FS)
-    App->>R: Run(xbe_entry_point)
-    R->>G: RunGuarded → xbe_entry_point()
-    G->>Reg: RECOMP_ICALL(slot value) → recomp_lookup_manual
-    Reg-->>G: not bound
-    G->>R: recomp_lookup_kernel → stop thunk → RaiseStop
-    R-->>App: RunReport (kernel import 255 PsCreateSystemThreadEx)
+    participant X as RecompExecutor
+    participant G as lifted code (guest thread)
+    App->>App: GuestMemory, place XBE, GuestHeap, SetEnvironment
+    App->>K: RegisterKernelHle, InitializeKernel(game dir, hdd), BindKernelImports
+    App->>X: Attach (offset, code range)
+    App->>K: StartInitialThread(image)
+    K->>X: StartThread(entry, esp, KPCR)
+    X->>G: host thread: RunGuarded(entry)
+    G->>K: PsCreateSystemThreadEx -> K->>X: StartThread(SystemRoutine)
+    App->>X: WaitForThreads -> reports
 ```
 
 ## 4. 주요 계약
 
-* **게스트 주소**: 32비트 `GuestAddress`. 런타임 C++ 코드는 `GuestMemory::Translate`, 생성·디컴파일 C 코드는 `MEM32` 등(`addr + g_xbox_mem_offset`)을 쓴다.
-* **레지스터**: 생성 코드의 TLS 전역. 그 밖의 코드는 `rexbox/recomp/recomp_abi.h`의 접근 함수로만 읽고 쓴다.
-* **HLE**: `HleRegistry::AddExport` / `BindGuestAddress`. thunk는 lift 함수와 같은 `void()`.
-* **커널 import**: 슬롯 값은 합성 주소 `0xFE000000 + ordinal × 4`(`rexbox/runtime/kernel_thunks.h`). 미구현이면 실행이 멈추고 ordinal이 보고된다.
-* **플랫폼**: `AllocateVirtualMemory`, `RunGuarded`, `RaiseStop`. 기본 값만 받는다.
+* **게스트 주소**: 32비트 `GuestAddress`. C++은 `GuestMemory::Translate`/`Read32`/`Write32`, 생성·디컴파일 C는 `MEM32` 등.
+* **레지스터**: HLE와 런타임은 `runtime::GuestCpu`로만 접근한다. 생성 코드의 TLS 전역을 아는 것은 `rexbox_recomp`뿐이다.
+* **HLE 함수**: `void()`; 안에서 `runtime::HleCall`로 stdcall 인자(`[esp+4+4i]`)·fastcall 레지스터를 읽고 `Return(value, n)`으로 eax와 esp를 맞춘다.
+* **스레드**: 커널이 게스트 메모리에 KPCR/ETHREAD/스택/TLS를 만들고 `GuestExecutor::StartThread`에 맡긴다. 종료는 `ExitThread`(SEH 해제, `/EHa`).
+* **동기화**: 디스패처 객체 상태는 게스트 메모리의 `SignalState`, 대기는 전역 디스패처 잠금과 condition variable.
+* **파일**: `\Device\CdRom0` → XBE 폴더(읽기 전용), `\Device\Harddisk0\Partition1..5` → `<hdd root>/PartitionN`, `Partition0`은 원시 장치. 파티션 루트는 볼륨(원시 쓰기 허용·폐기).
 
 ## 5. 빌드 구성
 
-* `REJSRF_PLATFORM`/`REJSRF_ARCH`는 루트 `CMakeLists.txt`가 정한다. 현재 플랫폼 계층은 `win32`만 있다.
-* MSVC: 전역 `/utf-8 /permissive-`, 우리 타깃에만 `/W4`(`rejsrf_strict_warnings`), 생성 코드는 `/w /bigobj /MP`. `rejsrf.exe`는 스택 64 MiB.
-* `REJSRF_RECOMP_GEN_DIR`(기본 `gen/jsrf_us/gen`)이 없으면 `rejsrf_recomp`와 `rejsrf_decomp_check`를 만들지 않는다(CI).
+* MSVC: 전역 `/utf-8 /permissive- /EHa`, `NOMINMAX WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS`; 우리 타깃 `/W4`; 생성 코드 `/w /bigobj /MP`. 게스트 스레드의 호스트 스택은 64 MiB.
+* `REJSRF_RECOMP_GEN_DIR`(기본 `gen/jsrf_us/gen`)이 없으면 `rejsrf_recomp`와 `rejsrf_decomp_check`를 만들지 않는다(CI). `rexbox_kernel_probe`는 항상 빌드되고 CI에서 실행된다.
 * 라이선스 가드 `REJSRF_COPYLEFT_PATHS`는 모든 우리 타깃과 `rejsrf_recomp`에 적용된다.
-* `third_party/xboxrecomp`(submodule)가 필요하다: `rexbox_recomp`가 `templates/runtime/recomp_types.h`로 컴파일된다.
+* 실행 시 환경 변수: `REJSRF_HDD_ROOT`(HDD 루트, 기본 `./hdd`), `REXBOX_TRACE_FILES`(모든 파일 열기 기록).
 
 ---
 
 # reJSRF Architecture
 
-This records the structure of the code as implemented now. The reasons are in [design i001](docs/design/20261012-i001-project-bootstrap.md) and [design i002](docs/design/20261012-i002-recomp-pipeline.md).
+This records the structure of the code as implemented now. The reasons are in [design i001](docs/design/20261012-i001-project-bootstrap.md), [i002](docs/design/20261012-i002-recomp-pipeline.md) and [i003](docs/design/20261012-i003-kernel-hle.md).
 
 ## 1. Layers and CMake targets
 
-The diagram above shows the link graph.
-
-| Target | Path | Responsibility | State |
-|---|---|---|---|
-| `rexbox_platform` | `include/rexbox/platform/`, `src/platform/<os>/` | OS contracts: virtual memory, `RunGuarded`/`RaiseStop` (guarded execution) | Win32 implemented |
-| `rexbox_xbe` | `src/rexbox/xbe/` | XBE parsing | Implemented |
-| `rexbox_runtime` | `src/rexbox/runtime/` | `GuestMemory` (based model), `LoadXbeIntoGuestMemory`, `HleRegistry`, the kernel-thunk synthetic-address contract (`kernel_thunks.h`) | Implemented |
-| `rexbox_recomp` | `include/rexbox/recomp/`, `src/rexbox/recomp/` | Generated-code ABI adapter: register and state globals, `recomp_lookup_manual/kernel`, logging, boot preparation, guarded run and stop reports | Implemented |
-| `rexbox_hle_kernel` | `src/rexbox/hle/kernel/` | Export name table; writes synthetic addresses into thunk slots and binds them | 0 implementations |
-| `rexbox_hle_xapi`, `_d3d8`, `_dsound`, `_xinput` | `src/rexbox/hle/<module>/` | XDK library HLE | Registration entry only |
-| `rejsrf_game` | `include/rejsrf/`, `src/game/jsrf/` | Profile (variant identification, primary variant), recompiled entry point, decompiled functions (`decomp/`) | 1 decompiled function |
-| `rejsrf_recomp` | `gen/jsrf_us/gen/` (gitignored) | 8,716 lifted functions in C, `/w /bigobj` | Only when `gen/` exists |
-| `rejsrf` | `src/app/` | Load → identify → place → HLE → prepare boot → run → report | Up to the first kernel call |
-| `rexbox_xbe_info` | `tools/xbe_info/` | XBE information | Implemented |
-| `rejsrf_decomp_check` | `tools/decomp_check/` | Compares decompiled functions with their `_gen` lifted bodies | Implemented |
-
-`rejsrf_game` ↔ `rejsrf_recomp` is a cycle between static libraries (generated code calls the decompiled `sub_X`; the game calls the generated entry point). Both directions are declared to CMake so GNU ld resolves it too.
+The diagrams and tables above apply. In short: `rexbox_platform` (virtual memory, guarded runs, host threads) ← `rexbox_runtime` (guest memory and heap, HLE registry, the GuestCpu/GuestExecutor contract, Environment, HleCall) ← `rexbox_recomp` (lifter ABI adapter and `RecompExecutor`, one host thread per guest thread) and the HLE modules; `rejsrf_game` and the generated `rejsrf_recomp` sit above; `rejsrf` orchestrates. The kernel HLE exports 103 functions, one file per area (threads, sync, memory, objects, Rtl, HAL, crypto, files with the VFS, data exports). Tools: `rexbox_xbe_info`, `rexbox_kernel_probe` (27 checks without a game, run in CI) and `rejsrf_decomp_check`.
 
 ## 2. Generating the recompiled code
 
-See the diagram above. `void sub_X(void)` definitions in decompiled files are passed to the lifter as `--exclude-manual`; with an `extern void sub_X_gen(void);` declaration the lifted body is emitted as `sub_X_gen`. CMake checks by SHA-256 that `gen/`'s `recomp_types.h` matches the pinned xboxrecomp template.
+`scripts/recomp/regenerate.py` runs the pinned xboxrecomp tools on the user's XBE, passing the committed function seeds (`src/game/jsrf/recomp/*.json`) to the disassembler and the decompiled `sub_X` definitions to the lifter; CMake checks the generated ABI header against the pin.
 
 ## 3. Execution flow
 
-See the sequence diagram above: kernel thunk slots get synthetic addresses, boot preparation sets the memory offset, code range, stack and FS block, and the guarded run of `xbe_entry_point` stops at the first unbound kernel import, which is reported (today: 255 `PsCreateSystemThreadEx`).
+The app builds guest memory, places the XBE, creates the heap and installs the Environment; registers the HLE; initializes the kernel (data exports, VFS with the game directory and the HDD root) and binds the kernel imports; attaches the executor; and starts the entry point as the first guest thread. The kernel builds each thread's KPCR/ETHREAD/stack/TLS and hands it to `RecompExecutor::StartThread`; the app waits for the threads and prints their reports.
 
 ## 4. Key contracts
 
-* **Guest address**: 32-bit `GuestAddress`. Runtime C++ uses `GuestMemory::Translate`; generated and decompiled C uses `MEM32` and friends (`addr + g_xbox_mem_offset`).
-* **Registers**: TLS globals of the generated code; any other code reads and writes them only through the accessors in `rexbox/recomp/recomp_abi.h`.
-* **HLE**: `HleRegistry::AddExport` / `BindGuestAddress`; a thunk has the lifted function's `void()` shape.
-* **Kernel imports**: a slot holds the synthetic address `0xFE000000 + ordinal × 4` (`rexbox/runtime/kernel_thunks.h`); an unimplemented one stops the run and the ordinal is reported.
-* **Platform**: `AllocateVirtualMemory`, `RunGuarded`, `RaiseStop`, taking plain values only.
+* **Guest address**: 32-bit `GuestAddress`; C++ uses `GuestMemory::Translate`/`Read32`/`Write32`, generated and decompiled C uses `MEM32` and friends.
+* **Registers**: HLE and runtime code go through `runtime::GuestCpu` only; only `rexbox_recomp` knows the generated code's TLS globals.
+* **HLE functions**: `void()`, using `runtime::HleCall` to read stdcall arguments (`[esp+4+4i]`) and fastcall registers, and `Return(value, n)` to set eax and esp.
+* **Threads**: the kernel builds KPCR/ETHREAD/stack/TLS in guest memory and hands the thread to `GuestExecutor::StartThread`; `ExitThread` unwinds with SEH (`/EHa`).
+* **Synchronization**: dispatcher state is the guest `SignalState`; waits use one global dispatcher lock and a condition variable.
+* **Files**: `\Device\CdRom0` → the XBE's folder (read-only), `\Device\Harddisk0\Partition1..5` → `<hdd root>/PartitionN`, `Partition0` a raw device; a partition root is a volume (raw writes accepted and dropped).
 
 ## 5. Build configuration
 
-* The root `CMakeLists.txt` sets `REJSRF_PLATFORM`/`REJSRF_ARCH`; only the `win32` platform layer exists now.
-* MSVC: `/utf-8 /permissive-` globally, `/W4` on our targets only (`rejsrf_strict_warnings`), `/w /bigobj /MP` for generated code; `rejsrf.exe` gets a 64 MiB stack.
-* Without `REJSRF_RECOMP_GEN_DIR` (default `gen/jsrf_us/gen`), `rejsrf_recomp` and `rejsrf_decomp_check` are not created (CI).
+* MSVC: `/utf-8 /permissive- /EHa` and `NOMINMAX WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS` globally; `/W4` on our targets; `/w /bigobj /MP` for generated code. Guest threads get 64 MiB host stacks.
+* Without `REJSRF_RECOMP_GEN_DIR` (default `gen/jsrf_us/gen`), `rejsrf_recomp` and `rejsrf_decomp_check` are not created (CI). `rexbox_kernel_probe` is always built and runs in CI.
 * The license guard `REJSRF_COPYLEFT_PATHS` applies to all our targets and to `rejsrf_recomp`.
-* `third_party/xboxrecomp` (submodule) is required: `rexbox_recomp` compiles with its `templates/runtime/recomp_types.h`.
+* Run-time environment variables: `REJSRF_HDD_ROOT` (HDD root, default `./hdd`) and `REXBOX_TRACE_FILES` (log every file open).

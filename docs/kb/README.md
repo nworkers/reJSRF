@@ -9,6 +9,7 @@ flowchart TD
     LOAD --> HLE
     REFS["External references"] --> RECOMP
     REFS --> HLE
+    KSTRUCT["Xbox kernel structures"] --> HLE
 ```
 
 ## 문서
@@ -16,6 +17,7 @@ flowchart TD
 * [XBE 실행 형식](xbe-format.md)
 * [정적 재컴파일, 디컴파일, HLE](static-recompilation-and-hle.md)
 * [외부 참조 프로젝트와 라이선스](external-references.md)
+* [Xbox 커널 구조와 서비스: KPCR, KTHREAD, TLS, 디스패처 객체, 객체 이름공간](xbox-kernel-structures.md)
 
 ---
 
@@ -28,3 +30,4 @@ This directory holds general technical knowledge needed to understand the projec
 * [The XBE executable format](xbe-format.md)
 * [Static recompilation, decompilation and HLE](static-recompilation-and-hle.md)
 * [External reference projects and licenses](external-references.md)
+* [Xbox kernel structures and services: KPCR, KTHREAD, TLS, dispatcher objects, object namespace](xbox-kernel-structures.md)

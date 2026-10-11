@@ -1,0 +1,12 @@
+[
+  {"start": "0x0018AFB0", "note": "indirect call target missed by disasm (issue #3 boot)"},
+  {"start": "0x0018B1A0", "note": "indirect call target missed by disasm (issue #3 boot)"},
+  {"start": "0x0018B390", "note": "indirect call target missed by disasm (issue #3 boot)"},
+  {"start": "0x0018B580", "note": "indirect call target missed by disasm (issue #3 boot)"},
+  {"start": "0x0018B770", "note": "indirect call target missed by disasm (issue #3 boot)"},
+  {"start": "0x0018B960", "note": "indirect call target missed by disasm (issue #3 boot)"},
+  {"start": "0x0018BB50", "note": "indirect call target missed by disasm (issue #3 boot)"},
+  {"start": "0x0018BD40", "note": "indirect call target missed by disasm (issue #3 boot)"},
+  {"start": "0x0018C1D0", "note": "indirect call target missed by disasm (issue #3 boot)"},
+  {"start": "0x0018C3C0", "note": "indirect call target missed by disasm (issue #3 boot)"}
+]

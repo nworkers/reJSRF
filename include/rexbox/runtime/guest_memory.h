@@ -11,6 +11,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 
 namespace rexbox::runtime
 {
@@ -36,6 +37,25 @@ public:
 
     // Host pointer for a guest address. The caller must have checked range.
     uint8_t* Translate(GuestAddress address) const { return base_ + address; }
+
+    // Little-endian scalar access; the caller must have checked the range.
+    uint32_t Read32(GuestAddress address) const
+    {
+        uint32_t value;
+        std::memcpy(&value, Translate(address), 4);
+        return value;
+    }
+    uint16_t Read16(GuestAddress address) const
+    {
+        uint16_t value;
+        std::memcpy(&value, Translate(address), 2);
+        return value;
+    }
+    uint8_t Read8(GuestAddress address) const { return *Translate(address); }
+    void Write32(GuestAddress address, uint32_t value) { std::memcpy(Translate(address), &value, 4); }
+    void Write16(GuestAddress address, uint16_t value) { std::memcpy(Translate(address), &value, 2); }
+    void Write8(GuestAddress address, uint8_t value) { *Translate(address) = value; }
+    void Fill(GuestAddress address, uint8_t value, size_t length) { std::memset(Translate(address), value, length); }
 
     uint8_t* base() const { return base_; }
     size_t size() const { return size_; }

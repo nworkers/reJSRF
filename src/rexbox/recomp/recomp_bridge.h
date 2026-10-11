@@ -19,8 +19,13 @@ namespace rexbox::recomp
 // Codes passed to platform::RaiseStop.
 constexpr uint32_t kStopUnimplementedKernel = 1;
 constexpr uint32_t kStopUnresolvedCall = 2;
+constexpr uint32_t kStopThreadExit = 3;
 
 void AttachBridge(runtime::GuestMemory* memory, runtime::HleRegistry* registry);
+
+// The HLE binding at `va`, or nullptr (what recomp_lookup_manual returns).
+using BridgeFunction = void (*)();
+BridgeFunction RecompLookupManual(uint32_t va);
 
 // The VA that caused the last stop on this thread; clears it.
 runtime::GuestAddress TakeStopTarget();

@@ -10,7 +10,10 @@ target_include_directories(rexbox_xbe PUBLIC "${PROJECT_SOURCE_DIR}/include")
 
 # Runtime core: guest memory, XBE placement, the HLE registry.
 add_library(rexbox_runtime STATIC
+    runtime/environment.cpp
+    runtime/guest_heap.cpp
     runtime/guest_memory.cpp
+    runtime/hle_call.cpp
     runtime/hle_registry.cpp
     runtime/xbe_loader.cpp
 )
@@ -29,8 +32,19 @@ target_link_libraries(rexbox_recomp PUBLIC rexbox_runtime)
 # HLE modules. Each links the runtime only, never another module, so any one
 # can be replaced (or reused by another title) on its own.
 add_library(rexbox_hle_kernel STATIC
+    hle/kernel/kernel_crypto.cpp
+    hle/kernel/kernel_data.cpp
     hle/kernel/kernel_exports.cpp
+    hle/kernel/kernel_file.cpp
+    hle/kernel/kernel_hal.cpp
     hle/kernel/kernel_hle.cpp
+    hle/kernel/kernel_memory.cpp
+    hle/kernel/kernel_object.cpp
+    hle/kernel/kernel_rtl.cpp
+    hle/kernel/kernel_state.cpp
+    hle/kernel/kernel_sync.cpp
+    hle/kernel/kernel_thread.cpp
+    hle/kernel/kernel_vfs.cpp
 )
 target_link_libraries(rexbox_hle_kernel PUBLIC rexbox_runtime)
 

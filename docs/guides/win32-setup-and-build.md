@@ -1,6 +1,6 @@
 # Win32 개발 환경 준비와 빌드
 
-근거: [설계 i001](../design/20261012-i001-project-bootstrap.md), [작업 로그 i001](../work-logs/20261012-i001-project-bootstrap.md), [설계 i002](../design/20261012-i002-recomp-pipeline.md), [작업 로그 i002](../work-logs/20261012-i002-recomp-pipeline.md)
+근거: [설계 i001](../design/20261012-i001-project-bootstrap.md), [작업 로그 i001](../work-logs/20261012-i001-project-bootstrap.md), [설계 i002](../design/20261012-i002-recomp-pipeline.md), [작업 로그 i002](../work-logs/20261012-i002-recomp-pipeline.md), [설계 i003](../design/20261012-i003-kernel-hle.md), [작업 로그 i003](../work-logs/20261012-i003-kernel-hle.md)
 
 ## 1. 필요한 것
 
@@ -64,15 +64,19 @@ python scripts\recomp\regenerate.py      # gen/jsrf_us/ 에 생성, 약 2분
 ```text
 reJSRF 0.0.0
 xbe: USA (region 1)
-guest memory: 64 MiB, 11 sections placed
-hle: 0 exports, kernel imports 0/120 bound, 0 title bindings
-boot: code 00011000-00284E18, stack 03FFFFF0, fs 00001000, flat dispatch
-run: stopped at unimplemented kernel import 255 PsCreateSystemThreadEx
+guest memory: 64 MiB, 11 sections placed, 62940 KiB free
+hle: 103 exports, kernel imports 106/120 bound, 0 title bindings
+boot: entry 00148023, flat dispatch
+thread 1 (start 00148023): returned, eax 00000001
+thread 2 (start 00147EBB): fault C0000005, read at guest FD001804, outside guest RAM (host ...)
 ```
 
-디컴파일 함수 비교:
+게임의 HDD는 현재 폴더의 `hdd\`(gitignore)에 만들어진다. 다른 곳을 쓰려면 `REJSRF_HDD_ROOT`를 지정한다. 모든 파일 열기를 보려면 `REXBOX_TRACE_FILES=1`을 켠다.
+
+시험 도구:
 
 ```powershell
+.\build\win32_x86\tools\Debug\rexbox_kernel_probe.exe   # "0 failure(s)", exit code 0 (게임 데이터 불필요)
 .\build\win32_x86\tools\Debug\rejsrf_decomp_check.exe   # "0 difference(s)", exit code 0
 ```
 
@@ -88,12 +92,12 @@ run: stopped at unimplemented kernel import 255 PsCreateSystemThreadEx
 
 # Win32 development setup and build
 
-Based on: [design i001](../design/20261012-i001-project-bootstrap.md), [work log i001](../work-logs/20261012-i001-project-bootstrap.md), [design i002](../design/20261012-i002-recomp-pipeline.md), [work log i002](../work-logs/20261012-i002-recomp-pipeline.md)
+Based on: [design i001](../design/20261012-i001-project-bootstrap.md), [work log i001](../work-logs/20261012-i001-project-bootstrap.md), [design i002](../design/20261012-i002-recomp-pipeline.md), [work log i002](../work-logs/20261012-i002-recomp-pipeline.md), [design i003](../design/20261012-i003-kernel-hle.md), [work log i003](../work-logs/20261012-i003-kernel-hle.md)
 
 1. **Requirements**: Windows 10/11; Visual Studio 2022 or 2026 with the "Desktop development with C++" workload (x86/x64 MSVC tools); CMake 3.20+ (the one bundled with Visual Studio works); Git; for the recompilation pipeline, Python 3.10+ with `pip install capstone`; a dump of a Jet Set Radio Future disc you own.
 2. **Get the repository**: `git clone --recurse-submodules https://github.com/nworkers/reJSRF.git` (or `git submodule update --init` after a plain clone).
 3. **Place the game files** under `roms/Jet Set Radio Future/` (gitignored; never commit them). Extract an ISO with [extract-xiso](https://github.com/XboxDev/extract-xiso) or [xdvdfs](https://github.com/antangelo/xdvdfs). `default_eng.xbe` (USA, MD5 `f4e366bfdceee551a09f42219c90d84e`) is the primary target; `default.xbe` (Japan region) is recognized only.
 4. **Generate the recompiled code**: `pip install capstone`, then `python scripts\recomp\regenerate.py` (into `gen/jsrf_us/`, about two minutes). Generated code is never committed; regenerate after changing `src/game/jsrf/decomp/` or updating the submodule. Without it the app stops at the load stage.
 5. **Build**: `.\scripts\build_win32_x86.ps1` for Debug, add `-Configuration Release` for Release. Output goes under `build\win32_x86\`.
-6. **Check**: run `rexbox_xbe_info.exe` and `rejsrf.exe` on `default_eng.xbe`; the app should print the expected output above (current frontier: [docs/analysis/boot-frontier.md](../analysis/boot-frontier.md)). `rejsrf_decomp_check.exe` should report "0 difference(s)" and exit 0.
+6. **Check**: run `rexbox_xbe_info.exe` and `rejsrf.exe` on `default_eng.xbe`; the app should print the expected output above (current frontier: [docs/analysis/boot-frontier.md](../analysis/boot-frontier.md)). The game's hard disk is created under `hdd\` in the current folder (gitignored); set `REJSRF_HDD_ROOT` to use another place and `REXBOX_TRACE_FILES=1` to log every file open. `rexbox_kernel_probe.exe` (needs no game data) should report "0 failure(s)" and `rejsrf_decomp_check.exe` "0 difference(s)", both exiting 0.
 7. **Reference repositories (optional)**: `.\scripts\fetch_references.ps1` clones reference repositories such as jsrf-recomp into `third_party/refs/`. They are not built.

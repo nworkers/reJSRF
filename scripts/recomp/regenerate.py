@@ -12,6 +12,9 @@ the generated code is derived from the game's bytes and is never committed.
     gen/<variant>/overrides.c     sub_X definitions the lifter must not emit
     gen/<variant>/gen/            lifted C, built by CMake as rejsrf_recomp
 
+Seeds: src/game/jsrf/recomp/*.json list function entry points the
+disassembler misses ([{"start": "0x..."}]); each is passed to it.
+
 Overrides: every `void sub_XXXXXXXX(void)` defined under the decompilation
 directories is handed to the lifter as --exclude-manual, so direct calls and
 the generated dispatch table link to the hand-written version. A file that
@@ -34,6 +37,10 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 XBOXRECOMP = ROOT / "third_party" / "xboxrecomp"
 DEFAULT_XBE = ROOT / "roms" / "Jet Set Radio Future" / "default_eng.xbe"
 OVERRIDE_DIRS = [ROOT / "src" / "game" / "jsrf" / "decomp"]
+# Function entry points the disassembler misses, found by running the title
+# (indirect-call targets with no lifted function). Facts about the binary's
+# layout, so they are committed; every *.json here is passed as a seed file.
+SEED_DIR = ROOT / "src" / "game" / "jsrf" / "recomp"
 
 
 def run_step(name, args):
@@ -89,8 +96,11 @@ def main():
         shutil.rmtree(gen_dir)
 
     run_step("parse", ["tools.xbe_parser", xbe, "--json", out / "analysis.json", "--quiet"])
+    seeds = sorted(SEED_DIR.glob("*.json")) if SEED_DIR.is_dir() else []
+    seed_args = [arg for seed in seeds for arg in ("--seed-functions", seed)]
+    print(f"    seeds: {len(seeds)} file(s)")
     run_step("disasm", ["tools.disasm", xbe, "--analysis-json", out / "analysis.json",
-                        "--output", out / "disasm", "--force"])
+                        "--output", out / "disasm", "--force"] + seed_args)
     run_step("func_id", ["tools.func_id", xbe,
                          "--functions", out / "disasm" / "functions.json",
                          "--strings", out / "disasm" / "strings.json",

@@ -54,12 +54,18 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
 if(WIN32)
-    add_compile_definitions(NOMINMAX WIN32_LEAN_AND_MEAN)
+    # _CRT_SECURE_NO_WARNINGS: portable code uses the standard C library
+    # (getenv, fopen) rather than the MSVC-only _s variants.
+    add_compile_definitions(NOMINMAX WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS)
 endif()
 if(MSVC)
     # /utf-8: sources are UTF-8; without it MSVC reads them in the system code
     # page (C4819 on a Korean locale).
     add_compile_options(/utf-8 /permissive-)
+    # /EHa: a guest thread ends (or stops) by unwinding native frames with a
+    # structured exception (platform::RaiseStop); C++ destructors -- lock
+    # guards in HLE code among them -- must run during that unwind.
+    string(REPLACE "/EHsc" "/EHa" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 endif()
 
 # Warning level for code we write. Generated code is built with warnings off

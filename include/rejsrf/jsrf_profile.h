@@ -45,9 +45,11 @@ size_t BindTitleHle(const rexbox::xbe::XbeImage& image, rexbox::runtime::HleRegi
 
 using RecompiledFunction = void (*)();
 
-// The lifted XBE entry point, or nullptr when the build has no recompiled
-// code (gen/ was not generated). Lifted for the primary variant only.
-RecompiledFunction RecompiledEntry();
+using RecompiledLookup = RecompiledFunction (*)(uint32_t guest_va);
+
+// The generated guest-VA-to-function lookup, or nullptr when the build has no
+// recompiled code (gen/ was not generated). Lifted for the primary variant only.
+RecompiledLookup RecompiledLookupFunction();
 
 // Builds the generated code's flat dispatch table. Returns false when there is
 // no recompiled code or the table could not be built (lookups then fall back

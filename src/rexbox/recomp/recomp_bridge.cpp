@@ -90,6 +90,11 @@ bool BridgeFirstTimeAt(uint32_t site)
     return FirstTimeAt(site);
 }
 
+BridgeFunction RecompLookupManual(uint32_t va)
+{
+    return g_registry == nullptr ? nullptr : g_registry->Lookup(va);
+}
+
 using GuestThunk = void (*)();
 
 GuestThunk BridgeUnimplementedKernelThunk()

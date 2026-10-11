@@ -22,3 +22,10 @@ flowchart LR
 * XDK 라이브러리 코드가 섹션 이름으로 분리되어 있어(`D3D`, `DSOUND`, `XGRPH`, `XPP`), 함수 식별의 범위를 섹션 단위로 좁힐 수 있다.
 * HLE 모듈은 XDK 4134 API(렌더 상태 번호 등)에 맞춘다.
 * 커널 import 중 인터럽트·장치·GPU 메모리 관련 항목은 D3D8/DSOUND를 API 수준에서 HLE하면 최소 구현으로 충분할 가능성이 있다(**추정**).
+
+## 4. 시작 순서와 커널 구조
+
+* 진입점 `0x148023`은 XAPI 시작 코드다. `CreateThread`(`0x147F53`)로 메인 스레드를 만들고 핸들을 닫은 뒤 반환한다. 메인 스레드는 `SystemRoutine 0x147EBB(StartRoutine 0x147FB4, ctx)`로 시작한다. → [boot-frontier](analysis/boot-frontier.md)
+* 게임 코드가 직접 읽는 커널 구조: `fs:[0x28]` 현재 스레드, `fs:[0x20]` Prcb, `fs:[4]` StackBase(TLS 기준), `KTHREAD+0x28` TlsData, `ETHREAD+0x12C` 스레드 ID. TLS는 커널 스택 맨 위에 둔다. → [kb/xbox-kernel-structures](kb/xbox-kernel-structures.md)
+* XAPI 초기화는 T:, U:, Z: 드라이브를 준비한다(Z:는 Partition5를 포맷해 사용).
+* 함수 탐색이 놓친 함수 10개(`0x0018AFB0`–`0x0018C3C0`)는 seed 파일로 보충한다(`src/game/jsrf/recomp/seed_functions.json`).

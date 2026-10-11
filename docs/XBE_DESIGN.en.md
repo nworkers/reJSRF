@@ -19,3 +19,10 @@ The diagram in the Korean version applies: headers at `0x00010000`, `.text` at `
 * XDK library code is separated into named sections (`D3D`, `DSOUND`, `XGRPH`, `XPP`), so function identification can be narrowed per section.
 * HLE modules match the XDK 4134 API (render-state numbers and so on).
 * Among the kernel imports, the interrupt, device and GPU-memory entries may need only minimal implementations once D3D8/DSOUND are HLE'd at the API level (**inferred**).
+
+## 4. Start sequence and kernel structures
+
+* The entry point `0x148023` is XAPI's startup: it creates the main thread with `CreateThread` (`0x147F53`), closes the handle and returns. The main thread starts as `SystemRoutine 0x147EBB(StartRoutine 0x147FB4, ctx)`. → [boot-frontier](analysis/boot-frontier.md)
+* Kernel structures the game reads directly: `fs:[0x28]` current thread, `fs:[0x20]` Prcb, `fs:[4]` StackBase (the TLS anchor), `KTHREAD+0x28` TlsData, `ETHREAD+0x12C` thread id. TLS sits at the top of the kernel stack. → [kb/xbox-kernel-structures](kb/xbox-kernel-structures.md)
+* XAPI initialization prepares the T:, U: and Z: drives (Z: by formatting Partition5).
+* Ten functions the disassembler misses (`0x0018AFB0`–`0x0018C3C0`) are supplied through a seed file (`src/game/jsrf/recomp/seed_functions.json`).
