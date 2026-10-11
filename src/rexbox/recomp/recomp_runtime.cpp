@@ -186,6 +186,12 @@ void RecompExecutor::ThreadMain(void* raw)
                 report.reason = StopReason::kExited;
                 report.exit_code = t_exit_code;
             }
+            else if (guarded.stop_code == kStopUnimplementedHle)
+            {
+                report.reason = StopReason::kUnimplementedHle;
+                TakeStopSymbol(&report.hle_library, &report.hle_name);
+                report.target = TakeStopTarget();
+            }
             else
             {
                 report.reason = guarded.stop_code == kStopUnresolvedCall ? StopReason::kUnresolvedCall

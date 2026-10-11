@@ -1,0 +1,4 @@
+{
+  "comment": "XDK libraries whose functions are replaced by HLE exports. regenerate.py generates an override for each identified function (docs/design/20261012-i006-xdk-symbol-binding.md).",
+  "libraries": ["D3D8", "D3D8LTCG"]
+}

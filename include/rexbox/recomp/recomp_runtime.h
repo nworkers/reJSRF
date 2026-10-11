@@ -45,6 +45,7 @@ enum class StopReason
     kReturned,               // the start function returned
     kExited,                 // the thread called GuestExecutor::ExitThread
     kUnimplementedKernel,    // called a kernel import with no HLE
+    kUnimplementedHle,       // called an overridden XDK function with no HLE export
     kUnresolvedCall,         // an indirect call found no target (when stopping on them)
     kFault,                  // a hardware fault inside guest code
     kNoFunction,             // the start VA has no recompiled function
@@ -56,7 +57,9 @@ struct ThreadReport
     runtime::GuestAddress start = 0;
     StopReason reason = StopReason::kReturned;
     uint32_t exit_code = 0;
-    runtime::GuestAddress target = 0;  // kernel thunk VA or unresolved call target
+    runtime::GuestAddress target = 0;  // kernel thunk VA, XDK function VA or unresolved call target
+    const char* hle_library = nullptr; // kUnimplementedHle: the XDK library and symbol
+    const char* hle_name = nullptr;
     uint32_t fault_code = 0;
     uintptr_t host_access_address = 0;
     bool access_is_write = false;

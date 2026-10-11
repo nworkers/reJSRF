@@ -21,6 +21,7 @@ flowchart LR
 
 * [JSRF XBE 개요: 빌드 변형, 섹션, XDK 라이브러리, 커널 import, 디스크 자산](jsrf-xbe-overview.md)
 * [부팅 frontier: 재컴파일 코드가 어디까지 실행되는가](boot-frontier.md)
+* [XDK 심볼 식별: 라이브러리별 함수, jsrf-recomp 대조, 부팅 중 D3D8 호출 순서](xdk-symbols.md)
 
 ---
 
@@ -38,3 +39,4 @@ Labels:
 
 * [JSRF XBE overview: build variants, sections, XDK libraries, kernel imports, disc assets](jsrf-xbe-overview.md)
 * [Boot frontier: how far the recompiled code runs](boot-frontier.md)
+* [XDK symbol identification: functions per library, comparison with jsrf-recomp, D3D8 call order during boot](xdk-symbols.md)

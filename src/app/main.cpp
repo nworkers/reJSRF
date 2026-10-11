@@ -52,6 +52,11 @@ void PrintThreadReport(const rexbox::recomp::ThreadReport& report)
         std::printf("stopped at unimplemented kernel import %u %s\n", ordinal, name != nullptr ? name : "<unknown>");
         break;
     }
+    case StopReason::kUnimplementedHle:
+        std::printf("stopped at unimplemented XDK function %s %s (%08X)\n",
+                    report.hle_library != nullptr ? report.hle_library : "?",
+                    report.hle_name != nullptr ? report.hle_name : "?", report.target);
+        break;
     case StopReason::kUnresolvedCall:
         std::printf("stopped at indirect call to %08X with no target\n", report.target);
         break;

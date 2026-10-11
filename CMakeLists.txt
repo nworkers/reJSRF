@@ -85,6 +85,16 @@ if(NOT EXISTS "${REJSRF_XBOXRECOMP_DIR}/templates/runtime/recomp_types.h")
     message(FATAL_ERROR "third_party/xboxrecomp is missing; run: git submodule update --init")
 endif()
 
+# XbSymbolDatabase (MIT) identifies statically linked XDK functions for the
+# rexbox_xdk_symbols tool; only its library is built.
+set(XBSDB_BUILD_CLI OFF CACHE BOOL "" FORCE)
+set(XBSDB_BUILD_UNITTEST OFF CACHE BOOL "" FORCE)
+set(XBSDB_INSTALL_LIB OFF CACHE BOOL "" FORCE)
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/XbSymbolDatabase/CMakeLists.txt")
+    message(FATAL_ERROR "third_party/XbSymbolDatabase is missing; run: git submodule update --init")
+endif()
+add_subdirectory(third_party/XbSymbolDatabase EXCLUDE_FROM_ALL)
+
 # Lifted C for the primary variant, produced by scripts/recomp/regenerate.py.
 # Without it the game links no recompiled code and the app stops after load.
 set(REJSRF_RECOMP_GEN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/gen/jsrf_us/gen" CACHE PATH
@@ -127,7 +137,7 @@ add_subdirectory(tools)              # developer tools
 set(REJSRF_OWN_TARGETS
     rexbox_platform rexbox_xbe rexbox_runtime rexbox_recomp
     rexbox_hle_kernel rexbox_hle_xapi rexbox_hle_d3d8 rexbox_hle_dsound rexbox_hle_xinput
-    rejsrf_game rejsrf rexbox_xbe_info)
+    rejsrf_game rejsrf rexbox_xbe_info rexbox_xdk_symbols)
 foreach(target IN LISTS REJSRF_OWN_TARGETS)
     rejsrf_check_license(${target})
     rejsrf_strict_warnings(${target})

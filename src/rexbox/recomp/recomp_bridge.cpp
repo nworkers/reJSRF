@@ -4,12 +4,15 @@
 #include "recomp_bridge.h"
 
 #include "rexbox/platform/guarded_call.h"
+#include "rexbox/recomp/recomp_hle_entry.h"
 #include "rexbox/recomp/recomp_runtime.h"
 #include "rexbox/runtime/guest_memory.h"
 #include "rexbox/runtime/hle_registry.h"
 #include "rexbox/runtime/kernel_thunks.h"
 
 #include <chrono>
+#include <cstdlib>
+#include <cstring>
 #include <cstdio>
 #include <mutex>
 #include <setjmp.h>
@@ -27,6 +30,7 @@ runtime::HleRegistry* g_registry = nullptr;
 bool g_stop_on_unresolved = false;
 
 thread_local runtime::GuestAddress t_stop_target = 0;
+thread_local const RexboxHleSlot* t_stop_slot = nullptr;
 
 std::mutex g_log_mutex;
 std::unordered_set<uint32_t> g_logged_sites;
@@ -54,6 +58,13 @@ void AttachBridge(runtime::GuestMemory* memory, runtime::HleRegistry* registry)
 void SetStopOnUnresolvedCall(bool stop)
 {
     g_stop_on_unresolved = stop;
+}
+
+void TakeStopSymbol(const char** library, const char** name)
+{
+    *library = t_stop_slot != nullptr ? t_stop_slot->library : nullptr;
+    *name = t_stop_slot != nullptr ? t_stop_slot->name : nullptr;
+    t_stop_slot = nullptr;
 }
 
 runtime::GuestAddress TakeStopTarget()
@@ -95,6 +106,13 @@ BridgeFunction RecompLookupManual(uint32_t va)
     return g_registry == nullptr ? nullptr : g_registry->Lookup(va);
 }
 
+void BridgeStopAtHle(const RexboxHleSlot* slot)
+{
+    t_stop_target = slot->va;
+    t_stop_slot = slot;
+    platform::RaiseStop(kStopUnimplementedHle);
+}
+
 using GuestThunk = void (*)();
 
 GuestThunk BridgeUnimplementedKernelThunk()
@@ -118,6 +136,42 @@ recomp_func_t recomp_lookup_manual(uint32_t xbox_va)
 {
     rexbox::runtime::HleRegistry* registry = bridge::BridgeRegistry();
     return registry == nullptr ? nullptr : registry->Lookup(xbox_va);
+}
+
+// Generated overrides of XDK library functions enter here. The export is
+// looked up by name once; concurrent first calls resolve to the same answer.
+void rexbox_hle_enter(RexboxHleSlot* slot)
+{
+    if (slot->state == 0)
+    {
+        rexbox::runtime::HleRegistry* registry = bridge::BridgeRegistry();
+        const rexbox::runtime::HleExport* found = registry != nullptr ? registry->FindExport(slot->name) : nullptr;
+        slot->resolved = found != nullptr ? found->thunk : nullptr;
+        slot->state = slot->resolved != nullptr ? 1 : 2;
+    }
+    if (slot->state == 1)
+    {
+        slot->resolved();
+        return;
+    }
+    // Diagnostic: REXBOX_HLE_FALLBACK=lifted runs the original body of an
+    // unimplemented function instead of stopping, logging each one once, to
+    // reveal the order in which a title calls a library.
+    static const bool fall_back_to_lifted = [] {
+        const char* value = std::getenv("REXBOX_HLE_FALLBACK");
+        return value != nullptr && std::strcmp(value, "lifted") == 0;
+    }();
+    if (fall_back_to_lifted && slot->lifted != nullptr)
+    {
+        if (bridge::BridgeFirstTimeAt(slot->va))
+        {
+            std::fprintf(stderr, "[hle] %s %s (%08X) unimplemented; running the lifted original\n", slot->library,
+                         slot->name, slot->va);
+        }
+        slot->lifted();
+        return;
+    }
+    bridge::BridgeStopAtHle(slot);
 }
 
 // Kernel imports are called through synthetic VAs (0xFE000000 and up) that

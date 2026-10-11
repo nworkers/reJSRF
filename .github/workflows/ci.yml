@@ -8,6 +8,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Run by hand on a task branch (gh workflow run ci.yml --ref <branch>) to
+  # check a CI change before any pull request exists.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -30,7 +33,7 @@ jobs:
 
     steps:
       - name: Check out
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # rexbox_recomp compiles against xboxrecomp's pinned ABI header.
           submodules: true
