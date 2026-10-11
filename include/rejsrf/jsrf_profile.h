@@ -36,9 +36,23 @@ struct XbeVariant
 // The variant `image` matches, or nullptr for an unsupported build.
 const XbeVariant* IdentifyXbe(const rexbox::xbe::XbeImage& image);
 
+// The variant the recompiled code and title bindings are made for.
+const XbeVariant* PrimaryVariant();
+
 // Binds the title's statically linked XDK functions to HLE exports. Returns
 // the number of bindings made.
 size_t BindTitleHle(const rexbox::xbe::XbeImage& image, rexbox::runtime::HleRegistry& registry);
+
+using RecompiledFunction = void (*)();
+
+// The lifted XBE entry point, or nullptr when the build has no recompiled
+// code (gen/ was not generated). Lifted for the primary variant only.
+RecompiledFunction RecompiledEntry();
+
+// Builds the generated code's flat dispatch table. Returns false when there is
+// no recompiled code or the table could not be built (lookups then fall back
+// to a binary search).
+bool InitializeRecompiledDispatch();
 
 }  // namespace rejsrf
 

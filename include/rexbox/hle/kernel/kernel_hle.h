@@ -12,6 +12,7 @@
 
 namespace rexbox::runtime
 {
+class GuestMemory;
 class HleRegistry;
 }
 
@@ -25,9 +26,12 @@ namespace rexbox::hle::kernel
 
 void RegisterKernelHle(runtime::HleRegistry& registry);
 
-// Binds each kernel thunk slot of `image` to the registered export of the same
-// ordinal. Returns the ordinals that have no implementation yet.
-std::vector<uint32_t> BindKernelImports(const xbe::XbeImage& image, runtime::HleRegistry& registry);
+// Points each kernel thunk slot of the placed image at the ordinal's
+// synthetic VA (rexbox/runtime/kernel_thunks.h) and binds that VA to the
+// registered export of the same name. Returns the ordinals with no
+// implementation yet; their slots are written all the same.
+std::vector<uint32_t> BindKernelImports(const xbe::XbeImage& image, runtime::GuestMemory& memory,
+                                        runtime::HleRegistry& registry);
 
 }  // namespace rexbox::hle::kernel
 

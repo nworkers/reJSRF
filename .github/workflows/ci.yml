@@ -1,8 +1,9 @@
 name: CI
 
 # The fast gate: a broken build is found on the branch rather than after the
-# merge. No game data exists in CI, so this builds and stops; anything that
-# needs an XBE is verified locally (docs/guides/).
+# merge. No game data exists in CI, so there is no generated code either: this
+# builds the no-recompiled-code configuration and stops. Anything that needs an
+# XBE is verified locally (docs/guides/).
 on:
   push:
     branches: [main]
@@ -30,7 +31,9 @@ jobs:
     steps:
       - name: Check out
         uses: actions/checkout@v4
-        # The xboxrecomp submodule is not part of the build yet.
+        with:
+          # rexbox_recomp compiles against xboxrecomp's pinned ABI header.
+          submodules: true
 
       - name: Build
         shell: powershell

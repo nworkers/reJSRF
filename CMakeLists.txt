@@ -59,8 +59,30 @@ endif()
 if(MSVC)
     # /utf-8: sources are UTF-8; without it MSVC reads them in the system code
     # page (C4819 on a Korean locale).
-    add_compile_options(/utf-8 /W4 /permissive-)
+    add_compile_options(/utf-8 /permissive-)
 endif()
+
+# Warning level for code we write. Generated code is built with warnings off
+# (src/game/jsrf/CMakeLists.txt), so the level is per target, not global.
+function(rejsrf_strict_warnings target)
+    if(MSVC)
+        target_compile_options(${target} PRIVATE /W4)
+    else()
+        target_compile_options(${target} PRIVATE -Wall -Wextra)
+    endif()
+endfunction()
+
+# The pinned xboxrecomp checkout supplies the lifter's ABI header
+# (templates/runtime/recomp_types.h) to rexbox_recomp.
+set(REJSRF_XBOXRECOMP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/xboxrecomp")
+if(NOT EXISTS "${REJSRF_XBOXRECOMP_DIR}/templates/runtime/recomp_types.h")
+    message(FATAL_ERROR "third_party/xboxrecomp is missing; run: git submodule update --init")
+endif()
+
+# Lifted C for the primary variant, produced by scripts/recomp/regenerate.py.
+# Without it the game links no recompiled code and the app stops after load.
+set(REJSRF_RECOMP_GEN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/gen/jsrf_us/gen" CACHE PATH
+    "Directory of generated recompiled C (recomp_dispatch.c and friends)")
 
 # License guard. third_party/xboxrecomp is MIT, except its xemu-derived files,
 # which are LGPL-2.1+ (its NOTICE). Those must never be compiled into this
@@ -96,9 +118,14 @@ add_subdirectory(src/game/jsrf)      # rejsrf_game: JSRF title code + profile
 add_subdirectory(src/app)            # rejsrf: the executable
 add_subdirectory(tools)              # developer tools
 
-foreach(target IN ITEMS
-        rexbox_platform rexbox_xbe rexbox_runtime
-        rexbox_hle_kernel rexbox_hle_xapi rexbox_hle_d3d8 rexbox_hle_dsound rexbox_hle_xinput
-        rejsrf_game rejsrf rexbox_xbe_info)
+set(REJSRF_OWN_TARGETS
+    rexbox_platform rexbox_xbe rexbox_runtime rexbox_recomp
+    rexbox_hle_kernel rexbox_hle_xapi rexbox_hle_d3d8 rexbox_hle_dsound rexbox_hle_xinput
+    rejsrf_game rejsrf rexbox_xbe_info)
+foreach(target IN LISTS REJSRF_OWN_TARGETS)
     rejsrf_check_license(${target})
+    rejsrf_strict_warnings(${target})
 endforeach()
+if(TARGET rejsrf_recomp)
+    rejsrf_check_license(rejsrf_recomp)
+endif()

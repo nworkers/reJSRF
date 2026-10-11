@@ -38,6 +38,11 @@ const XbeVariant* IdentifyXbe(const rexbox::xbe::XbeImage& image)
     return nullptr;
 }
 
+const XbeVariant* PrimaryVariant()
+{
+    return &kVariants[0];
+}
+
 size_t BindTitleHle(const rexbox::xbe::XbeImage& /*image*/, rexbox::runtime::HleRegistry& /*registry*/)
 {
     // XDK function addresses come from function identification, which is the

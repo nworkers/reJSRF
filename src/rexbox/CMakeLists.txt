@@ -16,6 +16,16 @@ add_library(rexbox_runtime STATIC
 )
 target_link_libraries(rexbox_runtime PUBLIC rexbox_xbe rexbox_platform)
 
+# Recompiled-code ABI adapter: the only code tied to the lifter's ABI
+# (xboxrecomp's recomp_types.h). A lifter upgrade changes this target alone.
+add_library(rexbox_recomp STATIC
+    recomp/recomp_abi.c
+    recomp/recomp_bridge.cpp
+    recomp/recomp_runtime.cpp
+)
+target_include_directories(rexbox_recomp PRIVATE "${REJSRF_XBOXRECOMP_DIR}/templates/runtime")
+target_link_libraries(rexbox_recomp PUBLIC rexbox_runtime)
+
 # HLE modules. Each links the runtime only, never another module, so any one
 # can be replaced (or reused by another title) on its own.
 add_library(rexbox_hle_kernel STATIC
