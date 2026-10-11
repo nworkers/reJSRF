@@ -1,0 +1,2 @@
+add_executable(rexbox_xbe_info xbe_info/main.cpp)
+target_link_libraries(rexbox_xbe_info PRIVATE rexbox_xbe rexbox_hle_kernel)

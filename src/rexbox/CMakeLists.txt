@@ -1,0 +1,34 @@
+# rexbox: the title-agnostic Xbox runtime. Nothing in this directory may name
+# Jet Set Radio Future or include rejsrf/ headers; that is what lets another
+# title reuse it unchanged.
+
+# XBE image parsing. Pure data; no platform dependency.
+add_library(rexbox_xbe STATIC
+    xbe/xbe_image.cpp
+)
+target_include_directories(rexbox_xbe PUBLIC "${PROJECT_SOURCE_DIR}/include")
+
+# Runtime core: guest memory, XBE placement, the HLE registry.
+add_library(rexbox_runtime STATIC
+    runtime/guest_memory.cpp
+    runtime/hle_registry.cpp
+    runtime/xbe_loader.cpp
+)
+target_link_libraries(rexbox_runtime PUBLIC rexbox_xbe rexbox_platform)
+
+# HLE modules. Each links the runtime only, never another module, so any one
+# can be replaced (or reused by another title) on its own.
+add_library(rexbox_hle_kernel STATIC
+    hle/kernel/kernel_exports.cpp
+    hle/kernel/kernel_hle.cpp
+)
+target_link_libraries(rexbox_hle_kernel PUBLIC rexbox_runtime)
+
+foreach(module IN ITEMS xapi d3d8 dsound xinput)
+    add_library(rexbox_hle_${module} STATIC hle/${module}/${module}_hle.cpp)
+    target_link_libraries(rexbox_hle_${module} PUBLIC rexbox_runtime)
+endforeach()
+
+add_library(rexbox_hle INTERFACE)
+target_link_libraries(rexbox_hle INTERFACE
+    rexbox_hle_kernel rexbox_hle_xapi rexbox_hle_d3d8 rexbox_hle_dsound rexbox_hle_xinput)
