@@ -27,7 +27,10 @@ runtime::GuestHeap& Heap()
 
 GuestAddress AllocateGuest(uint32_t size)
 {
-    const auto block = Heap().Allocate(size == 0 ? 1 : size, runtime::GuestHeap::kPageSize, false);
+    const uint32_t bytes = size == 0 ? 1 : size;
+    const auto block = bytes <= runtime::GuestHeap::kSmallMax
+                           ? Heap().AllocateSmall(bytes)
+                           : Heap().Allocate(bytes, runtime::GuestHeap::kPageSize, false);
     if (!block)
     {
         return 0;

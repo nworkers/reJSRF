@@ -16,12 +16,17 @@ KernelState& State()
 
 GuestAddress AllocateZeroed(uint32_t size, uint32_t alignment, bool top_down)
 {
-    const std::optional<GuestAddress> address = Heap().Allocate(size, alignment, top_down);
+    // Pool blocks and kernel objects of a few bytes share pages; a slot is
+    // aligned to its size class, at least 16 bytes.
+    const bool small = alignment < runtime::GuestHeap::kPageSize && size != 0 && size <= runtime::GuestHeap::kSmallMax;
+    const std::optional<GuestAddress> address =
+        small ? Heap().AllocateSmall(size) : Heap().Allocate(size, alignment, top_down);
     if (!address)
     {
         return 0;
     }
-    Memory().Fill(*address, 0, (size + runtime::GuestHeap::kPageSize - 1) & ~(runtime::GuestHeap::kPageSize - 1));
+    Memory().Fill(*address, 0,
+                  small ? size : (size + runtime::GuestHeap::kPageSize - 1) & ~(runtime::GuestHeap::kPageSize - 1));
     return *address;
 }
 

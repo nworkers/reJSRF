@@ -247,6 +247,44 @@ void ProbeMemory()
     g_memory->Write32(size_io, 0);
     Check(Call("NtFreeVirtualMemory", {base_io, size_io, 0x8000}) == 0, "MEM_RELEASE frees it");
     Check(Call("MmQueryAllocationSize", {block}) == 0, "the block is gone");
+
+    // Small reservations take page alignment, not a 64 KiB slot each.
+    g_memory->Write32(base_io, 0);
+    g_memory->Write32(size_io, 0x1800);
+    Check(Call("NtAllocateVirtualMemory", {base_io, 0, size_io, 0x3000, 4}) == 0, "small NtAllocateVirtualMemory");
+    const GuestAddress small = g_memory->Read32(base_io);
+    Check(small % 0x1000 == 0 && g_memory->Read32(size_io) == 0x2000, "small allocation is page aligned, 2 pages");
+    g_memory->Write32(size_io, 0);
+    Call("NtFreeVirtualMemory", {base_io, size_io, 0x8000});
+
+    // Small pool blocks share a page and report their size class.
+    const GuestAddress pool_a = Call("ExAllocatePoolWithTag", {0x18, 0x6B6F6F50});
+    const GuestAddress pool_b = Call("ExAllocatePoolWithTag", {0x18, 0x6B6F6F50});
+    Check(pool_a != 0 && pool_b != 0 && pool_a % 16 == 0 && pool_b % 16 == 0, "pool blocks are 16-byte aligned");
+    Check(pool_a / 0x1000 == pool_b / 0x1000 && pool_a != pool_b, "small pool blocks share a page");
+    Check(Call("ExQueryPoolBlockSize", {pool_a}) == 0x20, "ExQueryPoolBlockSize reports the size class");
+    Call("ExFreePool", {pool_a});
+    Check(Call("ExQueryPoolBlockSize", {pool_a}) == 0, "a freed pool block is gone");
+    Check(Call("ExQueryPoolBlockSize", {pool_b}) == 0x20, "its neighbour survives");
+    Call("ExFreePool", {pool_b});
+}
+
+// The heap's two regions: physical RAM below, virtual-only address space above.
+void ProbeGuestHeapRegions()
+{
+    rexbox::runtime::GuestHeap heap(0x200000, 0x100000);
+    const auto physical = heap.Allocate(0x3000, 0x1000, true);
+    Check(physical && *physical + 0x3000 <= 0x100000, "Allocate stays in physical RAM, even top-down");
+    const auto virtual_block = heap.AllocateVirtual(0x20000, 0x10000, false);
+    Check(virtual_block && *virtual_block >= 0x100000 && *virtual_block % 0x10000 == 0,
+          "AllocateVirtual takes the address space above RAM, aligned");
+    const auto small = heap.AllocateSmall(40);
+    Check(small && *small < 0x100000 && *small % 64 == 0, "AllocateSmall stays in physical RAM, 64-byte class");
+    Check(heap.BlockSizeContaining(*small + 8, nullptr) == 64, "an address inside a small block finds its slot");
+    const auto overflow = heap.AllocateVirtual(0xF0000, 0x1000, false);  // 0xE0000 free above
+    Check(overflow && *overflow < 0x100000, "AllocateVirtual falls back to physical RAM when the top is full");
+    Check(!heap.Allocate(0x100000, 0x1000, false), "Allocate never reaches the virtual-only space");
+    Check(heap.Free(*small) && !heap.Free(*small), "a small block frees once");
 }
 
 // XAPI opens "D:\..." with RootDirectory = ObDosDevicesDirectory() (-3);
@@ -421,6 +459,7 @@ int main()
     ProbeSha1();
     ProbeTime();
     ProbeMemory();
+    ProbeGuestHeapRegions();
     ProbeDosDevicesRoot(scratch);
     ProbeUserApc(scratch);
 

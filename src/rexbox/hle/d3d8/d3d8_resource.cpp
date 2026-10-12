@@ -241,7 +241,7 @@ GuestAddress CreateDeviceSurface(ResourceKind kind, uint32_t width, uint32_t hei
     runtime::GuestMemory& memory = Memory();
     const uint32_t pitch = LinearPitch(width, format);
     const uint32_t data_size = pitch * height;
-    const auto header_block = Heap().Allocate(header::kSurfaceSize, runtime::GuestHeap::kPageSize, false);
+    const auto header_block = Heap().AllocateSmall(header::kSurfaceSize);
     const auto data_block = Heap().Allocate(data_size, runtime::GuestHeap::kPageSize, false);
     if (!header_block || !data_block)
     {

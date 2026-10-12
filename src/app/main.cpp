@@ -105,7 +105,7 @@ int main(int argc, char** argv)
     std::printf("xbe: %s\n", variant->label);
 
     rexbox::runtime::GuestMemory memory;
-    if (!memory.Initialize(rexbox::runtime::GuestMemory::kRetailRamSize))
+    if (!memory.Initialize(rexbox::runtime::GuestMemory::kAddressSpaceSize))
     {
         std::fprintf(stderr, "error: cannot reserve guest memory\n");
         return 1;
@@ -115,7 +115,7 @@ int main(int argc, char** argv)
         std::fprintf(stderr, "error: %s\n", error.c_str());
         return 1;
     }
-    rexbox::runtime::GuestHeap heap(memory.size());
+    rexbox::runtime::GuestHeap heap(memory.size(), rexbox::runtime::GuestMemory::kRetailRamSize);
     heap.Reserve(0, image->base_address());  // low memory below the image
     heap.Reserve(image->base_address(), image->size_of_image());
     std::printf("guest memory: %zu MiB, %zu sections placed, %u KiB free\n", memory.size() >> 20,

@@ -18,9 +18,6 @@ namespace rexbox::hle::d3d8
 namespace
 {
 
-// The NV2A addresses texture memory physically; Data holds a physical address
-// (D3DResource_Register masks it so), which is also our guest address.
-constexpr uint32_t kPhysicalMask = 0x03FFFFFF;
 constexpr uint32_t kHashSamples = 256;
 
 // D3DTEXTUREADDRESS and D3DTEXTUREFILTERTYPE (Xbox; inferred, PC numbering

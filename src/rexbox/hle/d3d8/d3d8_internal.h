@@ -27,6 +27,14 @@ namespace rexbox::hle::d3d8
 using runtime::GuestAddress;
 using runtime::HleCall;
 
+// Turns an address the NV2A would see (a physical address, or one in the
+// 0x80000000 contiguous mapping) into a guest address. Contiguous memory is
+// identity-mapped in physical RAM, so this only strips the mapping bits; it
+// keeps the bit above retail RAM so data in the virtual-memory address space
+// (index data, user-pointer vertices) stays reachable.
+constexpr uint32_t kPhysicalMask = static_cast<uint32_t>(runtime::GuestMemory::kAddressSpaceSize - 1);
+static_assert((runtime::GuestMemory::kAddressSpaceSize & (runtime::GuestMemory::kAddressSpaceSize - 1)) == 0);
+
 // HRESULTs the Xbox D3D8 library returns.
 constexpr uint32_t kD3dOk = 0x00000000;
 constexpr uint32_t kD3dErrNotAvailable = 0x8876086A;

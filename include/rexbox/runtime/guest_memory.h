@@ -24,6 +24,12 @@ public:
     // Retail Xbox RAM.
     static constexpr size_t kRetailRamSize = 64u * 1024u * 1024u;
 
+    // Guest address space: retail RAM, then as much again for virtual memory.
+    // On the Xbox a reservation costs address space and only its committed
+    // pages cost RAM; with guest addresses mapped flat, every reserved page
+    // is backed, so reservations get room of their own above RAM.
+    static constexpr size_t kAddressSpaceSize = 2 * kRetailRamSize;
+
     GuestMemory() = default;
     ~GuestMemory();
     GuestMemory(const GuestMemory&) = delete;

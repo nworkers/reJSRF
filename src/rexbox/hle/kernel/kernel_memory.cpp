@@ -90,10 +90,25 @@ void NtAllocateVirtualMemory()
     }
     else
     {
-        base = AllocateZeroed(size, kAllocationGranularity, (type & kMemTopDown) != 0);
-        if (base == 0)
+        // On the Xbox a reservation takes 64 KiB of address space but only
+        // its committed pages take memory. Here address space is memory (one
+        // flat 64 MiB), so a 64 KiB slot per small request wasted up to 60
+        // KiB each: the title's ~300 small allocations alone filled 19 MiB
+        // and the stage load ran out. Small requests take page alignment;
+        // large ones keep the 64 KiB granularity.
+        const uint32_t alignment = size < kAllocationGranularity ? runtime::GuestHeap::kPageSize
+                                                                 : kAllocationGranularity;
+        const auto block = Heap().AllocateVirtual(size, alignment, (type & kMemTopDown) != 0);
+        base = block ? *block : 0;
+        if (base != 0)
         {
-            TraceOnce("NtAllocateVirtualMemory", "out of guest memory for " + std::to_string(size) + " bytes");
+            memory.Fill(base, 0, RoundUp(size, runtime::GuestHeap::kPageSize));
+        }
+        else
+        {
+            TraceOnce("NtAllocateVirtualMemory", "out of guest memory for " + std::to_string(size) + " bytes (" +
+                                                     std::to_string(Heap().free_bytes()) + " free, largest run " +
+                                                     std::to_string(Heap().largest_free_bytes()) + ")");
             call.Return(kStatusNoMemory, 5);
             return;
         }
@@ -287,7 +302,7 @@ void MmClaimGpuInstanceMemory()
     if (size == 0xFFFFFFFF)
     {
         // A query for the end of instance memory.
-        call.Return(static_cast<uint32_t>(Memory().size()), 2);
+        call.Return(static_cast<uint32_t>(runtime::GuestMemory::kRetailRamSize), 2);
         return;
     }
     call.Return(AllocateZeroed(size, runtime::GuestHeap::kPageSize, true), 2);
