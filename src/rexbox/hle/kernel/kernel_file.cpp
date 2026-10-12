@@ -1,6 +1,7 @@
 // File system services over the VFS (kernel_vfs.h). I/O is synchronous: a
 // request completes before the call returns, its event (if any) is signalled
-// and its IO_STATUS_BLOCK filled. APC completion routines are not delivered.
+// and its IO_STATUS_BLOCK filled. A completion routine (ApcRoutine) is queued
+// as a user APC on the calling thread (kernel_apc.cpp).
 
 #include "kernel_internal.h"
 #include "kernel_vfs.h"
@@ -111,6 +112,19 @@ void SignalEventIfAny(uint32_t event_handle)
         std::lock_guard<std::mutex> lock(State().dispatcher);
         Memory().Write32(event->object + layout::kHeaderSignalState, 1);
         State().signalled.notify_all();
+    }
+}
+
+// Finishes an I/O call that takes (FileHandle, Event, ApcRoutine, ApcContext,
+// IoStatusBlock, ...): signals the event and, unless the status is an error,
+// queues the completion APC on the calling thread for its next alertable wait.
+void CompleteIo(const HleCall& call, uint32_t status)
+{
+    SignalEventIfAny(call.Arg(1));
+    const GuestAddress routine = call.Arg(2);
+    if (routine != 0 && !IsNtError(status))
+    {
+        QueueUserApc(ApcThread(), UserApc{routine, call.Arg(3), call.Arg(4), 0});
     }
 }
 
@@ -372,7 +386,7 @@ void NtReadFile()
     if (file != nullptr && (file->kind == KernelObject::Kind::kDevice || file->volume))
     {
         const uint32_t status = DeviceTransfer(*file, false, buffer, length, ResolveOffset(*file, call.Arg(7)), io_status);
-        SignalEventIfAny(call.Arg(1));
+        CompleteIo(call, status);
         call.Return(status, 8);
         return;
     }
@@ -380,10 +394,6 @@ void NtReadFile()
     {
         call.Return(kStatusInvalidHandle, 8);
         return;
-    }
-    if (call.Arg(2) != 0)
-    {
-        TraceOnce("NtReadFile", "APC completion routine not delivered");
     }
     const uint64_t offset = ResolveOffset(*file, call.Arg(7));
     std::fstream& stream = *file->stream;
@@ -394,7 +404,7 @@ void NtReadFile()
     file->position = offset + read;
     const uint32_t status = read == 0 && length != 0 ? kStatusEndOfFile : kStatusSuccess;
     WriteIoStatus(io_status, status, read);
-    SignalEventIfAny(call.Arg(1));
+    CompleteIo(call, status);
     call.Return(status, 8);
 }
 
@@ -410,7 +420,7 @@ void NtWriteFile()
     {
         const uint32_t status =
             DeviceTransfer(*file, true, call.Arg(5), length, ResolveOffset(*file, call.Arg(7)), io_status);
-        SignalEventIfAny(call.Arg(1));
+        CompleteIo(call, status);
         call.Return(status, 8);
         return;
     }
@@ -427,7 +437,7 @@ void NtWriteFile()
     stream.flush();
     file->position = offset + length;
     WriteIoStatus(io_status, kStatusSuccess, length);
-    SignalEventIfAny(call.Arg(1));
+    CompleteIo(call, kStatusSuccess);
     call.Return(kStatusSuccess, 8);
 }
 
@@ -707,6 +717,7 @@ void NtQueryDirectoryFile()
     if (length < needed)
     {
         WriteIoStatus(io_status, 0x80000005, 0);  // STATUS_BUFFER_OVERFLOW
+        CompleteIo(call, 0x80000005);
         call.Return(0x80000005, 10);
         return;
     }
@@ -724,7 +735,7 @@ void NtQueryDirectoryFile()
     memory.Write32(info + 0x3C, static_cast<uint32_t>(name.size()));
     std::memcpy(memory.Translate(info + 0x40), name.data(), name.size());
     WriteIoStatus(io_status, kStatusSuccess, needed);
-    SignalEventIfAny(call.Arg(1));
+    CompleteIo(call, kStatusSuccess);
     call.Return(kStatusSuccess, 10);
 }
 
@@ -839,7 +850,7 @@ void ControlFile(const char* function)
         information = 32;
     }
     WriteIoStatus(io_status, kStatusSuccess, information);
-    SignalEventIfAny(call.Arg(1));
+    CompleteIo(call, kStatusSuccess);
     call.Return(kStatusSuccess, 10);
 }
 

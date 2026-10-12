@@ -198,28 +198,7 @@ void RtlCompareMemoryUlong()
 void RtlNtStatusToDosError()
 {
     HleCall call;
-    const uint32_t status = call.Arg(0);
-    uint32_t error = 317;  // ERROR_MR_MID_NOT_FOUND
-    switch (status)
-    {
-    case kStatusSuccess: error = 0; break;
-    case kStatusTimeout: error = 1460; break;          // ERROR_TIMEOUT
-    case kStatusPending: error = 997; break;           // ERROR_IO_PENDING
-    case kStatusNoMoreFiles: error = 18; break;        // ERROR_NO_MORE_FILES
-    case kStatusUnsuccessful: error = 31; break;       // ERROR_GEN_FAILURE
-    case kStatusNotImplemented: error = 1; break;      // ERROR_INVALID_FUNCTION
-    case kStatusInvalidHandle: error = 6; break;       // ERROR_INVALID_HANDLE
-    case kStatusInvalidParameter: error = 87; break;   // ERROR_INVALID_PARAMETER
-    case kStatusNoSuchFile: error = 2; break;          // ERROR_FILE_NOT_FOUND
-    case kStatusEndOfFile: error = 38; break;          // ERROR_HANDLE_EOF
-    case kStatusNoMemory: error = 8; break;            // ERROR_NOT_ENOUGH_MEMORY
-    case kStatusAccessDenied: error = 5; break;        // ERROR_ACCESS_DENIED
-    case kStatusObjectNameNotFound: error = 2; break;  // ERROR_FILE_NOT_FOUND
-    case kStatusObjectNameCollision: error = 183; break;  // ERROR_ALREADY_EXISTS
-    case kStatusObjectPathNotFound: error = 3; break;  // ERROR_PATH_NOT_FOUND
-    default: break;
-    }
-    call.Return(error, 1);
+    call.Return(NtStatusToDosError(call.Arg(0)), 1);
 }
 
 // TIME_FIELDS: Year, Month, Day, Hour, Minute, Second, Milliseconds, Weekday (CSHORT each).
@@ -304,6 +283,31 @@ void RtlTimeFieldsToTime()
 }
 
 }  // namespace
+
+uint32_t NtStatusToDosError(uint32_t status)
+{
+    uint32_t error = 317;  // ERROR_MR_MID_NOT_FOUND
+    switch (status)
+    {
+    case kStatusSuccess: error = 0; break;
+    case kStatusTimeout: error = 1460; break;          // ERROR_TIMEOUT
+    case kStatusPending: error = 997; break;           // ERROR_IO_PENDING
+    case kStatusNoMoreFiles: error = 18; break;        // ERROR_NO_MORE_FILES
+    case kStatusUnsuccessful: error = 31; break;       // ERROR_GEN_FAILURE
+    case kStatusNotImplemented: error = 1; break;      // ERROR_INVALID_FUNCTION
+    case kStatusInvalidHandle: error = 6; break;       // ERROR_INVALID_HANDLE
+    case kStatusInvalidParameter: error = 87; break;   // ERROR_INVALID_PARAMETER
+    case kStatusNoSuchFile: error = 2; break;          // ERROR_FILE_NOT_FOUND
+    case kStatusEndOfFile: error = 38; break;          // ERROR_HANDLE_EOF
+    case kStatusNoMemory: error = 8; break;            // ERROR_NOT_ENOUGH_MEMORY
+    case kStatusAccessDenied: error = 5; break;        // ERROR_ACCESS_DENIED
+    case kStatusObjectNameNotFound: error = 2; break;  // ERROR_FILE_NOT_FOUND
+    case kStatusObjectNameCollision: error = 183; break;  // ERROR_ALREADY_EXISTS
+    case kStatusObjectPathNotFound: error = 3; break;  // ERROR_PATH_NOT_FOUND
+    default: break;
+    }
+    return error;
+}
 
 void RegisterRtlExports(runtime::HleRegistry& registry)
 {

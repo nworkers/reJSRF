@@ -1,6 +1,6 @@
 # reJSRF 아키텍처
 
-현재 구현된 코드의 구조를 기록한다. 결정의 근거는 [설계 i001](docs/design/20261012-i001-project-bootstrap.md), [i002](docs/design/20261012-i002-recomp-pipeline.md), [i003](docs/design/20261012-i003-kernel-hle.md), [i006](docs/design/20261012-i006-xdk-symbol-binding.md), [i007](docs/design/20261012-i007-d3d8-hle-first-batch.md), [i012](docs/design/20261012-i012-d3d8-surfaces-first-frame.md), [i015](docs/design/20261012-i015-xinput-hle.md), [i017](docs/design/20261012-i017-dsound-hle.md)에 있다.
+현재 구현된 코드의 구조를 기록한다. 결정의 근거는 [설계 i001](docs/design/20261012-i001-project-bootstrap.md), [i002](docs/design/20261012-i002-recomp-pipeline.md), [i003](docs/design/20261012-i003-kernel-hle.md), [i006](docs/design/20261012-i006-xdk-symbol-binding.md), [i007](docs/design/20261012-i007-d3d8-hle-first-batch.md), [i012](docs/design/20261012-i012-d3d8-surfaces-first-frame.md), [i015](docs/design/20261012-i015-xinput-hle.md), [i017](docs/design/20261012-i017-dsound-hle.md), [i019](docs/design/20261012-i019-user-apc.md)에 있다.
 
 ## 1. 레이어와 CMake 타깃
 
@@ -39,17 +39,17 @@ flowchart BT
 | `rexbox_xbe` | `src/rexbox/xbe/` | XBE 파싱 | 구현 |
 | `rexbox_runtime` | `src/rexbox/runtime/` | `GuestMemory`(based 모델, 스칼라 접근), `GuestHeap`(페이지 할당자), `HleRegistry`, `GuestCpu`·`GuestExecutor` 계약, `Environment`, `HleCall`, 커널 thunk 합성 주소 | 구현 |
 | `rexbox_recomp` | `src/rexbox/recomp/` | 생성 코드 ABI 전역·콜백, `RecompExecutor`(게스트 스레드 = 호스트 스레드, `CallGuest`, 스레드별 보고), XDK override 진입점 `rexbox_hle_enter` | 구현 |
-| `rexbox_hle_kernel` | `src/rexbox/hle/kernel/` | 커널 export 103개(아래 표) | 부팅이 닿은 서비스 |
+| `rexbox_hle_kernel` | `src/rexbox/hle/kernel/` | 커널 export 104개(아래 표) | 부팅이 닿은 서비스 |
 | `rexbox_hle_d3d8` | `src/rexbox/hle/d3d8/` | Direct3D 8 HLE(아래 표): 어댑터·모드·Caps 질의, 디바이스·서피스·리소스 객체(Xbox 헤더 레이아웃), 상태 setter, 리소스 생성·Lock, 셰이더 핸들, 그리기 스텁 | export 110개(그리기는 로그만) |
 | `rexbox_hle_xinput` | `src/rexbox/hle/xinput/` | XAPI 장치·입력 함수 11개(`XInitDevices`, `XGetDevices`, `XGetDeviceChanges`, `XInput*`, `XMountMUA`/`XUnmountMU`) on 플랫폼 입력 계약 | 게임패드 포트 0(호스트 게임패드 또는 키보드), 메모리 유닛 없음 |
 | `rexbox_hle_dsound` | `src/rexbox/hle/dsound/` | 게임이 부르는 DSOUND 함수 50개(`DirectSoundCreate`, `IDirectSound_*`, `IDirectSoundBuffer_*`) on 플랫폼 오디오 계약: 객체·버퍼 메모리, Lock·Play·Stop·커서(원본 의미), PCM 8/16·Xbox ADPCM 믹서(주파수·볼륨·루프 구간·믹스 빈), 효과 이미지 서술자와 상태 읽기·쓰기 | 3D·EG·LFO·필터·DSP 효과는 `S_OK`만 |
 | `rexbox_hle_xapi` | `src/rexbox/hle/xapi/` | XDK 라이브러리 HLE | 등록 진입점만 |
-| `rejsrf_game` | `src/game/jsrf/` | 프로파일, 생성된 lookup 노출, 디컴파일 함수, 함수 탐색 seed(`recomp/seed_functions.json` 손으로 19개, `recomp/seed_pointer_targets.json` 포인터로만 참조되는 함수 162개: `scripts/recomp/find_pointer_targets.py`) | 디컴파일 1개 |
-| `rejsrf_recomp` | `gen/jsrf_us/gen/` (gitignore) | lift된 C 9,015개 함수 | `gen/`이 있을 때만 |
+| `rejsrf_game` | `src/game/jsrf/` | 프로파일, 생성된 lookup 노출, 디컴파일 함수, 함수 탐색 seed(`recomp/seed_functions.json` 손으로 20개(실행에서 닿은 `observed` 1개 포함), `recomp/seed_pointer_targets.json` 포인터로만 참조되는 함수 162개: `scripts/recomp/find_pointer_targets.py`) | 디컴파일 1개 |
+| `rejsrf_recomp` | `gen/jsrf_us/gen/` (gitignore) | lift된 C 9,016개 함수 | `gen/`이 있을 때만 |
 | `rejsrf` | `src/app/` | 부팅 orchestration과 스레드 보고 | D3D8 디바이스 생성(창 표시)까지 |
 | `rexbox_xbe_info` | `tools/xbe_info/` | XBE 정보 | 구현 |
 | `rexbox_xdk_symbols` | `tools/xdk_symbols/` | XbSymbolDatabase로 XDK 함수·변수 식별 → JSON (`regenerate.py`가 사용) | 구현 |
-| `rexbox_kernel_probe` | `tools/kernel_probe/` | 게임 없이 커널 export 검사(28개, CI) | 구현 |
+| `rexbox_kernel_probe` | `tools/kernel_probe/` | 게임 없이 커널 export 검사(사용자 APC 포함 42개, CI) | 구현 |
 | `rexbox_dsound_probe` | `tools/dsound_probe/` | 게임 없이 DSOUND export 검사(수동 출력으로 믹서를 직접 돌림; Lock, 커서, 반복 구간, 형식 디코드, 믹스 빈, 효과 서술자, pop 수; 48개, CI) | 구현 |
 | `rejsrf_decomp_check` | `tools/decomp_check/` | 디컴파일 함수와 lift 본문 비교 | 구현 |
 | `rejsrf_d3d8_check` | `tools/d3d8_check/` | D3D8 HLE export와 lift된 XDK 원본(`sub_X_gen`) 비교(eax, esp, 스크래치 메모리), `--dump`로 원본의 답 출력; 리소스 헤더 케이스와 디바이스 서피스 인코딩 확인 포함 | 구현(13,557 케이스) |
@@ -61,10 +61,11 @@ flowchart BT
 | `kernel_hle.cpp` | 등록, 초기화, thunk 슬롯 바인딩(함수 → 합성 주소, 데이터 → 변수 주소) |
 | `kernel_state.cpp`, `kernel_internal.h` | 디스패처 잠금, 핸들 표, 구조체 오프셋, 공용 도우미 |
 | `kernel_thread.cpp` | KPCR/ETHREAD/스택/TLS 구성, `PsCreateSystemThreadEx`, 종료, 일시정지, 우선순위, 초기 스레드 |
-| `kernel_sync.cpp` | 이벤트, 세마포어, 뮤턴트, 타이머, 대기 |
+| `kernel_sync.cpp` | 이벤트, 세마포어, 뮤턴트, 타이머, 대기(경고 가능 사용자 모드 대기는 사용자 APC를 실행하고 `STATUS_USER_APC`) |
+| `kernel_apc.cpp` | 스레드별 사용자 APC 큐(파일 I/O의 `ApcRoutine`), 전달, `NtUserIoApcDispatcher` |
 | `kernel_memory.cpp` | 가상·연속·시스템 메모리, 풀 |
 | `kernel_object.cpp` | `NtClose`, `Ob*` |
-| `kernel_rtl.cpp` | 크리티컬 섹션, 문자열, 시간 변환, 상태 코드 |
+| `kernel_rtl.cpp` | 크리티컬 섹션, 문자열, 시간 변환, 상태 코드(공용 `NtStatusToDosError`) |
 | `kernel_hal.cpp` | IRQL, 시간, 인터럽트·DPC(전달 안 함), PCI, AV, 비휘발 설정, `DbgPrint` |
 | `kernel_crypto.cpp` | `XcSHA*` (SHA-1) |
 | `kernel_file.cpp`, `kernel_vfs.*` | 파일·디렉터리·장치·볼륨·IOCTL, Xbox 이름공간 → 호스트 디렉터리 |
@@ -152,11 +153,11 @@ sequenceDiagram
 
 # reJSRF Architecture
 
-This records the structure of the code as implemented now. The reasons are in [design i001](docs/design/20261012-i001-project-bootstrap.md), [i002](docs/design/20261012-i002-recomp-pipeline.md), [i003](docs/design/20261012-i003-kernel-hle.md), [i006](docs/design/20261012-i006-xdk-symbol-binding.md), [i007](docs/design/20261012-i007-d3d8-hle-first-batch.md), [i012](docs/design/20261012-i012-d3d8-surfaces-first-frame.md), [i015](docs/design/20261012-i015-xinput-hle.md) and [i017](docs/design/20261012-i017-dsound-hle.md).
+This records the structure of the code as implemented now. The reasons are in [design i001](docs/design/20261012-i001-project-bootstrap.md), [i002](docs/design/20261012-i002-recomp-pipeline.md), [i003](docs/design/20261012-i003-kernel-hle.md), [i006](docs/design/20261012-i006-xdk-symbol-binding.md), [i007](docs/design/20261012-i007-d3d8-hle-first-batch.md), [i012](docs/design/20261012-i012-d3d8-surfaces-first-frame.md), [i015](docs/design/20261012-i015-xinput-hle.md), [i017](docs/design/20261012-i017-dsound-hle.md) and [i019](docs/design/20261012-i019-user-apc.md).
 
 ## 1. Layers and CMake targets
 
-The diagrams and tables above apply. In short: `rexbox_platform` (virtual memory, guarded runs, host threads, and the display, input and audio contracts implemented on SDL3 in `src/platform/sdl/`) ← `rexbox_runtime` (guest memory and heap, HLE registry, the GuestCpu/GuestExecutor contract, Environment, HleCall) ← `rexbox_recomp` (lifter ABI adapter and `RecompExecutor`, one host thread per guest thread) and the HLE modules; `rejsrf_game` and the generated `rejsrf_recomp` sit above; `rejsrf` orchestrates. The kernel HLE exports 103 functions, one file per area (threads, sync, memory, objects, Rtl, HAL, crypto, files with the VFS, data exports). The D3D8 HLE (`rexbox_hle_d3d8`) has one file per area: registration and state, constants and layouts, the adapter/mode/format queries with their measured tables, the caps table, device creation (which opens the display), and the GL function table. The DSOUND HLE (`rexbox_hle_dsound`) implements the 50 DSOUND functions the game calls on the platform audio contract: objects and buffer memory, Lock/Play/Stop and cursors with the original semantics, a PCM 8/16 and Xbox ADPCM mixer (frequency, volume, loop region, mix bins), and the effects image descriptor with state reads and writes; 3D, EG, LFO, filters and DSP effects only return `S_OK`. Function seeds: 19 by hand in `seed_functions.json` and 162 pointer-only functions in `seed_pointer_targets.json` (from `scripts/recomp/find_pointer_targets.py`); 9,015 functions are lifted. Tools: `rexbox_xbe_info`, `rexbox_kernel_probe` (28 checks without a game, run in CI), `rexbox_dsound_probe` (48 DSOUND checks without a game, driving the mixer by hand, run in CI), `rejsrf_decomp_check` and `rejsrf_d3d8_check` (HLE exports against the lifted XDK originals, 13,557 cases).
+The diagrams and tables above apply. In short: `rexbox_platform` (virtual memory, guarded runs, host threads, and the display, input and audio contracts implemented on SDL3 in `src/platform/sdl/`) ← `rexbox_runtime` (guest memory and heap, HLE registry, the GuestCpu/GuestExecutor contract, Environment, HleCall) ← `rexbox_recomp` (lifter ABI adapter and `RecompExecutor`, one host thread per guest thread) and the HLE modules; `rejsrf_game` and the generated `rejsrf_recomp` sit above; `rejsrf` orchestrates. The kernel HLE exports 104 functions, one file per area (threads, sync, memory, objects, Rtl, HAL, crypto, files with the VFS, data exports, and user APCs: a per-thread queue fed by file I/O completion routines, run by alertable user-mode waits that then return `STATUS_USER_APC`, with `NtUserIoApcDispatcher`). The D3D8 HLE (`rexbox_hle_d3d8`) has one file per area: registration and state, constants and layouts, the adapter/mode/format queries with their measured tables, the caps table, device creation (which opens the display), and the GL function table. The DSOUND HLE (`rexbox_hle_dsound`) implements the 50 DSOUND functions the game calls on the platform audio contract: objects and buffer memory, Lock/Play/Stop and cursors with the original semantics, a PCM 8/16 and Xbox ADPCM mixer (frequency, volume, loop region, mix bins), and the effects image descriptor with state reads and writes; 3D, EG, LFO, filters and DSP effects only return `S_OK`. Function seeds: 20 by hand in `seed_functions.json` (one marked `observed`) and 162 pointer-only functions in `seed_pointer_targets.json` (from `scripts/recomp/find_pointer_targets.py`); 9,016 functions are lifted. Tools: `rexbox_xbe_info`, `rexbox_kernel_probe` (42 checks without a game, user APCs included, run in CI), `rexbox_dsound_probe` (48 DSOUND checks without a game, driving the mixer by hand, run in CI), `rejsrf_decomp_check` and `rejsrf_d3d8_check` (HLE exports against the lifted XDK originals, 13,557 cases).
 
 ## 2. Generating the recompiled code
 

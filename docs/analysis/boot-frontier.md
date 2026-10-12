@@ -4,7 +4,34 @@
 
 This records how far the recompiled US build gets when run from its entry point. It is updated by each task; earlier frontiers stay in the history below.
 
-## 현재 / Current (issue #17, 2026-10-12)
+## 현재 / Current (issue #19, 2026-10-12)
+
+| 항목 / Item | 값 / Value |
+|---|---|
+| 생성 코드 / Generated code | 함수 9,016개(실행에서 닿은 `0x0007BE30`을 `observed` seed로 +1), 미해결 스텁 105개, XDK override 258개, 커널 export 104개(+`NtUserIoApcDispatcher`) / 9,016 functions (+1: `0x0007BE30`, reached at run time, as an `observed` seed), 105 unresolved stubs, 258 XDK overrides, 104 kernel exports (+`NtUserIoApcDispatcher`) |
+| 실행 결과 / Outcome | **`dsstdfx.bin` 읽기의 완료 APC가 전달되어 `DownloadEffectsImage`(효과 20개), 스트리밍 PCM 버퍼 4개, 첫 `D3DDevice_Swap`, 폰트 읽기, 효과음 버퍼 10개(Xbox ADPCM 9 + PCM 1), 세이브 메타데이터 확인(`U:\…\SaveMeta.xbx` 없음)을 지나, thread 2가 `D3DVertexBuffer_Lock` 뒤 `0x0FE80026`을 읽다 fault(약 50초, 헤드리스) / the completion APC of the `dsstdfx.bin` read is delivered; past `DownloadEffectsImage` (20 effects), four streaming PCM buffers, the first `D3DDevice_Swap`, font loading, ten sound-effect buffers (9 Xbox ADPCM + 1 PCM) and the save-metadata check (`U:\…\SaveMeta.xbx` absent), thread 2 faults reading `0x0FE80026` after `D3DVertexBuffer_Lock` (about 50 s, headless)** |
+
+* **확인됨**: XAPI `ReadFileEx`가 넘긴 `NtUserIoApcDispatcher` APC가 다음 경고 가능 대기에서 실행되고 대기는 `STATUS_USER_APC`로 끝난다. 게임은 이어서 효과 이미지를 내려받는다([dsound §5](dsound.md)).
+* **확인됨**: 첫 프레임 뒤 vtable 슬롯 `0x0007BE30`(`.data 0x0020D2B8`)이 `0x0007BDDB`에서 불려 건너뛰어졌다. 앞 함수 `sub_0007BDD0`의 switch 표를 선형 스윕이 코드로 읽어 seed가 "명령 중간"으로 거부되었으므로 `observed` seed로 넣었다. 같은 모양의 후보 `0x0001FD10`, `0x00020F10`은 아직 닿지 않았다.
+* **미확정**: fault 직전 마지막 간접 호출은 가상 getter `0x00038ED0`(`return this->[0x1770]`, 0을 돌려줌)이고, 호출자가 `esi = 0x0FE80022`에서 읽는다. 다음 task에서 호출자와 `esi`의 출처를 찾는다.
+* **Confirmed**: the `NtUserIoApcDispatcher` APC that XAPI's `ReadFileEx` passes runs at the next alertable wait, which ends with `STATUS_USER_APC`; the game then downloads the effects image ([dsound §5](dsound.md)).
+* **Confirmed**: after the first frame, the vtable slot `0x0007BE30` (`.data 0x0020D2B8`) was called from `0x0007BDDB` and skipped. The linear sweep had decoded the preceding `sub_0007BDD0`'s switch tables as code, so its seed was rejected as mid-instruction; it is now an `observed` seed. The two candidates of the same shape, `0x0001FD10` and `0x00020F10`, are not reached yet.
+* **Unresolved**: the last indirect call before the fault is the virtual getter `0x00038ED0` (`return this->[0x1770]`, which returns 0), and the caller then reads from `esi = 0x0FE80022`. The next task finds the caller and where `esi` comes from.
+
+## 이력 / History
+
+| issue | frontier |
+|---|---|
+| #2 | 첫 실행: 미구현 커널 import 255 `PsCreateSystemThreadEx` / first run: unimplemented kernel import 255 `PsCreateSystemThreadEx` |
+| #3 | `NtOpenFile` → `HalReturnToFirmware`(Partition0 없음) → D3D8의 NV2A `0xFD001804` 읽기 / `NtOpenFile` → `HalReturnToFirmware` (no Partition0) → D3D8 reading NV2A `0xFD001804` |
+| #6 | 첫 D3D8 API `Direct3D_GetAdapterCount` / the first D3D8 API, `Direct3D_GetAdapterCount` |
+| #7 | `Direct3D_CreateDevice` 통과(SDL3 창), `D3DDevice_GetBackBuffer` / past `Direct3D_CreateDevice` (SDL3 window), `D3DDevice_GetBackBuffer` |
+| #12 | D3D8 초기화·게임 객체 생성 통과, 커널 import 65 `IoCreateDevice` / past D3D8 initialization and object setup, kernel import 65 `IoCreateDevice` |
+| #15 | 입력·폰트·셰이더 생성 통과, `DirectSoundCreate`의 APU `0xFE801100` / past input, font and shader creation, APU `0xFE801100` in `DirectSoundCreate` |
+| #17 | `DirectSoundCreate`(HLE) 통과, `dsstdfx.bin` 읽기의 사용자 APC 대기 / past `DirectSoundCreate` (HLE), waiting for the user APC of the `dsstdfx.bin` read |
+| #19 | 사용자 APC 전달, 효과 이미지·버퍼 생성·첫 `D3DDevice_Swap`·폰트·효과음 버퍼 통과, `D3DVertexBuffer_Lock` 뒤 `0x0FE80026` fault / user APCs delivered; past the effects image, buffer creation, the first `D3DDevice_Swap`, fonts and sound-effect buffers, fault at `0x0FE80026` after `D3DVertexBuffer_Lock` |
+
+### issue #17 frontier 상세 / issue #17 frontier details
 
 | 항목 / Item | 값 / Value |
 |---|---|
@@ -19,18 +46,6 @@ This records how far the recompiled US build gets when run from its entry point.
 * **Confirmed**: the four thread routines the game then starts (`0x0013B180` and others, referenced only by `push offset`) and the file-read method `0x00178F40` (a vtable slot) were not lifted and were skipped. `scripts/recomp/find_pointer_targets.py` finds the 162 16-byte-aligned, padding-preceded function starts in `.text` that are referenced only from data or immediates and writes them to `seed_pointer_targets.json`; no indirect call is skipped now.
 * **Confirmed**: the current stop is the kernel's user APCs. XAPI's asynchronous file reads (the `ReadFileEx` family) pass a completion routine to `NtReadFile` and wait, alertably, for it to run; the kernel HLE completes the I/O synchronously but neither queues nor delivers the APC (`NtUserIoApcDispatcher`, ordinal 232, is not implemented either).
 * **Unresolved**: the next task is user APCs (`NtReadFile`/`NtWriteFile` `ApcRoutine`, `NtQueueApcThread`, `STATUS_USER_APC` from alertable waits); then the effects image download, buffer creation, and the first `D3DDevice_Swap`.
-
-## 이력 / History
-
-| issue | frontier |
-|---|---|
-| #2 | 첫 실행: 미구현 커널 import 255 `PsCreateSystemThreadEx` / first run: unimplemented kernel import 255 `PsCreateSystemThreadEx` |
-| #3 | `NtOpenFile` → `HalReturnToFirmware`(Partition0 없음) → D3D8의 NV2A `0xFD001804` 읽기 / `NtOpenFile` → `HalReturnToFirmware` (no Partition0) → D3D8 reading NV2A `0xFD001804` |
-| #6 | 첫 D3D8 API `Direct3D_GetAdapterCount` / the first D3D8 API, `Direct3D_GetAdapterCount` |
-| #7 | `Direct3D_CreateDevice` 통과(SDL3 창), `D3DDevice_GetBackBuffer` / past `Direct3D_CreateDevice` (SDL3 window), `D3DDevice_GetBackBuffer` |
-| #12 | D3D8 초기화·게임 객체 생성 통과, 커널 import 65 `IoCreateDevice` / past D3D8 initialization and object setup, kernel import 65 `IoCreateDevice` |
-| #15 | 입력·폰트·셰이더 생성 통과, `DirectSoundCreate`의 APU `0xFE801100` / past input, font and shader creation, APU `0xFE801100` in `DirectSoundCreate` |
-| #17 | `DirectSoundCreate`(HLE) 통과, `dsstdfx.bin` 읽기의 사용자 APC 대기 / past `DirectSoundCreate` (HLE), waiting for the user APC of the `dsstdfx.bin` read |
 
 ### issue #15 frontier 상세 / issue #15 frontier details
 

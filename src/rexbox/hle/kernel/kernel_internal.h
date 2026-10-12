@@ -13,6 +13,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
+#include <deque>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -30,6 +31,7 @@ using runtime::GuestAddress;
 
 // NTSTATUS values used by the HLE.
 constexpr uint32_t kStatusSuccess = 0x00000000;
+constexpr uint32_t kStatusUserApc = 0x000000C0;
 constexpr uint32_t kStatusTimeout = 0x00000102;
 constexpr uint32_t kStatusPending = 0x00000103;
 constexpr uint32_t kStatusObjectNameExists = 0x40000000;
@@ -47,6 +49,15 @@ constexpr uint32_t kStatusObjectNameCollision = 0xC0000035;
 constexpr uint32_t kStatusObjectPathNotFound = 0xC000003A;
 constexpr uint32_t kStatusMutantNotOwned = 0xC0000046;
 constexpr uint32_t kStatusSemaphoreLimitExceeded = 0xC0000047;
+
+// NT_ERROR: the top two bits of an NTSTATUS are 11.
+constexpr bool IsNtError(uint32_t status)
+{
+    return (status >> 30) == 3;
+}
+
+// KPROCESSOR_MODE.
+constexpr uint32_t kUserMode = 1;
 
 // Xbox structure layout (docs/kb/xbox-kernel-structures.md).
 namespace layout
@@ -176,6 +187,19 @@ void RegisterRtlExports(runtime::HleRegistry& registry);
 void RegisterHalExports(runtime::HleRegistry& registry);
 void RegisterFileExports(runtime::HleRegistry& registry);
 void RegisterCryptoExports(runtime::HleRegistry& registry);
+void RegisterApcExports(runtime::HleRegistry& registry);
+
+// The Win32 error code for an NTSTATUS (RtlNtStatusToDosError's table).
+uint32_t NtStatusToDosError(uint32_t status);
+
+// A user-mode APC: routine(argument1, argument2, argument3), stdcall.
+struct UserApc
+{
+    GuestAddress routine = 0;
+    uint32_t argument1 = 0;
+    uint32_t argument2 = 0;
+    uint32_t argument3 = 0;
+};
 
 // A host-side record of a guest thread.
 struct KernelThread
@@ -188,6 +212,9 @@ struct KernelThread
     std::mutex gate;
     std::condition_variable resumed;
     int suspend_count = 0;
+    // User-mode APCs waiting for an alertable wait; guarded by the
+    // dispatcher lock (docs/design/20261012-i019-user-apc.md).
+    std::deque<UserApc> user_apcs;
 };
 
 // The calling host thread's guest thread, or nullptr outside guest threads.
@@ -207,6 +234,17 @@ uint64_t InterruptTime100ns();
 
 // Kernel data area: allocates the data exports and starts the tick thread.
 void InitializeKernelData();
+
+// The thread whose APC queue the caller uses: the current guest thread, or a
+// per-host-thread record outside guest threads (tools).
+KernelThread& ApcThread();
+
+// Queues a user APC on `thread` and wakes the waiters (lock taken inside).
+void QueueUserApc(KernelThread& thread, const UserApc& apc);
+
+// Runs every user APC queued on `thread`, in order, without the dispatcher
+// lock (routines may call back into the kernel). Returns how many ran.
+uint32_t DeliverUserApcs(KernelThread& thread);
 
 // Signals a thread object at exit (dispatcher lock taken inside).
 void SignalThreadExit(GuestAddress ethread, uint32_t exit_status);

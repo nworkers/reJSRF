@@ -218,10 +218,36 @@ void PsTerminateSystemThread()
 }
 
 // NTSTATUS KeDelayExecutionThread(KPROCESSOR_MODE WaitMode, BOOLEAN Alertable, PLARGE_INTEGER Interval)
+// An alertable user-mode delay ends early for a user APC, runs it and
+// returns STATUS_USER_APC.
 void KeDelayExecutionThread()
 {
     HleCall call;
     const Deadline deadline = DeadlineFromTimeout(call.Arg(2));
+    const bool alertable = (call.Arg(1) & 0xFF) != 0 && (call.Arg(0) & 0xFF) == kUserMode;
+    if (alertable)
+    {
+        KernelThread& thread = ApcThread();
+        bool pending = false;
+        {
+            KernelState& state = State();
+            std::unique_lock<std::mutex> lock(state.dispatcher);
+            const auto has_apc = [&thread] { return !thread.user_apcs.empty(); };
+            pending = deadline ? state.signalled.wait_until(lock, *deadline, has_apc) : has_apc();
+        }
+        if (pending)
+        {
+            DeliverUserApcs(thread);
+            HleCall().Return(kStatusUserApc, 3);
+            return;
+        }
+        if (!deadline)
+        {
+            std::this_thread::yield();
+        }
+        call.Return(kStatusSuccess, 3);
+        return;
+    }
     if (deadline)
     {
         std::this_thread::sleep_until(*deadline);

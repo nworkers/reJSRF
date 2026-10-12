@@ -87,8 +87,11 @@ GuestAddress ObjectFromHandle(uint32_t handle)
 }
 
 // Waits for one (wait_all = false) or all of `objects`. Returns the NTSTATUS:
-// the index of the satisfying object, STATUS_TIMEOUT, or an error.
-uint32_t WaitForObjects(const std::vector<GuestAddress>& objects, bool wait_all, const Deadline& deadline)
+// the index of the satisfying object, STATUS_TIMEOUT, or an error. With
+// `apcs` (an alertable user-mode wait), a pending user APC ends the wait with
+// STATUS_USER_APC once no object satisfies it; the caller delivers them.
+uint32_t WaitForObjects(const std::vector<GuestAddress>& objects, bool wait_all, const Deadline& deadline,
+                        const KernelThread* apcs = nullptr)
 {
     KernelState& state = State();
     std::unique_lock<std::mutex> lock(state.dispatcher);
@@ -121,6 +124,10 @@ uint32_t WaitForObjects(const std::vector<GuestAddress>& objects, bool wait_all,
                 }
             }
         }
+        if (apcs != nullptr && !apcs->user_apcs.empty())
+        {
+            return kStatusUserApc;
+        }
         if (deadline)
         {
             if (state.signalled.wait_until(lock, *deadline) == std::cv_status::timeout)
@@ -133,7 +140,7 @@ uint32_t WaitForObjects(const std::vector<GuestAddress>& objects, bool wait_all,
                 }
                 if (!any || wait_all)
                 {
-                    return kStatusTimeout;
+                    return apcs != nullptr && !apcs->user_apcs.empty() ? kStatusUserApc : kStatusTimeout;
                 }
             }
         }
@@ -147,6 +154,24 @@ uint32_t WaitForObjects(const std::vector<GuestAddress>& objects, bool wait_all,
 void NotifyWaitersLocked()
 {
     State().signalled.notify_all();
+}
+
+// The thread whose user APCs an alertable wait in `mode` delivers, or null.
+KernelThread* AlertableThread(uint32_t mode, uint32_t alertable)
+{
+    return (alertable & 0xFF) != 0 && (mode & 0xFF) == kUserMode ? &ApcThread() : nullptr;
+}
+
+// WaitForObjects, then the APCs that ended it.
+uint32_t WaitAndDeliver(const std::vector<GuestAddress>& objects, bool wait_all, const Deadline& deadline,
+                        KernelThread* apcs)
+{
+    const uint32_t status = WaitForObjects(objects, wait_all, deadline, apcs);
+    if (status == kStatusUserApc && apcs != nullptr)
+    {
+        DeliverUserApcs(*apcs);
+    }
+    return status;
 }
 
 // --- Event ---------------------------------------------------------------
@@ -430,11 +455,11 @@ void KeWaitForSingleObject()
     HleCall call;
     const std::vector<GuestAddress> objects{call.Arg(0)};
     const Deadline deadline = DeadlineFromTimeout(call.Arg(4));
-    const uint32_t status = WaitForObjects(objects, false, deadline);
-    call.Return(status, 5);
+    const uint32_t status = WaitAndDeliver(objects, false, deadline, AlertableThread(call.Arg(2), call.Arg(3)));
+    HleCall().Return(status, 5);
 }
 
-void WaitForHandle(int stack_args, uint32_t handle, GuestAddress timeout)
+void WaitForHandle(int stack_args, uint32_t handle, GuestAddress timeout, KernelThread* apcs)
 {
     const GuestAddress object = ObjectFromHandle(handle);
     if (object == 0)
@@ -443,15 +468,16 @@ void WaitForHandle(int stack_args, uint32_t handle, GuestAddress timeout)
         return;
     }
     const std::vector<GuestAddress> objects{object};
-    const uint32_t status = WaitForObjects(objects, false, DeadlineFromTimeout(timeout));
+    const uint32_t status = WaitAndDeliver(objects, false, DeadlineFromTimeout(timeout), apcs);
     HleCall().Return(status, stack_args);
 }
 
 // NTSTATUS NtWaitForSingleObject(HANDLE Handle, BOOLEAN Alertable, PLARGE_INTEGER Timeout)
+// An Nt service: the wait counts as user mode.
 void NtWaitForSingleObject()
 {
     HleCall call;
-    WaitForHandle(3, call.Arg(0), call.Arg(2));
+    WaitForHandle(3, call.Arg(0), call.Arg(2), AlertableThread(kUserMode, call.Arg(1)));
 }
 
 // NTSTATUS NtWaitForSingleObjectEx(HANDLE Handle, KPROCESSOR_MODE WaitMode,
@@ -459,7 +485,7 @@ void NtWaitForSingleObject()
 void NtWaitForSingleObjectEx()
 {
     HleCall call;
-    WaitForHandle(4, call.Arg(0), call.Arg(3));
+    WaitForHandle(4, call.Arg(0), call.Arg(3), AlertableThread(call.Arg(1), call.Arg(2)));
 }
 
 // NTSTATUS NtWaitForMultipleObjectsEx(ULONG Count, HANDLE Handles[], WAIT_TYPE WaitType,
@@ -486,8 +512,9 @@ void NtWaitForMultipleObjectsEx()
         }
         objects.push_back(object);
     }
-    const uint32_t status = WaitForObjects(objects, wait_all, DeadlineFromTimeout(call.Arg(5)));
-    call.Return(status, 6);
+    const uint32_t status =
+        WaitAndDeliver(objects, wait_all, DeadlineFromTimeout(call.Arg(5)), AlertableThread(call.Arg(3), call.Arg(4)));
+    HleCall().Return(status, 6);
 }
 
 }  // namespace
