@@ -66,7 +66,7 @@ python scripts\recomp\regenerate.py      # gen/jsrf_us/ 에 생성, 약 2분
 기대 출력(앱, 재컴파일 코드 포함 빌드). 현재 frontier는 [docs/analysis/boot-frontier.md](../analysis/boot-frontier.md):
 
 ```text
-reJSRF 0.0.7
+reJSRF 0.0.8
 xbe: USA (region 1)
 guest memory: 64 MiB, 11 sections placed, 62940 KiB free
 hle: 283 exports, kernel imports 107/120 bound, 43 title bindings
