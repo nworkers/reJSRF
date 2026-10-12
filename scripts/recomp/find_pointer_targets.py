@@ -28,6 +28,8 @@ import re
 import struct
 import sys
 
+from xbe_variant import check_xbe
+
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 DEFAULT_XBE = ROOT / "roms" / "Jet Set Radio Future" / "default.xbe"
 DISPATCH = ROOT / "gen" / "jsrf_us" / "gen" / "recomp_dispatch.c"
@@ -55,6 +57,10 @@ def main():
     parser.add_argument("--write", action="store_true")
     args = parser.parse_args()
 
+    problem = check_xbe(args.xbe)
+    if problem:
+        print(f"error: {problem}", file=sys.stderr)
+        return 2
     image = pathlib.Path(args.xbe).read_bytes()
     if not DISPATCH.exists():
         print(f"error: {DISPATCH} is missing; run regenerate.py first", file=sys.stderr)

@@ -1,0 +1,9 @@
+{
+  "comment": "The XBE each generated variant is lifted from, checked by regenerate.py and find_pointer_targets.py before they read it. Seeds and title bindings hold addresses of this exact build, so another build would generate code that does not match them (docs/analysis/jsrf-xbe-overview.md).",
+  "variants": {
+    "jsrf_us": {
+      "label": "USA (region 1)",
+      "md5": "f4e366bfdceee551a09f42219c90d84e"
+    }
+  }
+}

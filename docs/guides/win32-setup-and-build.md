@@ -41,6 +41,8 @@ pip install capstone
 python scripts\recomp\regenerate.py      # gen/jsrf_us/ 에 생성, 약 2분
 ```
 
+`regenerate.py`는 기본으로 `roms\Jet Set Radio Future\default.xbe`를 읽는다. 다른 경로는 `--xbe <경로>`로 준다. 읽기 전에 MD5가 US판(`src/game/jsrf/recomp/variants.json`)과 같은지 확인하고, 다르면 생성하지 않고 멈춘다. seed와 타이틀 바인딩이 US판의 주소이기 때문이다. `find_pointer_targets.py`도 같은 검사를 한다.
+
 생성 코드는 커밋하지 않는다. `src/game/jsrf/decomp/`를 바꾸거나 submodule을 갱신한 뒤에는 다시 생성한다. 생성하지 않으면 앱은 로드 단계에서 멈춘다.
 
 ## 5. 빌드
