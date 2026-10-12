@@ -82,7 +82,9 @@ void ReadKeyboard(GamepadSnapshot* out)
     out->dpad_down = held(SDL_SCANCODE_DOWN);
     out->dpad_left = held(SDL_SCANCODE_LEFT);
     out->dpad_right = held(SDL_SCANCODE_RIGHT);
-    out->start = held(SDL_SCANCODE_RETURN);
+    // Alt+Enter toggles fullscreen (display_sdl.cpp), not START.
+    const bool alt = held(SDL_SCANCODE_LALT) || held(SDL_SCANCODE_RALT);
+    out->start = held(SDL_SCANCODE_RETURN) && !alt;
     out->back = held(SDL_SCANCODE_BACKSPACE);
     out->a = analog(SDL_SCANCODE_Z);
     out->b = analog(SDL_SCANCODE_X);

@@ -7,12 +7,14 @@
 // Usage: rejsrf <path to default.xbe>
 
 #include "rejsrf/jsrf_profile.h"
+#include "rejsrf_build_stamp.h"
 #include "rexbox/hle/d3d8/d3d8_hle.h"
 #include "rexbox/hle/dsound/dsound_hle.h"
 #include "rexbox/hle/kernel/kernel_exports.h"
 #include "rexbox/hle/kernel/kernel_hle.h"
 #include "rexbox/hle/xapi/xapi_hle.h"
 #include "rexbox/hle/xinput/xinput_hle.h"
+#include "rexbox/platform/display.h"
 #include "rexbox/recomp/recomp_runtime.h"
 #include "rexbox/runtime/environment.h"
 #include "rexbox/runtime/guest_heap.h"
@@ -31,6 +33,37 @@
 
 namespace
 {
+
+// "Win32/x86 Release": which binary a screenshot or a report came from.
+std::string BuildIdentity()
+{
+#if defined(_WIN32)
+    std::string identity = "Win32";
+#elif defined(__ANDROID__)
+    std::string identity = "Android";
+#elif defined(__APPLE__)
+    std::string identity = "macOS";
+#elif defined(__linux__)
+    std::string identity = "Linux";
+#else
+    std::string identity = "unknown";
+#endif
+#if defined(_M_IX86) || defined(__i386__)
+    identity += "/x86";
+#elif defined(_M_X64) || defined(__x86_64__)
+    identity += "/x64";
+#elif defined(_M_ARM64) || defined(__aarch64__)
+    identity += "/arm64";
+#endif
+    // A single-config generator without CMAKE_BUILD_TYPE leaves $<CONFIG> empty.
+    const std::string config = REJSRF_BUILD_CONFIG;
+#if defined(NDEBUG)
+    identity += " " + (config.empty() ? std::string("Release") : config);
+#else
+    identity += " " + (config.empty() ? std::string("Debug") : config);
+#endif
+    return identity;
+}
 
 void PrintThreadReport(const rexbox::recomp::ThreadReport& report)
 {
@@ -81,6 +114,9 @@ int main(int argc, char** argv)
     // Diagnostics interleave with the guest's output; keep stderr unbuffered even when redirected.
     std::setvbuf(stderr, nullptr, _IONBF, 0);
     std::printf("reJSRF %s\n", REJSRF_VERSION);
+    // The window adds the renderer and the FPS (rePIU's form).
+    rexbox::platform::SetDisplayTitle(std::string("reJSRF v" REJSRF_VERSION " (") + BuildIdentity() +
+                                      ") - Build " REJSRF_BUILD_TIME);
     if (argc < 2)
     {
         std::fprintf(stderr, "usage: %s <path to default.xbe>\n", argv[0]);

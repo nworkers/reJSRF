@@ -1,6 +1,15 @@
 add_executable(rejsrf main.cpp)
 target_link_libraries(rejsrf PRIVATE rejsrf_game rexbox_hle)
-target_compile_definitions(rejsrf PRIVATE REJSRF_VERSION="${REJSRF_VERSION}")
+target_compile_definitions(rejsrf PRIVATE REJSRF_VERSION="${REJSRF_VERSION}" REJSRF_BUILD_CONFIG="$<CONFIG>")
+
+# The build time in the window title, refreshed on every build.
+set(REJSRF_BUILD_STAMP "${CMAKE_CURRENT_BINARY_DIR}/generated/rejsrf_build_stamp.h")
+add_custom_target(rejsrf_build_stamp
+    COMMAND "${CMAKE_COMMAND}" "-DOUTPUT=${REJSRF_BUILD_STAMP}" -P "${CMAKE_CURRENT_SOURCE_DIR}/build_stamp.cmake"
+    BYPRODUCTS "${REJSRF_BUILD_STAMP}"
+    VERBATIM)
+add_dependencies(rejsrf rejsrf_build_stamp)
+target_include_directories(rejsrf PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
 if(MSVC)
     # Guest threads get their 64 MiB host stacks explicitly (CreateHostThread);
     # the image default stays small because every other thread in the process

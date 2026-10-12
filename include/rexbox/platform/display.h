@@ -31,8 +31,12 @@ enum class GlApi
 
 struct DisplayConfig
 {
+    // The picture's size; the window opens at `scale` times it and keeps its
+    // aspect ratio when resized.
     uint32_t width = 640;
     uint32_t height = 480;
+    uint32_t scale = 2;
+    // Used when SetDisplayTitle gave none.
     const char* title = "";
     GlApi api = GlApi::kDesktopGl;
     bool hidden = false;  // create the window invisible (diagnostics that still need a GL context)
@@ -47,8 +51,20 @@ struct DisplayInfo
     uint32_t drawable_height = 0;
 };
 
+// Sets the window title's fixed part (the application's name, version and
+// build). The window shows it followed by " - <GL api and version> - FPS :
+// <presents per second>", updated once a second. May be called before the
+// display exists.
+void SetDisplayTitle(const std::string& title);
+
 // Creates the window and an OpenGL-family context, current on the calling
 // thread. Only one display exists; a second call fails while it is open.
+//
+// The window is resizable (aspect ratio kept) and has these controls, handled
+// in PumpDisplayEvents: Alt+1/2/3 size it to 1x/2x/3x the picture, and a left
+// double click or Alt+Enter toggles borderless fullscreen at the desktop
+// resolution. Callers fit the picture into the drawable size (GetDisplayInfo),
+// which follows the window.
 bool CreateDisplay(const DisplayConfig& config, std::string* error);
 
 void DestroyDisplay();
@@ -62,7 +78,8 @@ void* GetGlProcAddress(const char* name);
 // to close the window (the caller decides what that means).
 void PumpDisplayEvents(bool* close_requested);
 
-// Swaps the back buffer to the window (vertical sync on).
+// Swaps the back buffer to the window (no vertical sync; the caller paces) and
+// counts the present for the title's FPS.
 void PresentDisplay();
 
 void GetDisplayInfo(DisplayInfo* info);
