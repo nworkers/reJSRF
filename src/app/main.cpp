@@ -22,10 +22,12 @@
 #include "rexbox/runtime/xbe_loader.h"
 #include "rexbox/xbe/xbe_image.h"
 
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <string>
+#include <thread>
 
 namespace
 {
@@ -76,6 +78,8 @@ void PrintThreadReport(const rexbox::recomp::ThreadReport& report)
 
 int main(int argc, char** argv)
 {
+    // Diagnostics interleave with the guest's output; keep stderr unbuffered even when redirected.
+    std::setvbuf(stderr, nullptr, _IONBF, 0);
     std::printf("reJSRF %s\n", REJSRF_VERSION);
     if (argc < 2)
     {
@@ -165,6 +169,34 @@ int main(int argc, char** argv)
     {
         std::fprintf(stderr, "error: %s\n", error.c_str());
         return 1;
+    }
+
+    // REXBOX_WATCHDOG=<seconds>: a run that is still going after that long
+    // dumps the guest threads' direct-call profile and ends (diagnostic for a
+    // guest thread that stopped reaching the HLE).
+    if (const char* watchdog = std::getenv("REXBOX_WATCHDOG"))
+    {
+        const int seconds = std::atoi(watchdog);
+        if (seconds > 0)
+        {
+            std::thread([seconds, &memory] {
+                std::this_thread::sleep_for(std::chrono::seconds(seconds));
+                std::fprintf(stderr, "[watchdog] still running after %d s\n", seconds);
+                rexbox::recomp::DumpCallProfile(stderr);
+                // REXBOX_WATCHDOG_DUMP=<file>: the whole guest RAM, for offline analysis.
+                if (const char* dump_path = std::getenv("REXBOX_WATCHDOG_DUMP"))
+                {
+                    if (FILE* dump = std::fopen(dump_path, "wb"))
+                    {
+                        std::fwrite(memory.base(), 1, memory.size(), dump);
+                        std::fclose(dump);
+                        std::fprintf(stderr, "[watchdog] guest memory written to %s\n", dump_path);
+                    }
+                }
+                std::fflush(stderr);
+                std::_Exit(4);
+            }).detach();
+        }
     }
 
     const std::vector<rexbox::recomp::ThreadReport> reports = executor.WaitForThreads();

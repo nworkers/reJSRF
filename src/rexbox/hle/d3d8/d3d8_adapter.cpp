@@ -171,9 +171,10 @@ void D3D_CheckDeviceFormat()
 
 // HRESULT Direct3D_CheckDeviceMultiSampleType(UINT Adapter, D3DDEVTYPE DeviceType,
 //     D3DFORMAT SurfaceFormat, BOOL Windowed, D3DMULTISAMPLE_TYPE MultiSampleType)
-// The library indexes the same capability table with the multisample type
-// and requires the depth/stencil bit there, so every real multisample value
-// is "not available"; Windowed is ignored.
+// The library indexes the capability table with the *Windowed* argument
+// (not the surface format) and requires its render-target bit, then with the
+// multisample type and requires the depth/stencil bit there. Every real call
+// therefore answers "not available"; the HLE reproduces that exactly.
 void Direct3D_CheckDeviceMultiSampleType()
 {
     HleCall call;
@@ -183,12 +184,17 @@ void Direct3D_CheckDeviceMultiSampleType()
         call.Return(verdict, 5);
         return;
     }
-    const bool available = (FormatFlags(call.Arg(2)) & kFormatRenderTarget) != 0 &&
+    const bool available = (FormatFlags(call.Arg(3)) & kFormatRenderTarget) != 0 &&
                            (FormatFlags(call.Arg(4)) & kFormatDepthStencil) != 0;
     call.Return(available ? kD3dOk : kD3dErrNotAvailable, 5);
 }
 
 }  // namespace
+
+uint8_t FormatCapabilityFlags(uint32_t format)
+{
+    return FormatFlags(format);
+}
 
 const DisplayMode* AdapterModes(uint32_t* count)
 {

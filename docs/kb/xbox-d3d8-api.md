@@ -57,6 +57,41 @@ Most are `__stdcall` (the callee removes its arguments with `ret n`); some LTCG 
 
 `Direct3D_CreateDevice` → `CMiniport_InitHardware` is the first point that reads NV2A MMIO (`0xFD000000` and up) ([boot-frontier](../analysis/boot-frontier.md)); the adapter, mode and caps queries before it use only tables inside the library and the kernel's AV services. Drawing commands are queued by the library into a push buffer the GPU consumes, so an API-level HLE never builds a push buffer and translates each `D3DDevice_*` call to the host graphics API instead.
 
+## 6. 리소스 헤더 / Resource headers
+
+Xbox D3D8의 리소스는 게스트 메모리의 작은 헤더 하나로 표현되며, 타이틀이 직접 만들어(`XGSetSurfaceHeader`, `XGSetTextureHeader`…) `D3DResource_Register`로 넘길 수도 있다. 레이아웃과 비트는 우리 바이너리의 lift 본문(`D3DResource_AddRef/Release/GetType`, `Get2DSurfaceDesc`, XGRAPHC 인코더 `0x001BBAFB`)에서 확인했다(**확인됨**, [analysis: d3d8-adapter §6](../analysis/d3d8-adapter.md)).
+
+An Xbox D3D8 resource is one small header in guest memory; a title may build it itself (`XGSetSurfaceHeader`, `XGSetTextureHeader`, …) and hand it to `D3DResource_Register`. The layout and bits below were confirmed from the lifted bodies in our binary (`D3DResource_AddRef/Release/GetType`, `Get2DSurfaceDesc`, the XGRAPHC encoder at `0x001BBAFB`) (**confirmed**, [analysis: d3d8-adapter §6](../analysis/d3d8-adapter.md)).
+
+```mermaid
+classDiagram
+    class D3DResource {
+        +0x00 Common
+        +0x04 Data
+        +0x08 Lock
+    }
+    class D3DPixelContainer {
+        +0x0C Format
+        +0x10 Size
+    }
+    class D3DSurface {
+        +0x14 Parent
+    }
+    D3DResource <|-- D3DPixelContainer
+    D3DPixelContainer <|-- D3DSurface
+```
+
+| 필드 / Field | 비트 / Bits |
+|---|---|
+| `Common` | bits 15:0 refcount; bits 18:16 type (0 VERTEXBUFFER, 1 INDEXBUFFER, 2 PUSHBUFFER, 3 PALETTE, 4 TEXTURE, 5 SURFACE, 6 FIXUP); bits 22:19 internal refcount; bit 24 D3DCREATED(라이브러리가 만든 객체, 마지막 Release에서 파괴 / created by the library, destroyed on the last Release) |
+| `Data` | 픽셀·정점 메모리 주소. `Register`는 `Data += pBase`, push buffer가 아니면 `& 0x03FFFFFF` / address of the pixel or vertex memory; `Register` adds `pBase` and, except for push buffers, masks with `0x03FFFFFF` |
+| `Format` | bits 1:0 DMA 채널(XGSetSurfaceHeader는 2), bit 2 큐브맵, bit 3 border color, bits 7:4 차원(2 = 2D, 3 = 3D), bits 15:8 `D3DFORMAT`, bits 19:16 밉 레벨 수, bits 23:20 log2 폭, bits 27:24 log2 높이, bits 31:28 log2 깊이(스위즐·2의 거듭제곱 리소스) / DMA channel (2 from XGSetSurfaceHeader), cube map, border color, dimension, `D3DFORMAT`, mip levels, log2 width, log2 height, log2 depth (swizzled power-of-two resources) |
+| `Size` | 선형 리소스만: bits 11:0 폭−1, bits 23:12 높이−1, bits 31:24 pitch/64−1; 스위즐 리소스는 0 / linear resources only: width−1, height−1, pitch/64−1; 0 for swizzled ones |
+
+* `D3DSURFACE_DESC`(Xbox): `{Format 0x00, Type 0x04, Usage 0x08, Size 0x0C, MultiSampleType 0x10, Width 0x14, Height 0x18}` 28바이트. `Usage`는 포맷 능력 바이트(§3의 표)에서 RENDERTARGET(bit 7) 또는 DEPTHSTENCIL(bit 6)로 정해진다. / 28 bytes; `Usage` comes from the format capability byte (render target bit 7, depth/stencil bit 6).
+* 포맷 능력 바이트의 bits 5:2는 픽셀당 비트 수다(레벨 크기 계산에 쓰임). / Bits 5:2 of the capability byte are the bits per pixel, used for level sizes.
+* `AddRef`는 refcount를 1 올려 돌려주고, refcount가 0인 서피스의 `Parent`도 AddRef한다. `Release`는 refcount 1·내부 refcount 0이면 파괴(`D3D_DestroyResource`)하고 0을 돌려준다. / `AddRef` increments and returns the count (also AddRef'ing a zero-count surface's `Parent`); `Release` destroys at count 1 with no internal count and returns 0.
+
 ## 출처 / Sources
 
 * XbSymbolDatabase, `src/OOVPADatabase/D3D8_OOVPA.c` (MIT): 심볼 이름, 규약, 인자 / symbol names, conventions, parameters

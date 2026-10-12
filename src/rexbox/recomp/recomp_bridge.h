@@ -39,6 +39,12 @@ runtime::GuestAddress TakeStopTarget();
 // SetUnimplementedHleFallback in recomp_runtime.h).
 bool BridgeHleFallbackLifted();
 
+// Whether the next diagnostic trace line may be written (REXBOX_HLE_TRACE).
+bool BridgeTraceEnabled();
+
+// Validates the heap named by REXBOX_HEAP_CHECK (diagnostic; see recomp_bridge.cpp).
+void CheckWatchedHeap(const char* where);
+
 }  // namespace rexbox::recomp
 
 #endif  // REXBOX_RECOMP_RECOMP_BRIDGE_H

@@ -1,6 +1,6 @@
 # reJSRF 아키텍처
 
-현재 구현된 코드의 구조를 기록한다. 결정의 근거는 [설계 i001](docs/design/20261012-i001-project-bootstrap.md), [i002](docs/design/20261012-i002-recomp-pipeline.md), [i003](docs/design/20261012-i003-kernel-hle.md), [i006](docs/design/20261012-i006-xdk-symbol-binding.md), [i007](docs/design/20261012-i007-d3d8-hle-first-batch.md)에 있다.
+현재 구현된 코드의 구조를 기록한다. 결정의 근거는 [설계 i001](docs/design/20261012-i001-project-bootstrap.md), [i002](docs/design/20261012-i002-recomp-pipeline.md), [i003](docs/design/20261012-i003-kernel-hle.md), [i006](docs/design/20261012-i006-xdk-symbol-binding.md), [i007](docs/design/20261012-i007-d3d8-hle-first-batch.md), [i012](docs/design/20261012-i012-d3d8-surfaces-first-frame.md)에 있다.
 
 ## 1. 레이어와 CMake 타깃
 
@@ -40,7 +40,7 @@ flowchart BT
 | `rexbox_runtime` | `src/rexbox/runtime/` | `GuestMemory`(based 모델, 스칼라 접근), `GuestHeap`(페이지 할당자), `HleRegistry`, `GuestCpu`·`GuestExecutor` 계약, `Environment`, `HleCall`, 커널 thunk 합성 주소 | 구현 |
 | `rexbox_recomp` | `src/rexbox/recomp/` | 생성 코드 ABI 전역·콜백, `RecompExecutor`(게스트 스레드 = 호스트 스레드, `CallGuest`, 스레드별 보고), XDK override 진입점 `rexbox_hle_enter` | 구현 |
 | `rexbox_hle_kernel` | `src/rexbox/hle/kernel/` | 커널 export 103개(아래 표) | 부팅이 닿은 서비스 |
-| `rexbox_hle_d3d8` | `src/rexbox/hle/d3d8/` | Direct3D 8 HLE(아래 표). 어댑터·모드·Caps 질의 8개, `Direct3D_CreateDevice`(표시 생성) | export 8개 + CreateDevice |
+| `rexbox_hle_d3d8` | `src/rexbox/hle/d3d8/` | Direct3D 8 HLE(아래 표): 어댑터·모드·Caps 질의, 디바이스·서피스·리소스 객체(Xbox 헤더 레이아웃), 상태 setter, 리소스 생성·Lock, 셰이더 핸들, 그리기 스텁 | export 110개(그리기는 로그만) |
 | `rexbox_hle_xapi`, `_dsound`, `_xinput` | `src/rexbox/hle/<module>/` | XDK 라이브러리 HLE | 등록 진입점만 |
 | `rejsrf_game` | `src/game/jsrf/` | 프로파일, 생성된 lookup 노출, 디컴파일 함수, 함수 탐색 seed(`recomp/seed_functions.json`) | 디컴파일 1개, seed 10개 |
 | `rejsrf_recomp` | `gen/jsrf_us/gen/` (gitignore) | lift된 C 8,721개 함수 | `gen/`이 있을 때만 |
@@ -49,7 +49,7 @@ flowchart BT
 | `rexbox_xdk_symbols` | `tools/xdk_symbols/` | XbSymbolDatabase로 XDK 함수·변수 식별 → JSON (`regenerate.py`가 사용) | 구현 |
 | `rexbox_kernel_probe` | `tools/kernel_probe/` | 게임 없이 커널 export 검사(27개, CI) | 구현 |
 | `rejsrf_decomp_check` | `tools/decomp_check/` | 디컴파일 함수와 lift 본문 비교 | 구현 |
-| `rejsrf_d3d8_check` | `tools/d3d8_check/` | D3D8 HLE export와 lift된 XDK 원본(`sub_X_gen`) 비교(eax, esp, 출력 버퍼), `--dump`로 원본의 답 출력 | 구현(12,202 케이스) |
+| `rejsrf_d3d8_check` | `tools/d3d8_check/` | D3D8 HLE export와 lift된 XDK 원본(`sub_X_gen`) 비교(eax, esp, 스크래치 메모리), `--dump`로 원본의 답 출력; 리소스 헤더 케이스와 디바이스 서피스 인코딩 확인 포함 | 구현(13,557 케이스) |
 
 ### 커널 HLE 파일
 
@@ -75,7 +75,12 @@ flowchart BT
 | `d3d8_internal.h` | Xbox D3D 상수, 구조체 오프셋(`D3DDISPLAYMODE`, `D3DPRESENT_PARAMETERS`, `D3DCAPS8`), `D3dState` |
 | `d3d8_adapter.cpp` | `Direct3D_GetAdapterCount`, `D3D_GetAdapterModeCount`, `D3D_EnumAdapterModes`, `D3D_CheckDeviceFormat`, `Direct3D_CheckDeviceMultiSampleType`; 모드 표 24개와 포맷 능력 바이트 표(측정값) |
 | `d3d8_caps.cpp` | `D3D_GetDeviceCaps`, `D3DDevice_GetDeviceCaps`; `D3DCAPS8` 53 DWORD 표(측정값) |
-| `d3d8_device.cpp` | `Direct3D_CreateDevice`: 표시 파라미터 읽기, 표시 생성, GL 정보 기록, 디바이스 객체(GuestHeap 1페이지) |
+| `d3d8_device.cpp` | `Direct3D_CreateDevice`(표시 생성, 백버퍼 2개·깊이 서피스 생성), `GetBackBuffer`, `GetDepthStencilSurface`, `SetRenderTarget`, `Reset`, `SetViewport`, `Clear`, `Swap`, 디바이스 refcount, `GetRasterStatus`, 타일·감마·필터 등 |
+| `d3d8_resource.h/.cpp` | Xbox `D3DResource` 헤더 레이아웃과 `Common`/`Format`/`Size` 비트, `ResourceTable`(헤더 주소 → 호스트 상태), `AddRef`/`Release`/`GetType`/`D3DSurface_GetDesc`, 디바이스 서피스 생성 |
+| `d3d8_create.cpp` | `CreateTexture`/`CreateVolumeTexture`/`CreateImageSurface`/`CreateVertexBuffer`/`CreateIndexBuffer`, `D3DResource_Register`, `GetSurfaceLevel`, `Lock*`, 연속 메모리 |
+| `d3d8_state.cpp` | `SetRenderState_*`·`SetTextureState_*`·`SetTransform`·스트림·인덱스·셰이더 바인딩 저장(`PipelineState`) |
+| `d3d8_shader.cpp` | 정점·픽셀 셰이더 핸들과 상수 저장(GLSL 변환은 다음 묶음) |
+| `d3d8_draw.cpp` | `Draw*`, `Begin`/`End`, `CopyRects`: 한 번 로그하고 통과(그리기 묶음에서 구현) |
 | `d3d8_gl.h/.cpp` | 쓰는 GL 함수만 담은 함수 표, `platform::GetGlProcAddress`로 채움 |
 
 ## 2. 재컴파일 코드 생성
@@ -131,8 +136,11 @@ sequenceDiagram
 * `REJSRF_RECOMP_GEN_DIR`(기본 `gen/jsrf_us/gen`)이 없으면 `rejsrf_recomp`와 `rejsrf_decomp_check`를 만들지 않는다(CI). `rexbox_kernel_probe`는 항상 빌드되고 CI에서 실행된다.
 * 라이선스 가드 `REJSRF_COPYLEFT_PATHS`는 모든 우리 타깃과 `rejsrf_recomp`에 적용된다.
 * 실행 시 환경 변수: `REJSRF_HDD_ROOT`(HDD 루트, 기본 `./hdd`), `REXBOX_TRACE_FILES`(모든 파일 열기 기록), `REXBOX_HLE_FALLBACK=lifted`(미구현 XDK 함수의 원본 실행, 진단용), `REXBOX_DISPLAY=none`(창 없이 실행; 헤드리스 진단).
+* 진단 환경 변수(멈춤·손상 추적): `REXBOX_HLE_TRACE=<n>`(XDK HLE 호출을 인자·ecx·eax와 함께, 커널 import는 ordinal로 처음 n개 기록), `REXBOX_TRACE_MEMORY`(가상 메모리 할당·커밋 기록), `REXBOX_WATCHDOG=<초>`(그 시간이 지나면 게스트 스레드의 직접 호출 프로파일을 덤프하고 종료; `REXBOX_WATCHDOG_DUMP=<파일>`이면 게스트 RAM 64 MiB도 저장), `REXBOX_HEAP_CHECK=<주소>`(NT 힙의 가변 크기 자유 리스트를 HLE 진입마다 검사해 첫 손상 지점 보고). 직접 호출 프로파일은 CMake `REJSRF_RECOMP_CALL_PROFILE=ON`으로 생성 코드를 빌드했을 때만 채워진다.
+* `scripts/recomp/check_hle_pops.py`는 D3D8 HLE export의 `Return(value, n)`과 lift 원본의 `ret n`을 대조한다(스택 불균형 예방).
 * `third_party/SDL`(submodule, release-3.4.18, zlib)은 정적 라이브러리만 빌드되어 `rexbox_platform`에 PRIVATE로 링크된다. 카메라·GPU·렌더러·햅틱·센서·대화상자·트레이는 끄고, 오디오·조이스틱·게임패드는 DSOUND·XInput task를 위해 남긴다.
 * `third_party/XbSymbolDatabase`(submodule)는 `rexbox_xdk_symbols`용으로 라이브러리만 빌드된다. 생성 코드를 처음 만들 때는 도구를 먼저 빌드해야 한다.
+* `third_party/xboxrecomp`는 업스트림 PR [#198](https://github.com/sp00nznet/xboxrecomp/pull/198)(`lock xadd` 플래그)이 머지되기 전까지 포크 `nworkers/xboxrecomp`의 `fix/xadd-flags`를 가리킨다(`THIRD_PARTY_NOTICES.md`).
 
 ---
 
@@ -159,6 +167,7 @@ The app builds guest memory, places the XBE, creates the heap and installs the E
 * **HLE functions**: `void()`, using `runtime::HleCall` to read stdcall arguments (`[esp+4+4i]`) and fastcall registers, and `Return(value, n)` to set eax and esp.
 * **Threads**: the kernel builds KPCR/ETHREAD/stack/TLS in guest memory and hands the thread to `GuestExecutor::StartThread`; `ExitThread` unwinds with SEH (`/EHa`).
 * **Synchronization**: dispatcher state is the guest `SignalState`; waits use one global dispatcher lock and a condition variable.
+* **Resources**: a D3D resource is a guest header in the Xbox layout (`Common` refcount/type bits, `Data`, `Format`/`Size` XGRAPHC bit fields, surfaces add `Parent`), because the title reads and builds headers itself; the HLE keeps host state per header address in a `ResourceTable` (docs/kb/xbox-d3d8-api.md).
 * **Display**: the HLE calls only `platform/display.h` (window and OpenGL-family context from width, height and title; `GetGlProcAddress`; `PresentDisplay`). SDL types never leave `src/platform/sdl/`. The window is created on the guest thread that calls `Direct3D_CreateDevice` (valid on Win32 and X11; platforms that need the main thread get a display service, design i007 §2.5).
 * **Files**: `\Device\CdRom0` → the XBE's folder (read-only), `\Device\Harddisk0\Partition1..5` → `<hdd root>/PartitionN`, `Partition0` a raw device; a partition root is a volume (raw writes accepted and dropped).
 
@@ -167,6 +176,6 @@ The app builds guest memory, places the XBE, creates the heap and installs the E
 * MSVC: `/utf-8 /permissive- /EHa` and `NOMINMAX WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS` globally; `/W4` on our targets; `/w /bigobj /MP` for generated code. Guest threads get 64 MiB host stacks.
 * Without `REJSRF_RECOMP_GEN_DIR` (default `gen/jsrf_us/gen`), `rejsrf_recomp` and `rejsrf_decomp_check` are not created (CI). `rexbox_kernel_probe` is always built and runs in CI.
 * The license guard `REJSRF_COPYLEFT_PATHS` applies to all our targets and to `rejsrf_recomp`.
-* Run-time environment variables: `REJSRF_HDD_ROOT` (HDD root, default `./hdd`), `REXBOX_TRACE_FILES` (log every file open), `REXBOX_HLE_FALLBACK=lifted` (run the original of an unimplemented XDK function; diagnostic) and `REXBOX_DISPLAY=none` (run without a window; headless diagnostics).
+* Run-time environment variables: `REJSRF_HDD_ROOT` (HDD root, default `./hdd`), `REXBOX_TRACE_FILES` (log every file open), `REXBOX_HLE_FALLBACK=lifted` (run the original of an unimplemented XDK function; diagnostic) and `REXBOX_DISPLAY=none` (run without a window; headless diagnostics). Diagnostics for hangs and corruption: `REXBOX_HLE_TRACE=<n>` (the first n XDK HLE calls with arguments, ecx and eax, and kernel imports by ordinal), `REXBOX_TRACE_MEMORY` (virtual-memory allocations and commits), `REXBOX_WATCHDOG=<seconds>` (dump the guest threads' direct-call profile and exit; with `REXBOX_WATCHDOG_DUMP=<file>` also write the 64 MiB guest RAM), `REXBOX_HEAP_CHECK=<address>` (validate an NT heap's variable-size free list at every HLE entry and report the first corruption). The direct-call profile is filled only when the generated code is built with CMake `REJSRF_RECOMP_CALL_PROFILE=ON`. `scripts/recomp/check_hle_pops.py` compares each D3D8 export's `Return(value, n)` with the lifted original's `ret n`.
 * `third_party/SDL` (submodule, release-3.4.18, zlib) is built as a static library only and linked PRIVATE into `rexbox_platform`; camera, GPU, renderer, haptic, sensor, dialog and tray are off, audio, joystick and gamepad stay for the DSOUND and XInput tasks.
 * `third_party/XbSymbolDatabase` (submodule) is built, library only, for `rexbox_xdk_symbols`; the tool must be built before generating code for the first time.

@@ -163,6 +163,9 @@ std::shared_ptr<KernelObject> LookupHandle(uint32_t handle);
 // Logs one line per distinct (function, detail) the first time it happens.
 void TraceOnce(const char* function, const std::string& detail);
 
+// True when REXBOX_TRACE_MEMORY is set: every virtual-memory call is logged.
+bool MemoryTraceEnabled();
+
 // Registration of each file's exports.
 void RegisterDataExports(runtime::HleRegistry& registry);
 void RegisterThreadExports(runtime::HleRegistry& registry);

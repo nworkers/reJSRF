@@ -15,6 +15,7 @@
 #include "rexbox/runtime/hle_registry.h"
 
 #include <cstdint>
+#include <array>
 #include <cstdio>
 #include <mutex>
 
@@ -77,7 +78,32 @@ constexpr uint32_t kPresentSize = 0x34;
 
 // D3DCAPS8 as the XDK 4134 library copies it: 53 DWORDs.
 constexpr uint32_t kCapsDwords = 53;
+
+// D3DVIEWPORT8.
+constexpr uint32_t kViewportX = 0x00;
+constexpr uint32_t kViewportY = 0x04;
+constexpr uint32_t kViewportWidth = 0x08;
+constexpr uint32_t kViewportHeight = 0x0C;
+constexpr uint32_t kViewportMinZ = 0x10;
+constexpr uint32_t kViewportMaxZ = 0x14;
+
+// D3DRECT.
+constexpr uint32_t kRectX1 = 0x00;
+constexpr uint32_t kRectY1 = 0x04;
+constexpr uint32_t kRectX2 = 0x08;
+constexpr uint32_t kRectY2 = 0x0C;
 }  // namespace layout
+
+// D3DCLEAR_* flags.
+constexpr uint32_t kClearTarget = 0x00000001;
+constexpr uint32_t kClearZBuffer = 0x00000002;
+constexpr uint32_t kClearStencil = 0x00000004;
+
+constexpr uint32_t kD3dErrNotFound = 0x88760866;
+
+// The library's per-D3DFORMAT capability byte (d3d8_adapter.cpp): bit 7
+// render target, bit 6 depth/stencil, bits 2-5 bits per pixel.
+uint8_t FormatCapabilityFlags(uint32_t format);
 
 struct DisplayMode
 {
@@ -104,12 +130,34 @@ struct PresentParameters
     uint32_t presentation_interval = 0;
 };
 
+struct Viewport
+{
+    uint32_t x = 0;
+    uint32_t y = 0;
+    uint32_t width = 0;
+    uint32_t height = 0;
+    float min_z = 0.0f;
+    float max_z = 1.0f;
+};
+
 struct D3dState
 {
     std::mutex mutex;
     GuestAddress device = 0;  // the guest device object, 0 before CreateDevice
     PresentParameters present;
     bool display_created = false;
+    bool headless = false;  // run without a window (SetD3d8Headless / REXBOX_DISPLAY=none)
+    GuestAddress back_buffers[2] = {0, 0};
+    GuestAddress depth_stencil = 0;
+    GuestAddress render_target = 0;  // current targets (headers)
+    GuestAddress depth_target = 0;
+    Viewport viewport;
+    uint32_t frame_count = 0;
+    bool close_requested = false;
+    uint32_t device_ref_count = 1;
+    uint32_t raster_status_calls = 0;
+    uint32_t fence_counter = 0;
+    std::array<std::array<uint32_t, 6>, 8> tiles = {};  // D3DTILE per tile register
 };
 
 D3dState& State();
@@ -121,6 +169,11 @@ runtime::GuestHeap& Heap();
 const DisplayMode* AdapterModes(uint32_t* count);
 
 void RegisterAdapterExports(runtime::HleRegistry& registry);
+void RegisterResourceExports(runtime::HleRegistry& registry);
+void RegisterStateExports(runtime::HleRegistry& registry);
+void RegisterCreateExports(runtime::HleRegistry& registry);
+void RegisterShaderExports(runtime::HleRegistry& registry);
+void RegisterDrawExports(runtime::HleRegistry& registry);
 void RegisterCapsExports(runtime::HleRegistry& registry);
 void RegisterDeviceExports(runtime::HleRegistry& registry);
 

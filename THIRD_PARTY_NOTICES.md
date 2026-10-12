@@ -8,7 +8,7 @@ reJSRF is MIT licensed. The third-party code below is included in, or ported int
 
 * 출처 / Source: https://github.com/sp00nznet/xboxrecomp
 * 라이선스 / License: MIT (Copyright (c) 2026 sp00nz). 전문은 `third_party/xboxrecomp/LICENSE`. / Full text in `third_party/xboxrecomp/LICENSE`.
-* 포함 방식 / How included: git submodule `third_party/xboxrecomp`, v0.13.1 (`193e2995ffaec871bb3be43a43bd66aa5fccfeb1`).
+* 포함 방식 / How included: git submodule `third_party/xboxrecomp`. v0.13.1 (`193e2995ffaec871bb3be43a43bd66aa5fccfeb1`) 위에 lifter 수정 하나(`xadd`/`lock xadd` 플래그, `e108d0e9`)를 더한 포크 `nworkers/xboxrecomp` 브랜치 `fix/xadd-flags`를 가리킨다. 그 수정은 업스트림 PR [sp00nznet/xboxrecomp#198](https://github.com/sp00nznet/xboxrecomp/pull/198)로 보냈고, 머지되면 submodule을 업스트림으로 되돌린다. / Points at the fork `nworkers/xboxrecomp`, branch `fix/xadd-flags`: v0.13.1 (`193e2995ffaec871bb3be43a43bd66aa5fccfeb1`) plus one lifter fix (`xadd`/`lock xadd` flags, `e108d0e9`), submitted upstream as [sp00nznet/xboxrecomp#198](https://github.com/sp00nznet/xboxrecomp/pull/198); the submodule returns to upstream once it is merged.
 * 옮긴 코드 / Ported code:
   * `src/rexbox/hle/kernel/kernel_exports.cpp` — `tools/xbe_parser/xbe_parser.py`의 `KERNEL_EXPORTS` 표 / the `KERNEL_EXPORTS` table of `tools/xbe_parser/xbe_parser.py`.
 * 빌드에 쓰는 파일 / Files used by the build (MIT, submodule에서 직접 / straight from the submodule):

@@ -58,7 +58,22 @@ void RtlEnterCriticalSection()
         return;
     }
     memory.Write32(cs + kCsLockCount, memory.Read32(cs + kCsLockCount) + 1);
-    state.signalled.wait(lock, [&] { return memory.Read32(cs + kCsRecursionCount) == 0; });
+    // A wait this long is a deadlock in practice; report the section once so
+    // the owner can be identified (diagnostic, no behavior change).
+    bool reported = false;
+    while (!state.signalled.wait_for(lock, std::chrono::seconds(5),
+                                     [&] { return memory.Read32(cs + kCsRecursionCount) == 0; }))
+    {
+        if (!reported)
+        {
+            reported = true;
+            std::fprintf(stderr,
+                         "[kernel] RtlEnterCriticalSection %08X: waiting 5 s; owner %08X self %08X recursion %u "
+                         "lock count %d\n",
+                         cs, memory.Read32(cs + kCsOwningThread), self, memory.Read32(cs + kCsRecursionCount),
+                         static_cast<int32_t>(memory.Read32(cs + kCsLockCount)));
+        }
+    }
     memory.Write32(cs + kCsOwningThread, self);
     memory.Write32(cs + kCsRecursionCount, 1);
     lock.unlock();
