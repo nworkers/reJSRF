@@ -97,8 +97,8 @@ add_subdirectory(third_party/XbSymbolDatabase EXCLUDE_FROM_ALL)
 
 # SDL3 (zlib): the host library behind the display contract on every target
 # OS (docs/design/20261012-i007-d3d8-hle-first-batch.md section 2). Static
-# library only; subsystems no HLE module uses yet stay off. Audio, joystick
-# and gamepad remain for the DSOUND and XInput tasks.
+# library only; subsystems no HLE module uses stay off. Audio serves the
+# DSOUND HLE, joystick and gamepad the XInput HLE.
 if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/SDL/CMakeLists.txt")
     message(FATAL_ERROR "third_party/SDL is missing; run: git submodule update --init")
 endif()

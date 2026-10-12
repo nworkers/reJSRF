@@ -4,7 +4,35 @@
 
 This records how far the recompiled US build gets when run from its entry point. It is updated by each task; earlier frontiers stay in the history below.
 
-## 현재 / Current (issue #15, 2026-10-12)
+## 현재 / Current (issue #17, 2026-10-12)
+
+| 항목 / Item | 값 / Value |
+|---|---|
+| 생성 코드 / Generated code | 함수 9,015개(포인터로만 참조되는 함수 162개 seed 뒤 +163), 미해결 스텁 105개, XDK override 258개(D3D8·D3D8LTCG 라이브러리 197 + 선택 함수 61: XAPILIB 11, DSOUND 50), XDK 변수 43개 / 9,015 functions (+163 after seeding 162 pointer-only functions), 105 unresolved stubs, 258 XDK overrides (197 from the D3D8 and D3D8LTCG libraries + 61 selected functions: 11 XAPILIB, 50 DSOUND), 43 XDK variables |
+| 실행 결과 / Outcome | **`DirectSoundCreate`(HLE, 호스트 오디오 48 kHz)를 지나 게임 스레드 4개가 돈다. 주 스레드가 `D:\Media\Sounds\dsstdfx.bin`을 완료 루틴(`NtReadFile`의 `ApcRoutine`)과 함께 읽고 이벤트를 기다리며 멈춘다(사용자 APC 미전달) / past `DirectSoundCreate` (HLE, host audio at 48 kHz), four game threads run; the main thread reads `D:\Media\Sounds\dsstdfx.bin` with a completion routine (`NtReadFile`'s `ApcRoutine`) and stops waiting for an event (user APCs are not delivered)** |
+
+* **확인됨**: DSOUND HLE가 APU 접근을 없앤다. `DirectSoundCreate` 다음 lift된 `DirectSoundUseFullHRTF`, `SetCooperativeLevel`/`Compact` 꼴 스텁이 문제없이 돈다([dsound §5](dsound.md)).
+* **확인됨**: 그 뒤 게임이 부르는 스레드 루틴 4개(`0x0013B180` 등, `push offset`으로만 참조)와 파일 읽기 메서드 `0x00178F40`(vtable)이 lift되지 않아 건너뛰어졌다. `scripts/recomp/find_pointer_targets.py`가 `.text`의 16바이트 정렬·패딩 뒤 함수 시작 중 데이터나 즉시값으로만 참조되는 162개를 찾아 `seed_pointer_targets.json`에 넣었고, 이제 건너뛴 간접 호출은 0건이다.
+* **확인됨**: 현재 정지점은 커널의 사용자 APC다. XAPI의 비동기 파일 읽기(`ReadFileEx` 계열)는 `NtReadFile`에 완료 루틴을 넘기고, 경고 가능 대기에서 그 루틴이 실행되기를 기다린다. 커널 HLE는 I/O를 동기로 끝내지만 APC를 큐에 넣거나 전달하지 않는다(`NtUserIoApcDispatcher` ordinal 232도 미구현).
+* **미확정**: 다음 task는 사용자 APC(`NtReadFile`/`NtWriteFile`의 `ApcRoutine`, `NtQueueApcThread`, 경고 가능 대기의 `STATUS_USER_APC`). 그 뒤 효과 이미지 다운로드와 버퍼 생성, 첫 `D3DDevice_Swap`.
+* **Confirmed**: the DSOUND HLE removes the APU accesses; after `DirectSoundCreate`, the lifted `DirectSoundUseFullHRTF` and the `SetCooperativeLevel`/`Compact`-shaped stubs run fine ([dsound §5](dsound.md)).
+* **Confirmed**: the four thread routines the game then starts (`0x0013B180` and others, referenced only by `push offset`) and the file-read method `0x00178F40` (a vtable slot) were not lifted and were skipped. `scripts/recomp/find_pointer_targets.py` finds the 162 16-byte-aligned, padding-preceded function starts in `.text` that are referenced only from data or immediates and writes them to `seed_pointer_targets.json`; no indirect call is skipped now.
+* **Confirmed**: the current stop is the kernel's user APCs. XAPI's asynchronous file reads (the `ReadFileEx` family) pass a completion routine to `NtReadFile` and wait, alertably, for it to run; the kernel HLE completes the I/O synchronously but neither queues nor delivers the APC (`NtUserIoApcDispatcher`, ordinal 232, is not implemented either).
+* **Unresolved**: the next task is user APCs (`NtReadFile`/`NtWriteFile` `ApcRoutine`, `NtQueueApcThread`, `STATUS_USER_APC` from alertable waits); then the effects image download, buffer creation, and the first `D3DDevice_Swap`.
+
+## 이력 / History
+
+| issue | frontier |
+|---|---|
+| #2 | 첫 실행: 미구현 커널 import 255 `PsCreateSystemThreadEx` / first run: unimplemented kernel import 255 `PsCreateSystemThreadEx` |
+| #3 | `NtOpenFile` → `HalReturnToFirmware`(Partition0 없음) → D3D8의 NV2A `0xFD001804` 읽기 / `NtOpenFile` → `HalReturnToFirmware` (no Partition0) → D3D8 reading NV2A `0xFD001804` |
+| #6 | 첫 D3D8 API `Direct3D_GetAdapterCount` / the first D3D8 API, `Direct3D_GetAdapterCount` |
+| #7 | `Direct3D_CreateDevice` 통과(SDL3 창), `D3DDevice_GetBackBuffer` / past `Direct3D_CreateDevice` (SDL3 window), `D3DDevice_GetBackBuffer` |
+| #12 | D3D8 초기화·게임 객체 생성 통과, 커널 import 65 `IoCreateDevice` / past D3D8 initialization and object setup, kernel import 65 `IoCreateDevice` |
+| #15 | 입력·폰트·셰이더 생성 통과, `DirectSoundCreate`의 APU `0xFE801100` / past input, font and shader creation, APU `0xFE801100` in `DirectSoundCreate` |
+| #17 | `DirectSoundCreate`(HLE) 통과, `dsstdfx.bin` 읽기의 사용자 APC 대기 / past `DirectSoundCreate` (HLE), waiting for the user APC of the `dsstdfx.bin` read |
+
+### issue #15 frontier 상세 / issue #15 frontier details
 
 | 항목 / Item | 값 / Value |
 |---|---|
@@ -19,17 +47,6 @@ This records how far the recompiled US build gets when run from its entry point.
 * **Confirmed**: the game's object creation failed for two reasons: (1) its enumeration returns `E_FAIL` when the gamepad shows as a pending change right after `XInitDevices`; (2) the xboxrecomp disassembler missed a branch target of an alias body (`0x00154DAA`), which became an unresolved stub and left the stack 12 bytes off (upstream PR [#199](https://github.com/sp00nznet/xboxrecomp/pull/199)). With both fixed, no indirect call is skipped.
 * **Confirmed**: XAPI opens `D:\…` files with `RootDirectory = ObDosDevicesDirectory()` (`0xFFFFFFFD`) and named objects with `0xFFFFFFFC`; the kernel HLE now resolves these pseudo-handles, and `D:\Media\Font\TNRoman.bin` opens.
 * **Unresolved**: the DSOUND HLE (next task), then the first `D3DDevice_Swap`.
-
-## 이력 / History
-
-| issue | frontier |
-|---|---|
-| #2 | 첫 실행: 미구현 커널 import 255 `PsCreateSystemThreadEx` / first run: unimplemented kernel import 255 `PsCreateSystemThreadEx` |
-| #3 | `NtOpenFile` → `HalReturnToFirmware`(Partition0 없음) → D3D8의 NV2A `0xFD001804` 읽기 / `NtOpenFile` → `HalReturnToFirmware` (no Partition0) → D3D8 reading NV2A `0xFD001804` |
-| #6 | 첫 D3D8 API `Direct3D_GetAdapterCount` / the first D3D8 API, `Direct3D_GetAdapterCount` |
-| #7 | `Direct3D_CreateDevice` 통과(SDL3 창), `D3DDevice_GetBackBuffer` / past `Direct3D_CreateDevice` (SDL3 window), `D3DDevice_GetBackBuffer` |
-| #12 | D3D8 초기화·게임 객체 생성 통과, 커널 import 65 `IoCreateDevice` / past D3D8 initialization and object setup, kernel import 65 `IoCreateDevice` |
-| #15 | 입력·폰트·셰이더 생성 통과, `DirectSoundCreate`의 APU `0xFE801100` / past input, font and shader creation, APU `0xFE801100` in `DirectSoundCreate` |
 
 ### issue #12 frontier 상세 / issue #12 frontier details
 

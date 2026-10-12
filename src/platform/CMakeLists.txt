@@ -6,6 +6,7 @@ set(REXBOX_PLATFORM_SOURCES_win32
     win32/guarded_call_win32.cpp
     win32/host_thread_win32.cpp
     win32/virtual_memory_win32.cpp
+    sdl/audio_sdl.cpp
     sdl/display_sdl.cpp
     sdl/input_sdl.cpp
 )
