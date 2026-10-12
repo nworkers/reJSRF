@@ -4,7 +4,7 @@ Accumulates the structure confirmed by analysing the original XBE. Detailed evid
 
 ## 1. Target build
 
-* The primary target is the US build `default_eng.xbe` (region 1, MD5 `f4e366bf…`). The Japan-region `default.xbe` has different code and shares no addresses with it. → [jsrf-xbe-overview §1](analysis/jsrf-xbe-overview.md)
+* The primary target is the US build `default.xbe` (region 1, MD5 `f4e366bf…`). The Japan-region `default.xbe` has different code and shares no addresses with it. → [jsrf-xbe-overview §1](analysis/jsrf-xbe-overview.md)
 * Both builds: XDK 4134, title id `5345000A`, entry point `0x00148023`.
 
 ## 2. Memory layout (US)

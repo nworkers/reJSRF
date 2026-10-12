@@ -4,7 +4,7 @@
 
 ## 요약
 
-reJSRF 저장소를 만들고 rePIU의 작업·코딩 규칙을 이 프로젝트에 맞게 옮겼다. 레이어는 `platform` → `rexbox`(재사용 Xbox 런타임과 HLE) → `game/jsrf` → `app`이며, CMake 타깃 그래프가 의존 방향을 강제한다. Win32 x86에서 Debug/Release 모두 경고 없이 빌드된다. 앱은 사용자 XBE를 식별하고 64 MiB guest memory에 배치한 뒤 멈춘다. XBE 분석 결과 디스크의 `default_eng.xbe`가 US 소매판(MD5가 dplewis/jsrf의 기재값과 일치)이라 1차 타깃으로 정했다.
+reJSRF 저장소를 만들고 rePIU의 작업·코딩 규칙을 이 프로젝트에 맞게 옮겼다. 레이어는 `platform` → `rexbox`(재사용 Xbox 런타임과 HLE) → `game/jsrf` → `app`이며, CMake 타깃 그래프가 의존 방향을 강제한다. Win32 x86에서 Debug/Release 모두 경고 없이 빌드된다. 앱은 사용자 XBE를 식별하고 64 MiB guest memory에 배치한 뒤 멈춘다. XBE 분석 결과 디스크의 `default.xbe`가 US 소매판(MD5가 dplewis/jsrf의 기재값과 일치)이라 1차 타깃으로 정했다.
 
 ## 과정
 
@@ -23,7 +23,7 @@ reJSRF 저장소를 만들고 rePIU의 작업·코딩 규칙을 이 프로젝트
 | Win32 x86 Debug 클린 빌드(VS 2026, `/W4 /permissive- /utf-8`) | 성공, 경고 0 |
 | Win32 x86 Release 클린 빌드 | 성공, 경고 0 |
 | `rexbox_xbe_info` × 2 XBE | 헤더, 인증서, 섹션 11개, 라이브러리 7개, 커널 import 120개 출력 |
-| `rejsrf default_eng.xbe` / `default.xbe` | `USA (region 1)` / `Japan (region 2)` 식별, 64 MiB에 섹션 11개 배치, 종료 코드 0 |
+| `rejsrf default.xbe` (US판 / 일본판) | `USA (region 1)` / `Japan (region 2)` 식별, 64 MiB에 섹션 11개 배치, 종료 코드 0 |
 | `rejsrf LICENSE` / 인자 없음 | `not an XBE image` 종료 코드 1 / 사용법, 종료 코드 2 |
 | LGPL 가드 | `apu_core.c`를 넣은 임시 타깃으로 configure 실패 확인 후 되돌림 |
 | 코드 검사 | 35개 파일: 탭, 비ASCII(한국어 주석), CRLF 없음. `rexbox` 아래 타이틀 이름은 규칙을 설명하는 주석 하나뿐 |
@@ -44,7 +44,7 @@ Work order: [20261012-i001](../work-orders/20261012-i001-project-bootstrap.md) �
 
 ## Summary
 
-Created the reJSRF repository and carried rePIU's working and coding rules over to this project. The layers are `platform` → `rexbox` (the reusable Xbox runtime and HLE) → `game/jsrf` → `app`, with the CMake target graph enforcing the direction. Win32 x86 builds in Debug and Release with no warnings. The app identifies the user's XBE, places it in 64 MiB of guest memory and stops. The XBE analysis showed the disc's `default_eng.xbe` is the US retail build (its MD5 matches the one dplewis/jsrf lists), so it is the primary target.
+Created the reJSRF repository and carried rePIU's working and coding rules over to this project. The layers are `platform` → `rexbox` (the reusable Xbox runtime and HLE) → `game/jsrf` → `app`, with the CMake target graph enforcing the direction. Win32 x86 builds in Debug and Release with no warnings. The app identifies the user's XBE, places it in 64 MiB of guest memory and stops. The XBE analysis showed the disc's `default.xbe` is the US retail build (its MD5 matches the one dplewis/jsrf lists), so it is the primary target.
 
 ## Process
 

@@ -4,7 +4,7 @@
 
 ## 1. 대상 빌드
 
-* 1차 타깃은 US판 `default_eng.xbe`(지역 1, MD5 `f4e366bf…`)다. 일본 지역판 `default.xbe`는 코드가 달라 주소를 공유하지 않는다. → [jsrf-xbe-overview §1](analysis/jsrf-xbe-overview.md)
+* 1차 타깃은 US판 `default.xbe`(지역 1, MD5 `f4e366bf…`)다. 일본 지역판 `default.xbe`는 코드가 달라 주소를 공유하지 않는다. → [jsrf-xbe-overview §1](analysis/jsrf-xbe-overview.md)
 * 두 빌드 모두 XDK 4134, title id `5345000A`, 진입점 `0x00148023`.
 
 ## 2. 메모리 배치 (US)

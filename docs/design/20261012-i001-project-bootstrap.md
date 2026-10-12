@@ -98,7 +98,7 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-    XBE["default_eng.xbe (user's dump)"] --> PARSE["xbe_parser"] --> DIS["disasm"] --> FID["func_id"] --> ABI["abi_analysis"] --> LIFT["recomp (lifter)"]
+    XBE["default.xbe (user's dump)"] --> PARSE["xbe_parser"] --> DIS["disasm"] --> FID["func_id"] --> ABI["abi_analysis"] --> LIFT["recomp (lifter)"]
     LIFT --> GEN["gen/ lifted C (gitignored)"]
     CFG["src/game/jsrf/recomp/ configs (committed)"] --> LIFT
     GEN --> BUILD["rejsrf_game"]

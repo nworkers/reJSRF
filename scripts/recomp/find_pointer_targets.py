@@ -29,7 +29,7 @@ import struct
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-DEFAULT_XBE = ROOT / "roms" / "Jet Set Radio Future" / "default_eng.xbe"
+DEFAULT_XBE = ROOT / "roms" / "Jet Set Radio Future" / "default.xbe"
 DISPATCH = ROOT / "gen" / "jsrf_us" / "gen" / "recomp_dispatch.c"
 SEED_FILE = ROOT / "src" / "game" / "jsrf" / "recomp" / "seed_pointer_targets.json"
 

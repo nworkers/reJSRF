@@ -44,7 +44,7 @@ import time
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 XBOXRECOMP = ROOT / "third_party" / "xboxrecomp"
-DEFAULT_XBE = ROOT / "roms" / "Jet Set Radio Future" / "default_eng.xbe"
+DEFAULT_XBE = ROOT / "roms" / "Jet Set Radio Future" / "default.xbe"
 OVERRIDE_DIRS = [ROOT / "src" / "game" / "jsrf" / "decomp"]
 TITLE_RECOMP_DIR = ROOT / "src" / "game" / "jsrf" / "recomp"
 HLE_LIBRARIES = TITLE_RECOMP_DIR / "hle_libraries.json"

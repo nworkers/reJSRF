@@ -24,7 +24,7 @@ SDL3(release-3.4.18, zlib)를 submodule로 들여와 플랫폼 표시 계약 `di
 | `rexbox_kernel_probe` | 27/27 |
 | `rejsrf_decomp_check` | 6/6 |
 | `rejsrf_d3d8_check` | 12,202 케이스, 차이 0 |
-| 부팅(`rejsrf.exe default_eng.xbe`) | 창 640×480, OpenGL 3.3; `stopped at unimplemented XDK function D3D8 D3DDevice_GetBackBuffer (0018D620)` |
+| 부팅(`rejsrf.exe default.xbe`) | 창 640×480, OpenGL 3.3; `stopped at unimplemented XDK function D3D8 D3DDevice_GetBackBuffer (0018D620)` |
 | CI | 다음 PR에서 확인(생성 코드 없이 SDL 포함 빌드) |
 
 ## 남은 일

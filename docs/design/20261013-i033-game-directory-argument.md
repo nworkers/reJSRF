@@ -4,7 +4,7 @@
 
 ## 1. 결정
 
-* `rejsrf <게임 디렉터리>`만 받는다. 게임 디렉터리는 디스크에서 추출한 폴더(`default_eng.xbe`, `default.xbe`, `Media\`)이고, 커널 HLE가 그대로 `D:`로 쓴다. 전에는 XBE 경로를 받아 그 부모를 `D:`로 썼다. 사용자에게 필요한 것은 디렉터리뿐이므로 파일명을 받지 않기로 했다.
+* `rejsrf <게임 디렉터리>`만 받는다. 게임 디렉터리는 디스크에서 추출한 폴더(`default.xbe`, `Media\`)이고, 커널 HLE가 그대로 `D:`로 쓴다. 전에는 XBE 경로를 받아 그 부모를 `D:`로 썼다. 사용자에게 필요한 것은 디렉터리뿐이므로 파일명을 받지 않기로 했다.
 * XBE는 이름이 아니라 **내용**으로 고른다.
   1. 디렉터리의 `.xbe`(대소문자 무시)를 모두 읽어 타이틀 프로파일(`IdentifyXbe`)로 식별한다.
   2. 주 변형(US판)이 있으면 그것을 실행한다.
@@ -27,7 +27,7 @@ Prerequisites: [i003 §4 files](20261012-i003-kernel-hle.md), [jsrf-xbe-overview
 ## 1. Decisions
 
 * `rejsrf <game directory>` is the only form.
-  * The game directory is the folder extracted from the disc (`default_eng.xbe`, `default.xbe`, `Media\`), which the kernel HLE serves as `D:` as it is.
+  * The game directory is the folder extracted from the disc (`default.xbe`, `Media\`), which the kernel HLE serves as `D:` as it is.
   * Before, the app took an XBE path and served its parent as `D:`. The user only needs to name the directory, so the file name is no longer taken.
 * The XBE is chosen by **content**, not by name.
   1. Every `.xbe` in the directory (case-insensitive) is read and identified with the title profile (`IdentifyXbe`).

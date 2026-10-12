@@ -103,7 +103,7 @@ flowchart BT
 
 ```mermaid
 flowchart LR
-    XBE["roms/.../default_eng.xbe"] --> REGEN["scripts/recomp/regenerate.py"]
+    XBE["roms/.../default.xbe"] --> REGEN["scripts/recomp/regenerate.py"]
     SEEDS["src/game/jsrf/recomp/*.json (seeds, hle_libraries, extra symbols)"] --> REGEN
     SYM["rexbox_xdk_symbols (XbSymbolDatabase)"] --> REGEN
     DECOMP["src/game/jsrf/decomp/*.c"] --> REGEN

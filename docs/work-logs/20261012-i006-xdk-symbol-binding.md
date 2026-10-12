@@ -17,7 +17,7 @@ XbSymbolDatabase(MIT)를 submodule로 들여와 도구 `rexbox_xdk_symbols`를 �
 
 | 검증 | 결과 |
 |---|---|
-| `rexbox_xdk_symbols default_eng.xbe` | 363개(D3D8 131+32, DSOUND 137, XAPILIB 48+11, XGRAPHC 4), 1.5초 |
+| `rexbox_xdk_symbols default.xbe` | 363개(D3D8 131+32, DSOUND 137, XAPILIB 48+11, XGRAPHC 4), 1.5초 |
 | jsrf-recomp D3D8 표 대조 | 103개 중 98개 주소·이름 일치, 5개는 jsrf-recomp의 추론 이름(보충 파일로 추가) |
 | `regenerate.py` | override 136개, `137 wrapped as sub_X_gen`(D3D8 136개 + 디컴파일 1개) |
 | Win32 Debug / Release 빌드 | 성공, 경고 0 |

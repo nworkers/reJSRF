@@ -1,8 +1,8 @@
 # XDK 심볼 식별 (US 빌드)
 
-`rexbox_xdk_symbols`(XbSymbolDatabase `20eced5`)로 `default_eng.xbe`를 스캔한 결과다(issue #6).
+`rexbox_xdk_symbols`(XbSymbolDatabase `20eced5`)로 `default.xbe`를 스캔한 결과다(issue #6).
 
-This is the result of scanning `default_eng.xbe` with `rexbox_xdk_symbols` (XbSymbolDatabase `20eced5`) (issue #6).
+This is the result of scanning `default.xbe` with `rexbox_xdk_symbols` (XbSymbolDatabase `20eced5`) (issue #6).
 
 ## 1. 식별 결과 / Identification
 

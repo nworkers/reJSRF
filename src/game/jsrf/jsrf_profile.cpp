@@ -17,10 +17,10 @@ namespace
 // Both share title id 5345000A, XDK 4134 and the entry point, but their code
 // differs, so guest addresses from one do not apply to the other.
 constexpr std::array<XbeVariant, 2> kVariants = {{
-    // Primary target: the USA retail build, shipped as default_eng.xbe on this
-    // disc (MD5 f4e366bfdceee551a09f42219c90d84e).
+    // Primary target: the USA retail build's default.xbe
+    // (MD5 f4e366bfdceee551a09f42219c90d84e).
     {"USA (region 1)", 0x5345000A, 0x3C5881D9, 0x00000001, 0x3C558EA7},
-    // Recognized only: the Japan-region build, default.xbe on this disc.
+    // Recognized only: the Japan-region build's default.xbe.
     {"Japan (region 2)", 0x5345000A, 0x3C56850C, 0x00000001, 0x3C559627},
 }};
 

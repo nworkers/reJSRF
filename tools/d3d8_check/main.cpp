@@ -6,7 +6,7 @@
 // HLE (docs/design/20261012-i007-d3d8-hle-first-batch.md section 4,
 // docs/design/20261012-i012-d3d8-surfaces-first-frame.md section 4).
 //
-// Usage: rejsrf_d3d8_check [--dump] [<path to default_eng.xbe>]
+// Usage: rejsrf_d3d8_check [--dump] [<path to default.xbe>]
 //   --dump   print the originals' answers (mode table, caps, format verdicts)
 // Exit code 0 when every case matches.
 
@@ -92,7 +92,7 @@ using rexbox::runtime::GuestMemory;
 using GuestFunction = void (*)();
 using Setup = std::function<void()>;
 
-constexpr const char* kDefaultXbe = "roms/Jet Set Radio Future/default_eng.xbe";
+constexpr const char* kDefaultXbe = "roms/Jet Set Radio Future/default.xbe";
 constexpr uint32_t kOutputBytes = 0x200;  // generous; the largest output is 53 DWORDs
 constexpr uint8_t kFillPattern = 0xCC;
 
