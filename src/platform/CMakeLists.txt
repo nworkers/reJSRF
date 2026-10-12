@@ -7,6 +7,7 @@ set(REXBOX_PLATFORM_SOURCES_win32
     win32/host_thread_win32.cpp
     win32/virtual_memory_win32.cpp
     sdl/display_sdl.cpp
+    sdl/input_sdl.cpp
 )
 
 add_library(rexbox_platform STATIC ${REXBOX_PLATFORM_SOURCES_${REJSRF_PLATFORM}})

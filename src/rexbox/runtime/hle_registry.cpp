@@ -34,6 +34,17 @@ const HleExport* HleRegistry::FindExport(std::string_view symbol) const
     return it == export_index_.end() ? nullptr : &exports_[it->second];
 }
 
+void HleRegistry::BindVariable(std::string_view name, GuestAddress address)
+{
+    variables_[std::string(name)] = address;
+}
+
+GuestAddress HleRegistry::FindVariable(std::string_view name) const
+{
+    const auto it = variables_.find(std::string(name));
+    return it == variables_.end() ? 0 : it->second;
+}
+
 HleThunk HleRegistry::Lookup(GuestAddress address) const
 {
     const auto it = bindings_.find(address);

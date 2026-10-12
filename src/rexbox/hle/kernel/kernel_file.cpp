@@ -67,7 +67,20 @@ std::string ObjectName(GuestAddress attributes)
     runtime::GuestMemory& memory = Memory();
     std::string name = ReadAnsiString(memory.Read32(attributes + 4));
     const uint32_t root = memory.Read32(attributes + 0);
-    if (root != 0)
+    // Pseudo-handles for the two object directories XAPI names relative to:
+    // ObDosDevicesDirectory() (-3, "\??\": drive letters such as D:) and
+    // ObWin32NamedObjectsDirectory() (-4, named events and the like).
+    constexpr uint32_t kDosDevicesDirectory = 0xFFFFFFFD;
+    constexpr uint32_t kWin32NamedObjectsDirectory = 0xFFFFFFFC;
+    if (root == kDosDevicesDirectory)
+    {
+        name = "\\??\\" + name;
+    }
+    else if (root == kWin32NamedObjectsDirectory)
+    {
+        name = "\\BaseNamedObjects\\" + name;
+    }
+    else if (root != 0)
     {
         if (const std::shared_ptr<KernelObject> parent = LookupHandle(root))
         {

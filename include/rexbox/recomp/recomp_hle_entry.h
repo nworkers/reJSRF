@@ -27,6 +27,16 @@ typedef struct RexboxHleSlot
 
 void rexbox_hle_enter(RexboxHleSlot* slot);
 
+/* An identified XDK variable (name and guest address), from the same
+ * generated file; the table ends with an entry whose name is NULL. A title
+ * profile hands these to HleRegistry::BindVariable. */
+typedef struct RexboxXdkVariable
+{
+    const char* library;
+    const char* name;
+    uint32_t address;
+} RexboxXdkVariable;
+
 #ifdef __cplusplus
 }
 #endif

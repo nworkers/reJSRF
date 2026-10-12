@@ -43,6 +43,12 @@ if(EXISTS "${REJSRF_RECOMP_GEN_DIR}/recomp_dispatch.c")
     if(REJSRF_RECOMP_CALL_PROFILE)
         target_compile_definitions(rejsrf_recomp PRIVATE RECOMP_CALL_PROFILE)
     endif()
+    # Diagnostic: every direct call checks that the callee kept ebx/esi/edi and
+    # popped at least its return address (recomp_abi_violation_log in rexbox_recomp).
+    option(REJSRF_RECOMP_ABI_CHECK "Build the generated code with per-call ABI checks (slow)" OFF)
+    if(REJSRF_RECOMP_ABI_CHECK)
+        target_compile_definitions(rejsrf_recomp PRIVATE RECOMP_ABI_CHECK)
+    endif()
     target_link_libraries(rejsrf_recomp PUBLIC rexbox_recomp)
 
     # Decompiled sources include the generated declarations.

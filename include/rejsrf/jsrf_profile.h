@@ -20,6 +20,8 @@ namespace rexbox::xbe
 class XbeImage;
 }
 
+struct RexboxXdkVariable;
+
 namespace rejsrf
 {
 
@@ -39,8 +41,10 @@ const XbeVariant* IdentifyXbe(const rexbox::xbe::XbeImage& image);
 // The variant the recompiled code and title bindings are made for.
 const XbeVariant* PrimaryVariant();
 
-// Binds the title's statically linked XDK functions to HLE exports. Returns
-// the number of bindings made.
+// Binds what the HLE needs to know about the title's statically linked XDK
+// code: the identified XDK variables (device types and the like), for the
+// primary variant only. XDK functions reach the HLE through generated
+// overrides instead. Returns the number of bindings made.
 size_t BindTitleHle(const rexbox::xbe::XbeImage& image, rexbox::runtime::HleRegistry& registry);
 
 using RecompiledFunction = void (*)();
@@ -50,6 +54,11 @@ using RecompiledLookup = RecompiledFunction (*)(uint32_t guest_va);
 // The generated guest-VA-to-function lookup, or nullptr when the build has no
 // recompiled code (gen/ was not generated). Lifted for the primary variant only.
 RecompiledLookup RecompiledLookupFunction();
+
+// The XDK variables identified in the primary variant (generated with the
+// recompiled code; the table ends with a null name), or nullptr when the build
+// has no recompiled code.
+const RexboxXdkVariable* RecompiledXdkVariables();
 
 // Builds the generated code's flat dispatch table. Returns false when there is
 // no recompiled code or the table could not be built (lookups then fall back

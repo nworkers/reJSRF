@@ -1,4 +1,53 @@
 {
-  "comment": "XDK libraries whose functions are replaced by HLE exports. regenerate.py generates an override for each identified function (docs/design/20261012-i006-xdk-symbol-binding.md).",
-  "libraries": ["D3D8", "D3D8LTCG"]
+  "comment": "XDK functions replaced by HLE exports. 'libraries' selects every identified function of a library; 'functions' selects single functions of libraries whose other functions stay lifted. regenerate.py generates an override for each (docs/design/20261012-i006-xdk-symbol-binding.md, docs/design/20261012-i015-xinput-hle.md). XGetDevices and XGetDeviceChanges are HLE too: they model when a device arrives (docs/design/20261012-i015-xinput-hle.md section 4).",
+  "libraries": [
+    "D3D8",
+    "D3D8LTCG"
+  ],
+  "functions": [
+    {
+      "library": "XAPILIB",
+      "name": "XInitDevices"
+    },
+    {
+      "library": "XAPILIB",
+      "name": "XGetDeviceChanges"
+    },
+    {
+      "library": "XAPILIB",
+      "name": "XGetDevices"
+    },
+    {
+      "library": "XAPILIB",
+      "name": "XInputOpen"
+    },
+    {
+      "library": "XAPILIB",
+      "name": "XInputClose"
+    },
+    {
+      "library": "XAPILIB",
+      "name": "XInputGetCapabilities"
+    },
+    {
+      "library": "XAPILIB",
+      "name": "XInputGetState"
+    },
+    {
+      "library": "XAPILIB",
+      "name": "XInputSetState"
+    },
+    {
+      "library": "XAPILIB",
+      "name": "XInputPoll"
+    },
+    {
+      "library": "XAPILIB",
+      "name": "XMountMUA"
+    },
+    {
+      "library": "XAPILIB",
+      "name": "XUnmountMU"
+    }
+  ]
 }

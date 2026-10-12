@@ -55,6 +55,15 @@ public:
     // The HLE implementation bound at `address`, or nullptr.
     HleThunk Lookup(GuestAddress address) const;
 
+    // A title profile records where its copy of an XDK variable lives (found
+    // by function identification), e.g. {"g_DeviceType_Gamepad", 0x001BC860}.
+    // HLE modules that receive such addresses as arguments look them up by
+    // name. Rebinding a name replaces the address.
+    void BindVariable(std::string_view name, GuestAddress address);
+    // The variable's guest address, or 0 when the title did not bind it.
+    GuestAddress FindVariable(std::string_view name) const;
+    size_t variable_count() const { return variables_.size(); }
+
     size_t export_count() const { return exports_.size(); }
     size_t binding_count() const { return bindings_.size(); }
 
@@ -62,6 +71,7 @@ private:
     std::vector<HleExport> exports_;
     std::unordered_map<std::string, size_t> export_index_;
     std::unordered_map<GuestAddress, size_t> bindings_;
+    std::unordered_map<std::string, GuestAddress> variables_;
 };
 
 }  // namespace rexbox::runtime

@@ -1,5 +1,6 @@
 #include "rejsrf/jsrf_profile.h"
 
+#include "rexbox/recomp/recomp_hle_entry.h"
 #include "rexbox/runtime/hle_registry.h"
 #include "rexbox/xbe/xbe_image.h"
 
@@ -43,11 +44,20 @@ const XbeVariant* PrimaryVariant()
     return &kVariants[0];
 }
 
-size_t BindTitleHle(const rexbox::xbe::XbeImage& /*image*/, rexbox::runtime::HleRegistry& /*registry*/)
+size_t BindTitleHle(const rexbox::xbe::XbeImage& image, rexbox::runtime::HleRegistry& registry)
 {
-    // XDK function addresses come from function identification, which is the
-    // next task. Until then the title binds nothing.
-    return 0;
+    // The variable addresses were identified in the primary variant's XBE.
+    const RexboxXdkVariable* variables = RecompiledXdkVariables();
+    if (variables == nullptr || IdentifyXbe(image) != PrimaryVariant())
+    {
+        return 0;
+    }
+    size_t count = 0;
+    for (; variables[count].name != nullptr; ++count)
+    {
+        registry.BindVariable(variables[count].name, variables[count].address);
+    }
+    return count;
 }
 
 }  // namespace rejsrf

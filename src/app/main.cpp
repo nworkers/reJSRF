@@ -200,6 +200,17 @@ int main(int argc, char** argv)
     }
 
     const std::vector<rexbox::recomp::ThreadReport> reports = executor.WaitForThreads();
+    // REXBOX_STOP_DUMP=<file>: after an abnormal stop, the whole guest RAM for
+    // offline analysis (diagnostic).
+    if (const char* dump_path = std::getenv("REXBOX_STOP_DUMP"); dump_path != nullptr && executor.halted())
+    {
+        if (FILE* dump = std::fopen(dump_path, "wb"))
+        {
+            std::fwrite(memory.base(), 1, memory.size(), dump);
+            std::fclose(dump);
+            std::fprintf(stderr, "[stop] guest memory written to %s\n", dump_path);
+        }
+    }
     for (const rexbox::recomp::ThreadReport& report : reports)
     {
         PrintThreadReport(report);
