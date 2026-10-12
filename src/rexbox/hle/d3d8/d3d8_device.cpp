@@ -3,6 +3,7 @@
 // targets, viewport, Clear and Swap.
 
 #include "d3d8_gl.h"
+#include "d3d8_globals.h"
 #include "d3d8_internal.h"
 #include "d3d8_resource.h"
 #include "d3d8_state.h"
@@ -199,6 +200,9 @@ void Direct3D_CreateDevice()
     }
     Memory().Fill(*device, 0, kDeviceObjectSize);
     state.device = *device;
+    // The library global the original sets; its own functions (and the
+    // binding fences, d3d8_globals.h) read the device through it.
+    SetDeviceObject(state.device);
     Memory().Write32(out, state.device);
     call.Return(kD3dOk, 6);
 }
@@ -503,7 +507,7 @@ void D3DDevice_GetTexture2()
     GuestAddress texture = 0;
     if (stage < kMaxTextureStages)
     {
-        texture = Pipeline().stages[stage].texture;
+        texture = Pipeline().textures[stage];
     }
     if (texture != 0)
     {

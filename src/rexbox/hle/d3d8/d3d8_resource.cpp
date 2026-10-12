@@ -336,6 +336,29 @@ uint32_t ReleaseResourceRef(GuestAddress resource)
     return updated & header::kRefCountMask;
 }
 
+void AddResourceBinding(GuestAddress resource)
+{
+    runtime::GuestMemory& memory = Memory();
+    memory.Write32(resource + header::kCommon, memory.Read32(resource + header::kCommon) + header::kIntRefCountOne);
+}
+
+void ReleaseResourceBinding(GuestAddress resource, uint32_t lock_value)
+{
+    Memory().Write32(resource + header::kLock, lock_value);
+    ReleaseResourceBinding(resource);
+}
+
+void ReleaseResourceBinding(GuestAddress resource)
+{
+    runtime::GuestMemory& memory = Memory();
+    const uint32_t updated = memory.Read32(resource + header::kCommon) - header::kIntRefCountOne;
+    memory.Write32(resource + header::kCommon, updated);
+    if ((updated & (header::kRefCountMask | header::kIntRefCountMask)) == 0)
+    {
+        DestroyResource(resource);
+    }
+}
+
 void RegisterResourceExports(runtime::HleRegistry& registry)
 {
     registry.AddExport("d3d8", "D3DResource_AddRef", &D3DResource_AddRef);
