@@ -22,6 +22,7 @@ void RegisterKernelHle(runtime::HleRegistry& registry)
     RegisterHalExports(registry);
     RegisterFileExports(registry);
     RegisterCryptoExports(registry);
+    RegisterApcExports(registry);
 }
 
 void InitializeKernel(const KernelConfig& config)

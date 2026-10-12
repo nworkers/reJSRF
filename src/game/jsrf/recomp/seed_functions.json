@@ -17,5 +17,6 @@
   {"start": "0x001BDE86", "note": "XPP USB class-driver callback (table 0x001BC950); FPO after jmp, missed by disasm (issue #12)"},
   {"start": "0x001BE0B4", "note": "XPP USB class-driver callback (table 0x001BC89C); FPO after ret, missed by disasm (issue #12)"},
   {"start": "0x001BE689", "note": "XPP USB class-driver callback (table 0x001BC898); FPO after ret, missed by disasm (issue #12)"},
-  {"start": "0x001C213A", "note": "XPP class-driver callback using the 0x002649A8 timer block (table 0x001BC97C); missed by disasm (issue #12)"}
+  {"start": "0x001C213A", "note": "XPP class-driver callback using the 0x002649A8 timer block (table 0x001BC97C); missed by disasm (issue #12)"},
+  {"start": "0x0007BE30", "observed": true, "note": "vtable slot (.data 0x0020D2B8) called from 0x0007BDDB at run time; follows sub_0007BDD0's switch tables, which the sweep decoded as code, so the plain seed was rejected as mid-instruction (issue #19)"}
 ]

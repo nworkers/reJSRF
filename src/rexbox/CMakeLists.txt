@@ -32,6 +32,7 @@ target_link_libraries(rexbox_recomp PUBLIC rexbox_runtime)
 # HLE modules. Each links the runtime only, never another module, so any one
 # can be replaced (or reused by another title) on its own.
 add_library(rexbox_hle_kernel STATIC
+    hle/kernel/kernel_apc.cpp
     hle/kernel/kernel_crypto.cpp
     hle/kernel/kernel_data.cpp
     hle/kernel/kernel_exports.cpp

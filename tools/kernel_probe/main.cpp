@@ -11,6 +11,7 @@
 #include "rexbox/runtime/guest_heap.h"
 #include "rexbox/runtime/guest_memory.h"
 #include "rexbox/runtime/hle_registry.h"
+#include "rexbox/runtime/kernel_thunks.h"
 
 #include <array>
 #include <chrono>
@@ -48,10 +49,30 @@ public:
         return false;
     }
     [[noreturn]] void ExitThread(uint32_t) override { std::abort(); }
-    uint32_t CallGuest(GuestAddress, const uint32_t*, int, bool* called) override
+    // Runs a "guest" function only when the registry binds its address (a
+    // kernel thunk or a probe routine), with the arguments on the guest stack.
+    uint32_t CallGuest(GuestAddress function, const uint32_t* arguments, int argument_count, bool* called) override
     {
-        *called = false;
-        return 0;
+        const rexbox::runtime::HleThunk thunk = rexbox::runtime::Env().registry->Lookup(function);
+        *called = thunk != nullptr;
+        if (thunk == nullptr)
+        {
+            return 0;
+        }
+        rexbox::runtime::GuestMemory& memory = *rexbox::runtime::Env().memory;
+        const uint32_t saved_esp = cpu_.Get(Gpr::kEsp);
+        uint32_t esp = saved_esp;
+        for (int i = argument_count - 1; i >= 0; --i)
+        {
+            esp -= 4;
+            memory.Write32(esp, arguments[i]);
+        }
+        esp -= 4;
+        memory.Write32(esp, 0);
+        cpu_.Set(Gpr::kEsp, esp);
+        thunk();
+        cpu_.Set(Gpr::kEsp, saved_esp);
+        return cpu_.Get(Gpr::kEax);
     }
 
 private:
@@ -61,6 +82,7 @@ private:
 constexpr GuestAddress kStackTop = 0x00080000;
 constexpr GuestAddress kScratch = 0x00090000;  // argument blocks
 constexpr uint32_t kTimeout = 0x00000102;
+constexpr uint32_t kUserApc = 0x000000C0;
 
 rexbox::runtime::GuestMemory* g_memory = nullptr;
 rexbox::runtime::HleRegistry* g_registry = nullptr;
@@ -256,6 +278,120 @@ void ProbeDosDevicesRoot(const std::filesystem::path& game_directory)
     }
 }
 
+
+// A completion routine the probe binds at kCompletionRoutine:
+// VOID (DWORD dwErrorCode, DWORD dwNumberOfBytesTransfered, LPOVERLAPPED lpOverlapped).
+constexpr GuestAddress kCompletionRoutine = 0x00097000;
+int g_completions = 0;
+uint32_t g_completion_args[3] = {};
+
+void ProbeCompletionRoutine()
+{
+    rexbox::runtime::GuestCpu& cpu = g_executor->Cpu();
+    const GuestAddress esp = cpu.Get(Gpr::kEsp);
+    for (uint32_t i = 0; i < 3; ++i)
+    {
+        g_completion_args[i] = g_memory->Read32(esp + 4 + 4 * i);
+    }
+    ++g_completions;
+    cpu.Set(Gpr::kEsp, esp + 4 + 12);
+}
+
+// Opens D:\<name> from the game directory; returns the handle or 0.
+uint32_t OpenGameFile(const char* name)
+{
+    const GuestAddress text = kScratch + 0x600;
+    const GuestAddress string = kScratch + 0x640;
+    const GuestAddress attributes = kScratch + 0x650;
+    const GuestAddress handle_out = kScratch + 0x660;
+    const GuestAddress io_status = kScratch + 0x668;
+    const std::string path = std::string("D:\\") + name;
+    std::memcpy(g_memory->Translate(text), path.c_str(), path.size() + 1);
+    g_memory->Write16(string + 0, static_cast<uint16_t>(path.size()));
+    g_memory->Write16(string + 2, static_cast<uint16_t>(path.size() + 1));
+    g_memory->Write32(string + 4, text);
+    g_memory->Write32(attributes + 0, 0xFFFFFFFD);  // ObDosDevicesDirectory()
+    g_memory->Write32(attributes + 4, string);
+    g_memory->Write32(attributes + 8, 0x40);         // OBJ_CASE_INSENSITIVE
+    const uint32_t status = Call("NtOpenFile", {handle_out, 0x80100000, attributes, io_status, 1, 0x60});
+    return status == 0 ? g_memory->Read32(handle_out) : 0;
+}
+
+// ReadFileEx's shape: NtReadFile(file, NULL, NtUserIoApcDispatcher,
+// completion, &overlapped, buffer, length, &offset).
+uint32_t ReadWithCompletion(uint32_t file, GuestAddress overlapped, uint32_t length, uint32_t offset)
+{
+    const GuestAddress buffer = kScratch + 0x700;
+    const GuestAddress offset_block = kScratch + 0x6F0;
+    g_memory->Write32(offset_block, offset);
+    g_memory->Write32(offset_block + 4, 0);
+    return Call("NtReadFile", {file, 0, rexbox::runtime::KernelThunkVa(232), kCompletionRoutine, overlapped, buffer,
+                               length, offset_block});
+}
+
+void ProbeUserApc(const std::filesystem::path& game_directory)
+{
+    g_registry->AddExport("probe", "ProbeCompletionRoutine", &ProbeCompletionRoutine);
+    g_registry->BindGuestAddress(kCompletionRoutine, "ProbeCompletionRoutine");
+    g_registry->BindGuestAddress(rexbox::runtime::KernelThunkVa(232), "NtUserIoApcDispatcher");
+    {
+        std::ofstream(game_directory / "apc.bin", std::ios::binary) << "abcdefgh";
+    }
+    const uint32_t file = OpenGameFile("apc.bin");
+    Check(file != 0, "open D:\\apc.bin for the APC checks");
+    if (file == 0)
+    {
+        return;
+    }
+    const GuestAddress event_out = kScratch + 0x680;
+    const GuestAddress overlapped = kScratch + 0x690;
+    const GuestAddress zero = Timeout(kScratch + 0x6A0, 0);
+    Call("NtCreateEvent", {event_out, 0, 0, 0});
+    const uint32_t event = g_memory->Read32(event_out);
+
+    Check(ReadWithCompletion(file, overlapped, 8, 0) == 0 && g_completions == 0,
+          "NtReadFile with a completion routine succeeds and runs nothing yet");
+    Check(Call("NtWaitForSingleObjectEx", {event, 1, 0, zero}) == kTimeout && g_completions == 0,
+          "a non-alertable wait delivers no APC");
+    Check(Call("NtWaitForSingleObjectEx", {event, 0, 1, zero}) == kTimeout && g_completions == 0,
+          "an alertable kernel-mode wait delivers no user APC");
+    Check(Call("NtWaitForSingleObjectEx", {event, 1, 1, zero}) == kUserApc && g_completions == 1,
+          "an alertable user-mode wait runs the APC and returns STATUS_USER_APC");
+    Check(g_completion_args[0] == 0 && g_completion_args[1] == 8 && g_completion_args[2] == overlapped,
+          "the completion routine gets (0, bytes read, the OVERLAPPED)");
+    Check(Call("NtWaitForSingleObjectEx", {event, 1, 1, zero}) == kTimeout && g_completions == 1,
+          "a delivered APC is not delivered again");
+
+    ReadWithCompletion(file, overlapped, 4, 4);
+    Call("NtSetEvent", {event, 0});
+    Check(Call("NtWaitForSingleObjectEx", {event, 1, 1, zero}) == 0 && g_completions == 1,
+          "a signalled object satisfies the wait before a pending APC");
+    Check(Call("KeDelayExecutionThread", {1, 1, zero}) == kUserApc && g_completions == 2 && g_completion_args[1] == 4,
+          "an alertable KeDelayExecutionThread runs the pending APC");
+    Call("NtClearEvent", {event});
+
+    const GuestAddress handles = kScratch + 0x6B0;
+    g_memory->Write32(handles, event);
+    ReadWithCompletion(file, overlapped, 8, 0);
+    Check(Call("NtWaitForMultipleObjectsEx", {1, handles, 1, 1, 1, zero}) == kUserApc && g_completions == 3,
+          "an alertable NtWaitForMultipleObjectsEx runs the APC");
+    ReadWithCompletion(file, overlapped, 8, 0);
+    Check(Call("NtWaitForSingleObject", {event, 1, zero}) == kUserApc && g_completions == 4,
+          "an alertable NtWaitForSingleObject runs the APC");
+
+    Check(ReadWithCompletion(file, overlapped, 8, 100) == 0xC0000011, "a read past the end is STATUS_END_OF_FILE");
+    Check(Call("NtWaitForSingleObjectEx", {event, 1, 1, zero}) == kTimeout && g_completions == 4,
+          "a read that ends in an error queues no APC");
+
+    g_memory->Write32(overlapped, 0xC0000011);  // Status: STATUS_END_OF_FILE
+    g_memory->Write32(overlapped + 4, 5);
+    Call("NtUserIoApcDispatcher", {kCompletionRoutine, overlapped, 0});
+    Check(g_completions == 5 && g_completion_args[0] == 38 && g_completion_args[1] == 0,
+          "NtUserIoApcDispatcher reports an error as (ERROR_HANDLE_EOF, 0 bytes)");
+    Call("NtClose", {event});
+    Call("NtClose", {file});
+}
+
 }  // namespace
 
 int main()
@@ -286,6 +422,7 @@ int main()
     ProbeTime();
     ProbeMemory();
     ProbeDosDevicesRoot(scratch);
+    ProbeUserApc(scratch);
 
     std::printf("%d check(s), %d failure(s)\n", g_checks, g_failures);
     std::fflush(stdout);
