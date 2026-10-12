@@ -38,7 +38,7 @@ cd reJSRF
 
 | 플랫폼 | 상태 |
 |---|---|
-| Win32 x86 | 빌드됨. 부팅이 D3D8 디바이스 생성까지 가서 SDL3/OpenGL 창을 연다(그리기 전) |
+| Win32 x86 | 빌드됨. 부팅이 첫 화면("Presented by SEGA" 로고)을 SDL3/OpenGL 창에 그린다(고정 기능 그리기; 프로그래머블 셰이더는 아직) |
 | Win64 | 예정 |
 | Linux x86 / x64 | 예정 |
 | Web (wasm32) | 예정 |
@@ -82,7 +82,7 @@ See the commands above, and [Win32 development setup and build](docs/guides/win3
 
 ## Platform status
 
-Win32 x86 builds; boot reaches D3D8 device creation and opens the SDL3/OpenGL window (no drawing yet). Win64, Linux x86/x64, the web (wasm32) and Android are planned.
+Win32 x86 builds; the boot draws its first screen (the "Presented by SEGA" logo) in the SDL3/OpenGL window (fixed-function drawing; programmable shaders not yet). Win64, Linux x86/x64, the web (wasm32) and Android are planned.
 
 ## Contributing and working rules
 

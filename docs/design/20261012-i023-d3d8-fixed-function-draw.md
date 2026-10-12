@@ -193,6 +193,17 @@ flowchart TB
 * 게임이 백버퍼나 render target 텍스처를 CPU로 읽는 경우(§3.5).
 * `CopyRects`, `UpdateOverlay` 등 아직 게임이 부르지 않은 표시 함수.
 
+## 10. 구현 중 확정·변경된 사항 (2026-10-13)
+
+* **simple 렌더 상태**: 처음에는 `SetRenderState_Simple`의 NV2A method를 따로 모으려 했다. 그런데 원본 기본 상태 루틴은 simple 상태를 `NotInline`으로 넣고, 그 경로에는 method가 없다. 그래서 배열 칸(57~81)만 읽는다. 번호는 칸 값과 method 값의 일치로 확정했다(analysis §8). `SetRenderState_Simple`은 아무 일도 하지 않는다.
+* **dirty 플래그**: 원본 그리기 경로만 소비하므로 미러링하지 않는다. `rejsrf_d3d8_check`도 그 한 DWORD를 비교에서 뺀다.
+* **기본 상태**: HLE `CreateDevice`가 원본 루틴 `0x001919C0`을 실행한다. 이 루틴은 타이틀 프로파일이 `D3D_InitializeDeviceState`로 바인딩한다. 실행하지 않으면 `COLORWRITEENABLE` 등이 0이다.
+* **`D3DCLEAR`**: Xbox 비트(`TARGET` 0xF0, `ZBUFFER` 1, `STENCIL` 2)다. 기존 구현의 PC 비트가 그린 화면을 지우고 있었다.
+* **빈 스테이지**: Xbox 기본값은 모든 스테이지가 `MODULATE`이므로, 텍스처가 없는 스테이지는 흰색을 읽는다(§3.4 보강).
+* **선형 텍스처**: 텍셀 단위 좌표로 샘플링되므로(추정) 스테이지 키에 `unnormalized`를 두고 셰이더에서 크기로 나눈다.
+* **수직 동기**: 호스트 vsync는 끈다(swap interval 0). 가상 시계가 창이 있든 없든 `Swap`을 presentation interval에 맞춘다. 모니터 주사율이 60 Hz가 아니어도 게임 속도가 같다(§4 보강).
+* **아직 안 한 것**: 해시는 프레임마다 한 번 확인한다. 상태는 그리기마다 모두 다시 적용한다(변경 감지 없음). 텍스처 좌표 변환, texgen, 안개, 조명, `CopyRects`, 큐브맵은 처음 만날 때 한 번 보고한다.
+
 ---
 
 # Design: D3D8 HLE, third batch — fixed-function drawing on GL (issue #23)
@@ -309,3 +320,15 @@ There is no pixel-exact reference image, so comparison with the original is visu
 * Running the `SetVerticalBlankCallback` callback (§4).
 * The game reading a back buffer or render-target texture on the CPU (§3.5).
 * Display functions the game does not call yet, such as `CopyRects` and `UpdateOverlay`.
+
+## 10. Settled or changed during implementation (2026-10-13)
+
+* **Simple render states**: the first plan collected the NV2A methods of `SetRenderState_Simple`. But the original default-state routine sets simple states through `NotInline`, which carries no method, so only the array slots (57–81) are read. Their numbering was fixed by matching slot values with method values (analysis §8). `SetRenderState_Simple` does nothing.
+* **Dirty flags**: only the original draw path consumes them, so they are not mirrored, and `rejsrf_d3d8_check` leaves that one DWORD out of the comparison.
+* **Default state**: the HLE `CreateDevice` runs the original routine `0x001919C0`, which the title profile binds as `D3D_InitializeDeviceState`. Without it `COLORWRITEENABLE` and others are 0.
+* **`D3DCLEAR`**: the Xbox bits apply (`TARGET` 0xF0, `ZBUFFER` 1, `STENCIL` 2); the earlier PC bits wiped the drawn image.
+* **Empty stages**: the Xbox default is `MODULATE` on every stage, so a stage without a texture reads white (adds to §3.4).
+* **Linear textures**: they are sampled with texel coordinates (inferred), so the stage key carries `unnormalized` and the shader divides by the size.
+* **Vertical blank**: host vsync is off (swap interval 0). The virtual clock paces `Swap` to the presentation interval with or without a window, so the game's speed does not depend on the monitor's refresh (adds to §4).
+* **Not done yet**: the hash is checked once per frame, and all state is reapplied for every draw (no change tracking). Texture-coordinate transforms, texgen, fog, lighting, `CopyRects` and cube maps are reported once when first met.
+

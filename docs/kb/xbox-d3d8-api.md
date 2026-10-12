@@ -92,8 +92,55 @@ classDiagram
 * 포맷 능력 바이트의 bits 5:2는 픽셀당 비트 수다(레벨 크기 계산에 쓰임). / Bits 5:2 of the capability byte are the bits per pixel, used for level sizes.
 * `AddRef`는 refcount를 1 올려 돌려주고, refcount가 0인 서피스의 `Parent`도 AddRef한다. `Release`는 refcount 1·내부 refcount 0이면 파괴(`D3D_DestroyResource`)하고 0을 돌려준다. / `AddRef` increments and returns the count (also AddRef'ing a zero-count surface's `Parent`); `Release` destroys at count 1 with no internal count and returns 0.
 
+## 7. 상태 번호 (XDK 4134) / State numbering (XDK 4134)
+
+렌더 상태는 라이브러리 전역 `D3D__RenderState[번호]`에, 텍스처 스테이지 상태는 `D3D__TextureState[스테이지][번호]`(스테이지당 32칸)에 있다. 게임 inline이 이 배열에 직접 쓰므로 HLE도 같은 배열을 상태의 원본으로 쓴다([design i023 §2](../design/20261012-i023-d3d8-fixed-function-draw.md), [analysis §8](../analysis/d3d8-adapter.md)). 번호는 PC와 다르다.
+
+Render states live in the library global `D3D__RenderState[number]`, texture-stage states in `D3D__TextureState[stage][number]` (32 slots per stage). The title's inlines write these arrays directly, so the HLE uses them as the source of truth too ([design i023 §2](../design/20261012-i023-d3d8-fixed-function-draw.md), [analysis §8](../analysis/d3d8-adapter.md)). The numbers differ from the PC's.
+
+| 범위 / Range | 내용 / Contents | 근거 / Evidence |
+|---|---|---|
+| 0–56 | 픽셀 셰이더(레지스터 컴바이너) 상태 / pixel-shader (register combiner) states | 추정 / inferred |
+| 57–75 | simple: 57 `ZFUNC`, 58 `ALPHAFUNC`, 59 `ALPHABLENDENABLE`, 60 `ALPHATESTENABLE`, 61 `ALPHAREF`, 62 `SRCBLEND`, 63 `DESTBLEND`, 64 `ZWRITEENABLE`, 65 `DITHERENABLE`, 66 `SHADEMODE`, 67 `COLORWRITEENABLE`, 68 `STENCILZFAIL`, 69 `STENCILPASS`, 70 `STENCILFUNC`, 71 `STENCILREF`, 72 `STENCILMASK`, 73 `STENCILWRITEMASK`, 74 `BLENDOP`, 75 `BLENDCOLOR` | 확인됨: 칸 값 = 게임이 같은 NV2A method와 넘기는 값 / confirmed: the slot value equals what the title passes with that NV2A method |
+| 76 | `SWATHWIDTH` | 추정 / inferred |
+| 77–81 | `POLYGONOFFSETZSLOPESCALE`, `POLYGONOFFSETZOFFSET`, `POINTOFFSETENABLE`, `WIREFRAMEOFFSETENABLE`, `SOLIDOFFSETENABLE` | 확인됨: `ZBias` setter가 쓰는 칸 / confirmed: the slots `ZBias` writes |
+| 82–116 | deferred: 82 `FOGENABLE`, 83 `FOGTABLEMODE`, 84 `FOGSTART`, 85 `FOGEND`, 86 `FOGDENSITY`, 87 `RANGEFOGENABLE`, 88–91 `WRAP0..3`, 92 `LIGHTING`, 93 `SPECULARENABLE`, 94 `LOCALVIEWER`, 95 `COLORVERTEX`, 96–99 뒷면 재질 소스 / back material sources, 100–103 재질 소스 / material sources (101 `DIFFUSEMATERIALSOURCE`), 104 `BACKAMBIENT`, 105 `AMBIENT`, 106–113 점 크기·스프라이트·스케일 / point size, sprite and scale, 114 `PATCHEDGESTYLE`, 115 `PATCHSEGMENTS`, 116 `SWAPFILTER` | 블록 경계 82는 확인됨(`D3D_g_DeferredRenderState`), 순서는 추정 / boundary 82 confirmed (`D3D_g_DeferredRenderState`), order inferred |
+| 117–145 | complex: 117 `PSTEXTUREMODES`, 118 `VERTEXBLEND`, 119 `FOGCOLOR`, 120 `FILLMODE`, 121 `BACKFILLMODE`, 122 `TWOSIDEDLIGHTING`, 123 `NORMALIZENORMALS`, 124 `ZENABLE`, 125 `STENCILENABLE`, 126 `STENCILFAIL`, 127 `FRONTFACE`, 128 `CULLMODE`, 129 `TEXTUREFACTOR`, 130 `ZBIAS`, 131 `LOGICOP`, 132 `EDGEANTIALIAS`, 133 `MULTISAMPLEANTIALIAS`, 134 `MULTISAMPLEMASK`, 135 `MULTISAMPLEMODE`, 136 `MULTISAMPLERENDERTARGETMODE`, 137 `SHADOWFUNC`, 138 `LINEWIDTH`, 139 `DXT1NOISEENABLE`, 140 `YUVENABLE`, 141 `OCCLUSIONCULLENABLE`, 142 `STENCILCULLENABLE`, 143 `ROPZCMPALWAYSREAD`, 144 `ROPZREAD`, 145 `DONOTCULLUNCOMPRESSED` | 확인됨: 각 setter가 쓰는 칸 / confirmed: the slot each setter writes |
+
+* 값은 NV2A/GL 인코딩이다. 비교 함수는 0x200 `NEVER` … 0x207 `ALWAYS`, 블렌드 계수는 `ZERO` 0·`ONE` 1·0x300 `SRCCOLOR` …, 블렌드 연산은 0x8006 `ADD` …, 스텐실 연산은 0x1E00 `KEEP` …이다. `CULLMODE`/`FRONTFACE`는 0x900 `CW`·0x901 `CCW`(0은 컬링 없음), `FILLMODE`는 0x1B00 점·0x1B01 선·0x1B02 면, `SHADEMODE`는 0x1D00 flat·0x1D01 Gouraud다. `COLORWRITEENABLE`은 채널마다 1바이트다(A R G B, 0x01010101 = 전부, 추정).
+* Values are in NV2A/GL encoding: comparisons 0x200 `NEVER` … 0x207 `ALWAYS`; blend factors `ZERO` 0, `ONE` 1, 0x300 `SRCCOLOR` …; blend operations 0x8006 `ADD` …; stencil operations 0x1E00 `KEEP` …; `CULLMODE`/`FRONTFACE` 0x900 `CW`, 0x901 `CCW` (0 = no culling); `FILLMODE` 0x1B00 point, 0x1B01 line, 0x1B02 solid; `SHADEMODE` 0x1D00 flat, 0x1D01 Gouraud. `COLORWRITEENABLE` has one byte per channel (A R G B; 0x01010101 = all, inferred).
+
+텍스처 스테이지 칸은 다음과 같다. 대부분 추정이고, 28 `TEXCOORDINDEX`·29 `BORDERCOLOR`·30 `COLORKEYCOLOR`·22–27 bump env는 확인됨이다. / Texture-stage slots (mostly inferred; 28 `TEXCOORDINDEX`, 29 `BORDERCOLOR`, 30 `COLORKEYCOLOR` and 22–27 bump env confirmed): 0 `ADDRESSU`, 1 `ADDRESSV`, 2 `ADDRESSW`, 3 `MAGFILTER`, 4 `MINFILTER`, 5 `MIPFILTER`, 6 `MIPMAPLODBIAS`, 7 `MAXMIPLEVEL`, 8 `MAXANISOTROPY`, 9 `COLORKEYOP`, 10 `COLORSIGN`, 11 `ALPHAKILL`, 12 `COLOROP`, 13–15 `COLORARG0..2`, 16 `ALPHAOP`, 17–19 `ALPHAARG0..2`, 20 `RESULTARG`, 21 `TEXTURETRANSFORMFLAGS`, 22–27 `BUMPENVMAT00/01/11/10`, `BUMPENVLSCALE`, `BUMPENVLOFFSET`.
+
+## 8. 텍스처 포맷 / Texture formats
+
+NV2A 색 포맷이다(추정, xboxrecomp `d3d8_xbox.h`(MIT)의 원래 Xbox 항목과 일치). 게임이 지금 쓰는 것은 DXT1 0x0C뿐이다. / NV2A color formats (inferred, matching the original-Xbox entries of xboxrecomp `d3d8_xbox.h` (MIT); the title uses only DXT1 0x0C so far):
+
+| 스위즐 / Swizzled | 선형 / Linear | 압축 / Compressed |
+|---|---|---|
+| 0x00 `L8`, 0x01 `AL8`, 0x02 `A1R5G5B5`, 0x03 `X1R5G5B5`, 0x04 `A4R4G4B4`, 0x05 `R5G6B5`, 0x06 `A8R8G8B8`, 0x07 `X8R8G8B8`, 0x0B `P8`, 0x19 `A8`, 0x1A `A8L8`, 0x3A `A8B8G8R8`, 0x3B `B8G8R8A8`, 0x3C `R8G8B8A8` | 0x10 `LIN_A1R5G5B5`, 0x11 `LIN_R5G6B5`, 0x12 `LIN_A8R8G8B8`, 0x13 `LIN_L8`, 0x1B `LIN_AL8`, 0x1C `LIN_X1R5G5B5`, 0x1D `LIN_A4R4G4B4`, 0x1E `LIN_X8R8G8B8`, 0x1F `LIN_A8`, 0x20 `LIN_A8L8`, 0x3F `LIN_A8B8G8R8`, 0x40 `LIN_B8G8R8A8`, 0x41 `LIN_R8G8B8A8` | 0x0C `DXT1`, 0x0E `DXT2/3`, 0x0F `DXT4/5` |
+
+* 스위즐 텍스처는 Morton 순서다. x·y(·z) 주소 비트를 x부터 번갈아 놓고, 작은 차원이 끝나면 큰 차원의 남은 비트가 이어진다. DXT는 4×4 블록의 raster 순서다(스위즐 없음). 선형 텍스처는 pitch를 가진 행 순서이고, NV2A에서 텍셀 단위 좌표로 샘플링된다(rectangle 텍스처, 추정).
+* Swizzled textures are in Morton order: the x and y (and z) address bits interleave starting with x, and once the smaller dimension runs out the larger one's remaining bits follow. DXT is 4×4 blocks in raster order (not swizzled). Linear textures are rows with a pitch, sampled by the NV2A with texel coordinates (rectangle textures, inferred).
+
+## 9. FVF, 프리미티브, Clear / FVF, primitives, Clear
+
+* FVF 비트는 PC D3D8과 같다. 위치는 `0x00E`(`XYZ` 2, `XYZRHW` 4, `XYZB1..4` 6..C), `NORMAL` 0x10, `PSIZE` 0x20, `DIFFUSE` 0x40, `SPECULAR` 0x80, 텍스처 수는 bits 11:8, 좌표 크기는 bits 16+2i(0→2, 1→3, 2→4, 3→1)다. 정점 셰이더 핸들의 bit 0이 1이면 `CreateVertexShader`의 프로그램이다. 확인된 것은 게임의 `0x1C4`(stride 32)뿐이다.
+* The FVF bits are the PC D3D8 ones (position `0x00E`: `XYZ` 2, `XYZRHW` 4, `XYZB1..4` 6..C; `NORMAL` 0x10, `PSIZE` 0x20, `DIFFUSE` 0x40, `SPECULAR` 0x80; texture count bits 11:8; coordinate sizes bits 16+2i: 0→2, 1→3, 2→4, 3→1). A vertex-shader handle with bit 0 set is a `CreateVertexShader` program. Only the title's `0x1C4` (stride 32) is confirmed.
+* `D3DPRIMITIVETYPE`(추정, 5는 확인됨) / (inferred; 5 confirmed): 1 `POINTLIST`, 2 `LINELIST`, 3 `LINELOOP`, 4 `LINESTRIP`, 5 `TRIANGLELIST`, 6 `TRIANGLESTRIP`, 7 `TRIANGLEFAN`, 8 `QUADLIST`, 9 `QUADSTRIP`, 10 `POLYGON`.
+* `D3DCLEAR`(확인됨, PC와 다름) / (confirmed, differs from the PC): `ZBUFFER` 1, `STENCIL` 2, `TARGET_R` 0x10, `TARGET_G` 0x20, `TARGET_B` 0x40, `TARGET_A` 0x80, `TARGET` 0xF0.
+* 정점·인덱스·텍스처의 `Data`는 NV2A가 보는 물리 주소다(`& 0x03FFFFFF`). / Vertex, index and texture `Data` fields are physical addresses as the NV2A sees them (`& 0x03FFFFFF`).
+
+## 10. 고정 기능 텍스처 스테이지 / Fixed-function texture stages
+
+`D3DTOP`(1 `DISABLE` … 26 `BUMPENVMAPLUMINANCE`)과 `D3DTA`는 PC 번호와 같다. `D3DTA`는 0 `DIFFUSE`, 1 `CURRENT`, 2 `TEXTURE`, 3 `TFACTOR`, 4 `SPECULAR`, 5 `TEMP`이고 수식어는 0x10 `COMPLEMENT`, 0x20 `ALPHAREPLICATE`다(추정). 게임이 쓰는 4 `MODULATE`, 2 `TEXTURE`, 0 `DIFFUSE`, 1 `CURRENT`는 화면으로 확인했다. Xbox 기본값은 모든 스테이지가 `MODULATE`(`TEXTURE`, `CURRENT`)이므로, 텍스처가 없는 스테이지는 흰색을 읽는 것으로 다룬다(추정, 로고 화면이 그렇게 맞게 나온다).
+
+`D3DTOP` (1 `DISABLE` … 26 `BUMPENVMAPLUMINANCE`) and `D3DTA` keep the PC numbers. `D3DTA` is 0 `DIFFUSE`, 1 `CURRENT`, 2 `TEXTURE`, 3 `TFACTOR`, 4 `SPECULAR`, 5 `TEMP`, with the modifiers 0x10 `COMPLEMENT` and 0x20 `ALPHAREPLICATE` (inferred). The title's 4 `MODULATE`, 2 `TEXTURE`, 0 `DIFFUSE` and 1 `CURRENT` are confirmed on screen. The Xbox default is `MODULATE` (`TEXTURE`, `CURRENT`) on every stage, so a stage without a texture is treated as reading white (inferred; the logo screen comes out right that way).
+
 ## 출처 / Sources
 
 * XbSymbolDatabase, `src/OOVPADatabase/D3D8_OOVPA.c` (MIT): 심볼 이름, 규약, 인자 / symbol names, conventions, parameters
 * xboxrecomp, `src/d3d/d3d8_xbox.h` (MIT): `D3DFORMAT`, `D3DMULTISAMPLE_TYPE`, `D3DPRESENT_PARAMETERS`
+* envytools rnndb (MIT): NV2A Kelvin(NV097) method 번호 / method numbers, https://github.com/envytools/envytools
+* Cxbx-Reloaded (GPL): XDK 4134 상태 번호 순서를 지식으로만 참고(코드 미사용) / XDK 4134 state ordering, consulted as knowledge only (no code)
 * 우리 바이너리 측정 / measurements on our binary: [analysis: d3d8-adapter](../analysis/d3d8-adapter.md)

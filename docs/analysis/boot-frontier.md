@@ -4,21 +4,19 @@
 
 This records how far the recompiled US build gets when run from its entry point. It is updated by each task; earlier frontiers stay in the history below.
 
-## 현재 / Current (issue #21, 2026-10-12)
+## 현재 / Current (issue #23, 2026-10-13)
 
 | 항목 / Item | 값 / Value |
 |---|---|
-| 생성 코드 / Generated code | 함수 9,193개(다른 함수 본문 중간으로 가는 분기 대상 48개를 alias로 복구, xboxrecomp PR [#200](https://github.com/sp00nznet/xboxrecomp/pull/200)), 미해결 스텁 83개(105에서), XDK override 258개, 커널 export 104개 / 9,193 functions (48 branch targets inside other functions recovered as aliases, xboxrecomp PR [#200](https://github.com/sp00nznet/xboxrecomp/pull/200)), 83 unresolved stubs (from 105), 258 XDK overrides, 104 kernel exports |
-| 실행 결과 / Outcome | **fault 없이 프레임 루프가 계속 돈다(헤드리스 5분, 약 18만 5천 present, 수직 동기 대기가 없어 매우 빠름). 그리기는 아직 받기만 하고 그리지 않으며(`DrawIndexedVertices` 등), 게임은 사운드 버퍼 67개를 만들지만 `Play`는 아직 부르지 않는다 / the frame loop keeps running with no fault (5 minutes headless, about 185,000 presents, very fast because nothing waits for vertical blank). Drawing is still accepted but not drawn (`DrawIndexedVertices` and others), and the game creates 67 sound buffers but calls no `Play` yet** |
+| 생성 코드 / Generated code | issue #21과 같음(함수 9,193개) / as in issue #21 (9,193 functions) |
+| 실행 결과 / Outcome | **첫 화면이 나온다: "Presented by SEGA" 로고(FVF `0x1C4` 텍스처 사각형, DXT1 512×512). 프레임 루프는 가상 vblank 시계로 60 Hz에 맞춰 돈다. 게임은 로고를 그리는 동안 스테이지와 "PRESS" 자원을 읽고, 그 뒤 2분 이상 로고에 머문다 / the first screen shows: the "Presented by SEGA" logo (an FVF `0x1C4` textured quad, DXT1 512×512). The frame loop runs at 60 Hz on the virtual vblank clock. While showing the logo the game reads the stage and "PRESS" assets, then stays on the logo for over two minutes** |
 
-* **확인됨**: `0x0FE80026` fault는 노드 순회 `0x00011070`의 `esi` 손상이었다. `0x0007E180`의 공유 꼬리 `pop esi; ret`(`0x0007E255`)로 가는 `jcc` 네 개가, 디스어셈블러가 그 앞 블록(`0x0007E242`)을 함수로 자르면서 `g_esp += 4` 스텁으로 lift되었다. `REJSRF_RECOMP_ABI_CHECK` 빌드가 첫 위반(`call 0x0007E180`, 반환 주소 미pop)을 찾았다([설계 i021](../design/20261012-i021-node-walk-fault.md)).
-* **확인됨**: 실행 4번 중 3번은 "PRESS" 화면 자원(`Mark\PRESS\JSRF_TEXS_0.JTX`)과 캐시 표를 읽은 뒤 같은 루프를 돈다. 1번은 그 전에 미션 `mssn0090`, 스테이지 `Stg10_*`, 캐릭터(Corn, Beat, Gum), 효과음(`se_stg01`, `p_cmn`, `pv_*`)을 읽었다. 데모 같은 경로가 실행마다 달라지는 것으로 보인다(**추정**).
-* **확인됨**: 그 1번 실행에서 `NtAllocateVirtualMemory`가 한 번 크기 0(반올림 뒤)으로 실패했다(`out of guest memory for 0 bytes`). 원인은 아직 보지 않았다.
-* **미확정**: 다음 task 후보는 둘이다. (1) D3D8 그리기(정점·인덱스 버퍼, 셰이더, 텍스처, `Draw*`), (2) 첫 `Play`가 나오는 조건(타이틀 음악·데모의 사운드 스트림) 확인.
-* **Confirmed**: the `0x0FE80026` fault was a corrupted `esi` in the node walk `0x00011070`. The four `jcc` to `0x0007E180`'s shared `pop esi; ret` tail (`0x0007E255`) became `g_esp += 4` stubs when the disassembler cut the block before it (`0x0007E242`) into a function; a `REJSRF_RECOMP_ABI_CHECK` build found the first violation (`call 0x0007E180`, return address not popped) ([design i021](../design/20261012-i021-node-walk-fault.md)).
-* **Confirmed**: three runs of four read the "PRESS" screen assets (`Mark\PRESS\JSRF_TEXS_0.JTX`) and the cache tables, then run the same loop; one first read mission `mssn0090`, stage `Stg10_*`, characters (Corn, Beat, Gum) and sound effects (`se_stg01`, `p_cmn`, `pv_*`). A demo-like path apparently differs from run to run (**inferred**).
-* **Confirmed**: in that run, one `NtAllocateVirtualMemory` failed with a size of 0 after rounding (`out of guest memory for 0 bytes`); not looked into yet.
-* **Unresolved**: two candidates for the next task: (1) D3D8 drawing (vertex and index buffers, shaders, textures, `Draw*`), (2) what makes the first `Play` happen (the sound streams of the title music and demo).
+* **확인됨**: 그리기를 막던 두 가지를 고쳤다. HLE `SetIndices`가 `D3D__IndexData`를 쓰지 않아 인덱스 포인터가 0이었다. 또 `D3DCLEAR` 비트를 PC 값으로 읽어, 그리기 뒤의 `Clear(3)`(깊이·스텐실)가 색까지 지웠다([analysis: d3d8-adapter §8](d3d8-adapter.md)).
+* **확인됨**: 프레임 덤프(`REXBOX_DISPLAY=hidden`, `REXBOX_FRAME_DUMP`)의 600·1,800·8,700번째 프레임이 같은 로고다.
+* **미확정**: 로고에서 넘어가지 않는 이유는 아직 모른다. 페이싱 전(issue #21)에도 4번 중 3번은 같은 자원을 읽고 같은 루프에 머물렀다. 다음 후보는 (1) 로고 뒤 진행 조건(사운드 `Play`가 한 번도 불리지 않음, 커널 타이머 `KeSetTimer`가 발화하지 않음), (2) 프로그래머블 정점 셰이더와 픽셀 셰이더 그리기(i023 설계 §9)다.
+* **Confirmed**: two things that blocked drawing are fixed. The HLE `SetIndices` did not write `D3D__IndexData`, so the index pointer was 0. And the `D3DCLEAR` bits were read with PC values, so the `Clear(3)` (depth and stencil) after drawing also wiped the color ([analysis: d3d8-adapter §8](d3d8-adapter.md)).
+* **Confirmed**: frame dumps (`REXBOX_DISPLAY=hidden`, `REXBOX_FRAME_DUMP`) of frames 600, 1,800 and 8,700 show the same logo.
+* **Unresolved**: why the game does not move past the logo. Before pacing (issue #21), three runs of four also read the same assets and stayed in the same loop. Next candidates: (1) what lets the boot move past the logo (the sound `Play` is never called, and the kernel timer `KeSetTimer` never fires), and (2) drawing with programmable vertex shaders and pixel shaders (i023 design §9).
 
 ## 이력 / History
 
@@ -33,6 +31,23 @@ This records how far the recompiled US build gets when run from its entry point.
 | #17 | `DirectSoundCreate`(HLE) 통과, `dsstdfx.bin` 읽기의 사용자 APC 대기 / past `DirectSoundCreate` (HLE), waiting for the user APC of the `dsstdfx.bin` read |
 | #19 | 사용자 APC 전달, 효과 이미지·버퍼 생성·첫 `D3DDevice_Swap`·폰트·효과음 버퍼 통과, `D3DVertexBuffer_Lock` 뒤 `0x0FE80026` fault / user APCs delivered; past the effects image, buffer creation, the first `D3DDevice_Swap`, fonts and sound-effect buffers, fault at `0x0FE80026` after `D3DVertexBuffer_Lock` |
 | #21 | 노드 순회 fault 해결(xboxrecomp #200), 프레임 루프가 계속 돎, 그리기·`Play` 없음 / node-walk fault fixed (xboxrecomp #200); the frame loop keeps running, no drawing or `Play` yet |
+| #23 | 고정 기능 그리기(GL), 60 Hz 페이싱, "Presented by SEGA" 로고 표시 뒤 로고에 머묾 / fixed-function drawing on GL, 60 Hz pacing; shows the "Presented by SEGA" logo and stays on it |
+
+### issue #21 frontier 상세 / issue #21 frontier details
+
+| 항목 / Item | 값 / Value |
+|---|---|
+| 생성 코드 / Generated code | 함수 9,193개(다른 함수 본문 중간으로 가는 분기 대상 48개를 alias로 복구, xboxrecomp PR [#200](https://github.com/sp00nznet/xboxrecomp/pull/200)), 미해결 스텁 83개(105에서), XDK override 258개, 커널 export 104개 / 9,193 functions (48 branch targets inside other functions recovered as aliases, xboxrecomp PR [#200](https://github.com/sp00nznet/xboxrecomp/pull/200)), 83 unresolved stubs (from 105), 258 XDK overrides, 104 kernel exports |
+| 실행 결과 / Outcome | **fault 없이 프레임 루프가 계속 돈다(헤드리스 5분, 약 18만 5천 present, 수직 동기 대기가 없어 매우 빠름). 그리기는 아직 받기만 하고 그리지 않으며(`DrawIndexedVertices` 등), 게임은 사운드 버퍼 67개를 만들지만 `Play`는 아직 부르지 않는다 / the frame loop keeps running with no fault (5 minutes headless, about 185,000 presents, very fast because nothing waits for vertical blank). Drawing is still accepted but not drawn (`DrawIndexedVertices` and others), and the game creates 67 sound buffers but calls no `Play` yet** |
+
+* **확인됨**: `0x0FE80026` fault는 노드 순회 `0x00011070`의 `esi` 손상이었다. `0x0007E180`의 공유 꼬리 `pop esi; ret`(`0x0007E255`)로 가는 `jcc` 네 개가, 디스어셈블러가 그 앞 블록(`0x0007E242`)을 함수로 자르면서 `g_esp += 4` 스텁으로 lift되었다. `REJSRF_RECOMP_ABI_CHECK` 빌드가 첫 위반(`call 0x0007E180`, 반환 주소 미pop)을 찾았다([설계 i021](../design/20261012-i021-node-walk-fault.md)).
+* **확인됨**: 실행 4번 중 3번은 "PRESS" 화면 자원(`Mark\PRESS\JSRF_TEXS_0.JTX`)과 캐시 표를 읽은 뒤 같은 루프를 돈다. 1번은 그 전에 미션 `mssn0090`, 스테이지 `Stg10_*`, 캐릭터(Corn, Beat, Gum), 효과음(`se_stg01`, `p_cmn`, `pv_*`)을 읽었다. 데모 같은 경로가 실행마다 달라지는 것으로 보인다(**추정**).
+* **확인됨**: 그 1번 실행에서 `NtAllocateVirtualMemory`가 한 번 크기 0(반올림 뒤)으로 실패했다(`out of guest memory for 0 bytes`). 원인은 아직 보지 않았다.
+* **미확정**: 다음 task 후보는 둘이다. (1) D3D8 그리기(정점·인덱스 버퍼, 셰이더, 텍스처, `Draw*`), (2) 첫 `Play`가 나오는 조건(타이틀 음악·데모의 사운드 스트림) 확인.
+* **Confirmed**: the `0x0FE80026` fault was a corrupted `esi` in the node walk `0x00011070`. The four `jcc` to `0x0007E180`'s shared `pop esi; ret` tail (`0x0007E255`) became `g_esp += 4` stubs when the disassembler cut the block before it (`0x0007E242`) into a function; a `REJSRF_RECOMP_ABI_CHECK` build found the first violation (`call 0x0007E180`, return address not popped) ([design i021](../design/20261012-i021-node-walk-fault.md)).
+* **Confirmed**: three runs of four read the "PRESS" screen assets (`Mark\PRESS\JSRF_TEXS_0.JTX`) and the cache tables, then run the same loop; one first read mission `mssn0090`, stage `Stg10_*`, characters (Corn, Beat, Gum) and sound effects (`se_stg01`, `p_cmn`, `pv_*`). A demo-like path apparently differs from run to run (**inferred**).
+* **Confirmed**: in that run, one `NtAllocateVirtualMemory` failed with a size of 0 after rounding (`out of guest memory for 0 bytes`); not looked into yet.
+* **Unresolved**: two candidates for the next task: (1) D3D8 drawing (vertex and index buffers, shaders, textures, `Draw*`), (2) what makes the first `Play` happen (the sound streams of the title music and demo).
 
 ### issue #19 frontier 상세 / issue #19 frontier details
 
