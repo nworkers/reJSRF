@@ -1,5 +1,6 @@
 #include "d3d8_resource.h"
 
+#include "d3d8_gl_textures.h"
 #include "d3d8_internal.h"
 
 #include <algorithm>
@@ -60,6 +61,7 @@ void DestroyResource(GuestAddress resource)
     {
         Heap().Free(resource);
     }
+    ForgetTexture(resource);
     g_resources.erase(it);
 }
 
@@ -334,6 +336,29 @@ uint32_t ReleaseResourceRef(GuestAddress resource)
     const uint32_t updated = memory.Read32(resource + header::kCommon) - 1;
     memory.Write32(resource + header::kCommon, updated);
     return updated & header::kRefCountMask;
+}
+
+void AddResourceBinding(GuestAddress resource)
+{
+    runtime::GuestMemory& memory = Memory();
+    memory.Write32(resource + header::kCommon, memory.Read32(resource + header::kCommon) + header::kIntRefCountOne);
+}
+
+void ReleaseResourceBinding(GuestAddress resource, uint32_t lock_value)
+{
+    Memory().Write32(resource + header::kLock, lock_value);
+    ReleaseResourceBinding(resource);
+}
+
+void ReleaseResourceBinding(GuestAddress resource)
+{
+    runtime::GuestMemory& memory = Memory();
+    const uint32_t updated = memory.Read32(resource + header::kCommon) - header::kIntRefCountOne;
+    memory.Write32(resource + header::kCommon, updated);
+    if ((updated & (header::kRefCountMask | header::kIntRefCountMask)) == 0)
+    {
+        DestroyResource(resource);
+    }
 }
 
 void RegisterResourceExports(runtime::HleRegistry& registry)

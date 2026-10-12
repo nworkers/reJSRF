@@ -94,10 +94,16 @@ constexpr uint32_t kRectX2 = 0x08;
 constexpr uint32_t kRectY2 = 0x0C;
 }  // namespace layout
 
-// D3DCLEAR_* flags.
-constexpr uint32_t kClearTarget = 0x00000001;
-constexpr uint32_t kClearZBuffer = 0x00000002;
-constexpr uint32_t kClearStencil = 0x00000004;
+// D3DCLEAR_* flags (Xbox values, not the PC's: the target is one bit per
+// channel, and the title's Clear(..., 3, ...) after drawing clears only depth
+// and stencil, measured on the boot's loading screen).
+constexpr uint32_t kClearZBuffer = 0x00000001;
+constexpr uint32_t kClearStencil = 0x00000002;
+constexpr uint32_t kClearTargetR = 0x00000010;
+constexpr uint32_t kClearTargetG = 0x00000020;
+constexpr uint32_t kClearTargetB = 0x00000040;
+constexpr uint32_t kClearTargetA = 0x00000080;
+constexpr uint32_t kClearTarget = 0x000000F0;
 
 constexpr uint32_t kD3dErrNotFound = 0x88760866;
 
@@ -155,7 +161,6 @@ struct D3dState
     uint32_t frame_count = 0;
     bool close_requested = false;
     uint32_t device_ref_count = 1;
-    uint32_t raster_status_calls = 0;
     uint32_t fence_counter = 0;
     std::array<std::array<uint32_t, 6>, 8> tiles = {};  // D3DTILE per tile register
 };

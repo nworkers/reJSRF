@@ -1,10 +1,14 @@
-// Pipeline state the title sets through the per-state setters of the XDK
-// 4134 library (D3DDevice_SetRenderState_*, SetTextureState_*, SetTransform,
-// shader and stream bindings). This batch stores the state; the drawing
-// batch consumes it.
+// Pipeline state the title sets through the setters of the XDK 4134 library.
+//
+// Render and texture-stage state lives in the library's own globals
+// (d3d8_globals.h): the setters write the slots the originals write, and the
+// title's inlines write the rest directly. What the globals do not hold is
+// kept here: texture bindings, transforms and shader handles.
 
 #ifndef REXBOX_HLE_D3D8_D3D8_STATE_H
 #define REXBOX_HLE_D3D8_D3D8_STATE_H
+
+#include "d3d8_render_state.h"
 
 #include "rexbox/runtime/guest_memory.h"
 #include "rexbox/runtime/hle_registry.h"
@@ -15,76 +19,30 @@
 namespace rexbox::hle::d3d8
 {
 
-// Render states with a dedicated setter in the library, in the order of the
-// setters below (our own numbering; the Xbox D3DRENDERSTATETYPE values differ).
-enum class RenderState : uint32_t
-{
-    kBackFillMode,
-    kCullMode,
-    kDoNotCullUncompressed,
-    kDxt1NoiseEnable,
-    kEdgeAntiAlias,
-    kFillMode,
-    kFogColor,
-    kFrontFace,
-    kLineWidth,
-    kLogicOp,
-    kMultiSampleAntiAlias,
-    kMultiSampleMask,
-    kMultiSampleMode,
-    kMultiSampleRenderTargetMode,
-    kNormalizeNormals,
-    kOcclusionCullEnable,
-    kPSTextureModes,
-    kRopZCmpAlwaysRead,
-    kRopZRead,
-    kShadowFunc,
-    kStencilCullEnable,
-    kStencilEnable,
-    kStencilFail,
-    kTextureFactor,
-    kTwoSidedLighting,
-    kVertexBlend,
-    kYuvEnable,
-    kZBias,
-    kZEnable,
-    kCount,
-};
-
 constexpr uint32_t kMaxTextureStages = 4;
-constexpr uint32_t kMaxStreams = 16;
-constexpr uint32_t kMaxTransforms = 32;  // D3DTS_* indices used by the title (world, view, projection, textures)
+constexpr uint32_t kMaxTransforms = 32;  // D3DTRANSFORMSTATETYPE values the title uses (inferred bound)
 
-struct TextureStageState
+// D3DTRANSFORMSTATETYPE (Xbox 4134; inferred, the title sets 1 every frame).
+namespace ts
 {
-    runtime::GuestAddress texture = 0;  // header of the bound texture, 0 for none
-    uint32_t tex_coord_index = 0;
-    uint32_t border_color = 0;
-    uint32_t color_key_color = 0;
-    std::array<uint32_t, 4> bump_env = {};
-    std::array<uint32_t, 64> raw = {};  // SetTextureStageStateNotInline(Stage, Type, Value) by Type
-};
-
-struct StreamSource
-{
-    runtime::GuestAddress vertex_buffer = 0;
-    uint32_t stride = 0;
-};
+constexpr uint32_t kView = 0;
+constexpr uint32_t kProjection = 1;
+constexpr uint32_t kTexture0 = 2;  // .. kTexture3 = 5
+constexpr uint32_t kWorld = 6;
+}  // namespace ts
 
 struct PipelineState
 {
-    std::array<uint32_t, static_cast<size_t>(RenderState::kCount)> render_state = {};
-    std::array<uint32_t, 256> raw_render_state = {};  // SetRenderStateNotInline(State, Value) by State
-    std::array<TextureStageState, kMaxTextureStages> stages;
-    std::array<StreamSource, kMaxStreams> streams;
+    std::array<runtime::GuestAddress, kMaxTextureStages> textures = {};  // bound texture headers
     std::array<std::array<float, 16>, kMaxTransforms> transforms = {};
     runtime::GuestAddress index_buffer = 0;
     uint32_t base_vertex_index = 0;
     uint32_t vertex_shader = 0;
     uint32_t pixel_shader = 0;
     uint32_t shader_constant_mode = 0;
-    int32_t screen_space_offset_x = 0;
-    int32_t screen_space_offset_y = 0;
+    float screen_space_offset_x = 0.0f;
+    float screen_space_offset_y = 0.0f;
+    uint64_t texture_generation = 0;  // bumped by SetTexture and locks (d3d8_draw)
 };
 
 PipelineState& Pipeline();

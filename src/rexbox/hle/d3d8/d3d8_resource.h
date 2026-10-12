@@ -41,6 +41,7 @@ constexpr uint32_t kTypeTexture = 0x00040000;
 constexpr uint32_t kTypeSurface = 0x00050000;
 constexpr uint32_t kTypeFixup = 0x00060000;
 constexpr uint32_t kIntRefCountMask = 0x00780000;
+constexpr uint32_t kIntRefCountOne = 0x00080000;  // one device binding (stream, indices, texture stage)
 constexpr uint32_t kD3dCreated = 0x01000000;
 
 // Format (the XGRAPHC bit field).
@@ -149,6 +150,16 @@ HostResource* AdoptResource(GuestAddress resource, ResourceKind kind);
 // (parents of surfaces follow) and returns the new count.
 uint32_t AddResourceRef(GuestAddress resource);
 uint32_t ReleaseResourceRef(GuestAddress resource);
+
+// The device's own references, held while a resource is bound (stream
+// source, indices, texture stage): the internal count in Common bits 22:19.
+// Releasing a binding destroys the resource when no reference of either kind
+// is left, as the original setters do. SetStreamSource and SetTexture also
+// stamp Lock with the device's push-buffer position (+0x30, a fence the
+// library waits on); SetIndices does not.
+void AddResourceBinding(GuestAddress resource);
+void ReleaseResourceBinding(GuestAddress resource);
+void ReleaseResourceBinding(GuestAddress resource, uint32_t lock_value);
 
 void RegisterResourceExports(runtime::HleRegistry& registry);
 

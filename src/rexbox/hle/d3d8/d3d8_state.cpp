@@ -1,6 +1,9 @@
 #include "d3d8_state.h"
 
+#include "d3d8_globals.h"
 #include "d3d8_internal.h"
+#include "d3d8_resource.h"
+#include "d3d8_trace.h"
 
 #include <cstring>
 
@@ -12,92 +15,98 @@ namespace
 
 PipelineState g_pipeline;
 
-// One setter per render state: void D3DDevice_SetRenderState_<Name>(DWORD Value).
-template <RenderState kState>
-void SetRenderState()
+uint32_t FloatBits(float value)
+{
+    uint32_t bits = 0;
+    std::memcpy(&bits, &value, 4);
+    return bits;
+}
+
+float FloatArg(uint32_t bits)
+{
+    float value = 0.0f;
+    std::memcpy(&value, &bits, 4);
+    return value;
+}
+
+// One setter per complex render state: void D3DDevice_SetRenderState_<Name>(DWORD Value).
+// The original stores Value in its D3D__RenderState slot (and pushes the
+// matching NV2A methods, which the GL backend derives at draw time instead).
+template <uint32_t kSlot>
+void SetComplexRenderState()
 {
     HleCall call;
-    g_pipeline.render_state[static_cast<size_t>(kState)] = call.Arg(0);
+    SetRenderStateValue(kSlot, call.Arg(0));
     call.Return(kD3dOk, 1);
 }
 
-// void D3DDevice_SetRenderStateNotInline(D3DRENDERSTATETYPE State, DWORD Value)
-// The Xbox state numbering is kept raw until the drawing batch maps it.
-void D3DDevice_SetRenderStateNotInline()
+// D3DRS_ZBIAS also sets the polygon-offset states (the original goes through
+// SetRenderStateNotInline): slope -Value/4, offset -Value, the three enables
+// to Value != 0 (measured with rejsrf_d3d8_check).
+void ApplyZBias(uint32_t value)
+{
+    const float bias = static_cast<float>(value);
+    SetRenderStateValue(rs::kZBias, value);
+    SetRenderStateValue(rs::kPolygonOffsetZSlopeScale, FloatBits(-bias / 4.0f));
+    SetRenderStateValue(rs::kPolygonOffsetZOffset, FloatBits(-bias));
+    const uint32_t enable = value != 0 ? 1u : 0u;
+    SetRenderStateValue(rs::kPointOffsetEnable, enable);
+    SetRenderStateValue(rs::kWireframeOffsetEnable, enable);
+    SetRenderStateValue(rs::kSolidOffsetEnable, enable);
+}
+
+// void D3DDevice_SetRenderState_ZBias(DWORD Value)
+void D3DDevice_SetRenderState_ZBias()
 {
     HleCall call;
-    const uint32_t state = call.Arg(0);
-    if (state < g_pipeline.raw_render_state.size())
-    {
-        g_pipeline.raw_render_state[state] = call.Arg(1);
-    }
-    call.Return(kD3dOk, 2);
+    ApplyZBias(call.Arg(0));
+    call.Return(kD3dOk, 1);
 }
 
 // void __fastcall D3DDevice_SetRenderState_Simple(DWORD Method, DWORD Value)
-// Method is the NV2A register the library would write; the value is kept by
-// register for the drawing batch (docs/design/20261012-i012 section 3).
+// The title's inline already stored the D3D__RenderState slot, which drawing
+// reads; Method and Value only feed the original's push buffer.
 void D3DDevice_SetRenderState_Simple()
 {
     HleCall call;
-    static bool logged = false;
-    if (!logged)
-    {
-        logged = true;
-        std::fprintf(stderr, "[d3d8] SetRenderState_Simple method %08X value %08X (stored, not applied yet)\n",
-                     call.Ecx(), call.Edx());
-    }
     call.Return(kD3dOk, 0);
 }
 
-TextureStageState* Stage(uint32_t stage)
+// void D3DDevice_SetRenderStateNotInline(D3DRENDERSTATETYPE State, DWORD Value)
+// The original stores the slot and, for the states below the deferred block,
+// pushes the NV2A method from its own table; those states reach the GL
+// backend through the slot (d3d8_draw reads them).
+void D3DDevice_SetRenderStateNotInline()
 {
-    return stage < kMaxTextureStages ? &g_pipeline.stages[stage] : nullptr;
+    HleCall call;
+    // Complex states go through their setters in the original; ZBias is the
+    // only one whose setter writes more than its own slot.
+    if (call.Arg(0) == rs::kZBias)
+    {
+        ApplyZBias(call.Arg(1));
+    }
+    else
+    {
+        SetRenderStateValue(call.Arg(0), call.Arg(1));
+    }
+    call.Return(kD3dOk, 2);
 }
 
 // void D3DDevice_SetTextureStageStateNotInline(DWORD Stage, D3DTEXTURESTAGESTATETYPE Type, DWORD Value)
+// and the dedicated setters below: every path of the original ends in
+// D3D__TextureState[Stage][Type] = Value.
 void D3DDevice_SetTextureStageStateNotInline()
 {
     HleCall call;
-    TextureStageState* stage = Stage(call.Arg(0));
-    const uint32_t type = call.Arg(1);
-    if (stage != nullptr && type < stage->raw.size())
-    {
-        stage->raw[type] = call.Arg(2);
-    }
+    SetTextureStateValue(call.Arg(0), call.Arg(1), call.Arg(2));
     call.Return(kD3dOk, 3);
 }
 
-// void D3DDevice_SetTextureState_TexCoordIndex(DWORD Stage, DWORD Value)
-void D3DDevice_SetTextureState_TexCoordIndex()
+template <uint32_t kSlot>
+void SetTextureStateSlot()
 {
     HleCall call;
-    if (TextureStageState* stage = Stage(call.Arg(0)))
-    {
-        stage->tex_coord_index = call.Arg(1);
-    }
-    call.Return(kD3dOk, 2);
-}
-
-// void D3DDevice_SetTextureState_BorderColor(DWORD Stage, D3DCOLOR Color)
-void D3DDevice_SetTextureState_BorderColor()
-{
-    HleCall call;
-    if (TextureStageState* stage = Stage(call.Arg(0)))
-    {
-        stage->border_color = call.Arg(1);
-    }
-    call.Return(kD3dOk, 2);
-}
-
-// void D3DDevice_SetTextureState_ColorKeyColor(DWORD Stage, D3DCOLOR Color)
-void D3DDevice_SetTextureState_ColorKeyColor()
-{
-    HleCall call;
-    if (TextureStageState* stage = Stage(call.Arg(0)))
-    {
-        stage->color_key_color = call.Arg(1);
-    }
+    SetTextureStateValue(call.Arg(0), kSlot, call.Arg(1));
     call.Return(kD3dOk, 2);
 }
 
@@ -105,22 +114,44 @@ void D3DDevice_SetTextureState_ColorKeyColor()
 void D3DDevice_SetTextureState_BumpEnv()
 {
     HleCall call;
-    TextureStageState* stage = Stage(call.Arg(0));
-    const uint32_t type = call.Arg(1);
-    if (stage != nullptr && type < stage->bump_env.size())
-    {
-        stage->bump_env[type] = call.Arg(2);
-    }
+    SetTextureStateValue(call.Arg(0), call.Arg(1), call.Arg(2));
     call.Return(kD3dOk, 3);
 }
 
 // void D3DDevice_SetTexture(DWORD Stage, D3DBaseTexture* pTexture)
+// The device holds a binding on the texture (internal reference count).
 void D3DDevice_SetTexture()
 {
     HleCall call;
-    if (TextureStageState* stage = Stage(call.Arg(0)))
+    const uint32_t stage = call.Arg(0);
+    const GuestAddress texture = call.Arg(1);
+    if (stage < kMaxTextureStages)
     {
-        stage->texture = call.Arg(1);
+        const GuestAddress previous = g_pipeline.textures[stage];
+        if (texture != 0)
+        {
+            AddResourceBinding(texture);
+            if (D3d8TraceEnabled())
+            {
+                const uint32_t format_field = Memory().Read32(texture + header::kFormat);
+                const uint32_t size_field = Memory().Read32(texture + header::kSize);
+                const uint32_t common = Memory().Read32(texture + header::kCommon);
+                TraceOnce(Format("texture %08X %08X", format_field & 0xFFFFFF0C, size_field != 0 ? 1u : 0u),
+                          Format("texture format %02X dim %u levels %u cube %u %s, type %X (first: header %08X, "
+                                 "Format %08X Size %08X)",
+                                 HeaderFormat(texture), (format_field >> header::kFormatDimensionShift) & 0xF,
+                                 (format_field >> header::kFormatMipLevelsShift) & 0xF,
+                                 (format_field & header::kFormatCubeMap) != 0 ? 1u : 0u,
+                                 size_field != 0 ? "linear" : "swizzled", (common & header::kTypeMask) >> 16,
+                                 texture, format_field, size_field));
+            }
+        }
+        g_pipeline.textures[stage] = texture;
+        if (previous != 0)
+        {
+            ReleaseResourceBinding(previous, DevicePushFence());
+        }
+        ++g_pipeline.texture_generation;
     }
     call.Return(kD3dOk, 2);
 }
@@ -143,19 +174,40 @@ void D3DDevice_SetStreamSource()
 {
     HleCall call;
     const uint32_t stream = call.Arg(0);
-    if (stream < kMaxStreams)
+    const GuestAddress buffer = call.Arg(1);
+    if (stream < globals::kStreamCount)
     {
-        g_pipeline.streams[stream].vertex_buffer = call.Arg(1);
-        g_pipeline.streams[stream].stride = call.Arg(2);
+        if (buffer != 0)
+        {
+            AddResourceBinding(buffer);
+        }
+        const GuestAddress previous = StreamVertexBuffer(stream);
+        if (previous != 0)
+        {
+            ReleaseResourceBinding(previous, DevicePushFence());
+        }
+        SetStream(stream, buffer, call.Arg(2));
     }
     call.Return(kD3dOk, 3);
 }
 
 // void D3DDevice_SetIndices(D3DIndexBuffer* pIndexData, UINT BaseVertexIndex)
+// The title's DrawIndexedPrimitive inline reads D3D__IndexData itself.
 void D3DDevice_SetIndices()
 {
     HleCall call;
-    g_pipeline.index_buffer = call.Arg(0);
+    const GuestAddress buffer = call.Arg(0);
+    if (buffer != 0)
+    {
+        AddResourceBinding(buffer);
+    }
+    SetIndexData(buffer != 0 ? Memory().Read32(buffer + header::kData) : 0);
+    const GuestAddress previous = g_pipeline.index_buffer;
+    if (previous != 0)
+    {
+        ReleaseResourceBinding(previous);
+    }
+    g_pipeline.index_buffer = buffer;
     g_pipeline.base_vertex_index = call.Arg(1);
     call.Return(kD3dOk, 2);
 }
@@ -188,20 +240,13 @@ void D3DDevice_SetShaderConstantMode()
 void D3DDevice_SetScreenSpaceOffset()
 {
     HleCall call;
-    float x = 0.0f;
-    float y = 0.0f;
-    uint32_t bits = call.Arg(0);
-    std::memcpy(&x, &bits, 4);
-    bits = call.Arg(1);
-    std::memcpy(&y, &bits, 4);
-    g_pipeline.screen_space_offset_x = static_cast<int32_t>(x);
-    g_pipeline.screen_space_offset_y = static_cast<int32_t>(y);
+    g_pipeline.screen_space_offset_x = FloatArg(call.Arg(0));
+    g_pipeline.screen_space_offset_y = FloatArg(call.Arg(1));
     call.Return(kD3dOk, 2);
 }
 
 // Setters whose arguments describe fixed-function lighting or material; the
-// values are accepted (the title's rendering uses vertex shaders, to be
-// confirmed in the drawing batch).
+// values are accepted (lit draws are logged and drawn unlit, d3d8_draw).
 void AcceptOne()
 {
     HleCall call;
@@ -229,49 +274,53 @@ PipelineState& Pipeline()
 
 void RegisterStateExports(runtime::HleRegistry& registry)
 {
-    registry.AddExport("d3d8", "D3DDevice_SetRenderState_BackFillMode", &SetRenderState<RenderState::kBackFillMode>);
-    registry.AddExport("d3d8", "D3DDevice_SetRenderState_CullMode", &SetRenderState<RenderState::kCullMode>);
-    registry.AddExport("d3d8", "D3DDevice_SetRenderState_DoNotCullUncompressed",
-                       &SetRenderState<RenderState::kDoNotCullUncompressed>);
-    registry.AddExport("d3d8", "D3DDevice_SetRenderState_Dxt1NoiseEnable", &SetRenderState<RenderState::kDxt1NoiseEnable>);
-    registry.AddExport("d3d8", "D3DDevice_SetRenderState_EdgeAntiAlias", &SetRenderState<RenderState::kEdgeAntiAlias>);
-    registry.AddExport("d3d8", "D3DDevice_SetRenderState_FillMode", &SetRenderState<RenderState::kFillMode>);
-    registry.AddExport("d3d8", "D3DDevice_SetRenderState_FogColor", &SetRenderState<RenderState::kFogColor>);
-    registry.AddExport("d3d8", "D3DDevice_SetRenderState_FrontFace", &SetRenderState<RenderState::kFrontFace>);
-    registry.AddExport("d3d8", "D3DDevice_SetRenderState_LineWidth", &SetRenderState<RenderState::kLineWidth>);
-    registry.AddExport("d3d8", "D3DDevice_SetRenderState_LogicOp", &SetRenderState<RenderState::kLogicOp>);
-    registry.AddExport("d3d8", "D3DDevice_SetRenderState_MultiSampleAntiAlias",
-                       &SetRenderState<RenderState::kMultiSampleAntiAlias>);
-    registry.AddExport("d3d8", "D3DDevice_SetRenderState_MultiSampleMask", &SetRenderState<RenderState::kMultiSampleMask>);
-    registry.AddExport("d3d8", "D3DDevice_SetRenderState_MultiSampleMode", &SetRenderState<RenderState::kMultiSampleMode>);
-    registry.AddExport("d3d8", "D3DDevice_SetRenderState_MultiSampleRenderTargetMode",
-                       &SetRenderState<RenderState::kMultiSampleRenderTargetMode>);
-    registry.AddExport("d3d8", "D3DDevice_SetRenderState_NormalizeNormals",
-                       &SetRenderState<RenderState::kNormalizeNormals>);
-    registry.AddExport("d3d8", "D3DDevice_SetRenderState_OcclusionCullEnable",
-                       &SetRenderState<RenderState::kOcclusionCullEnable>);
-    registry.AddExport("d3d8", "D3DDevice_SetRenderState_PSTextureModes", &SetRenderState<RenderState::kPSTextureModes>);
-    registry.AddExport("d3d8", "D3DDevice_SetRenderState_RopZCmpAlwaysRead",
-                       &SetRenderState<RenderState::kRopZCmpAlwaysRead>);
-    registry.AddExport("d3d8", "D3DDevice_SetRenderState_RopZRead", &SetRenderState<RenderState::kRopZRead>);
-    registry.AddExport("d3d8", "D3DDevice_SetRenderState_ShadowFunc", &SetRenderState<RenderState::kShadowFunc>);
-    registry.AddExport("d3d8", "D3DDevice_SetRenderState_StencilCullEnable",
-                       &SetRenderState<RenderState::kStencilCullEnable>);
-    registry.AddExport("d3d8", "D3DDevice_SetRenderState_StencilEnable", &SetRenderState<RenderState::kStencilEnable>);
-    registry.AddExport("d3d8", "D3DDevice_SetRenderState_StencilFail", &SetRenderState<RenderState::kStencilFail>);
-    registry.AddExport("d3d8", "D3DDevice_SetRenderState_TextureFactor", &SetRenderState<RenderState::kTextureFactor>);
-    registry.AddExport("d3d8", "D3DDevice_SetRenderState_TwoSidedLighting",
-                       &SetRenderState<RenderState::kTwoSidedLighting>);
-    registry.AddExport("d3d8", "D3DDevice_SetRenderState_VertexBlend", &SetRenderState<RenderState::kVertexBlend>);
-    registry.AddExport("d3d8", "D3DDevice_SetRenderState_YuvEnable", &SetRenderState<RenderState::kYuvEnable>);
-    registry.AddExport("d3d8", "D3DDevice_SetRenderState_ZBias", &SetRenderState<RenderState::kZBias>);
-    registry.AddExport("d3d8", "D3DDevice_SetRenderState_ZEnable", &SetRenderState<RenderState::kZEnable>);
+    struct ComplexSetter
+    {
+        const char* name;
+        void (*function)();
+    };
+    static const ComplexSetter kComplexSetters[] = {
+        {"D3DDevice_SetRenderState_PSTextureModes", &SetComplexRenderState<rs::kPSTextureModes>},
+        {"D3DDevice_SetRenderState_VertexBlend", &SetComplexRenderState<rs::kVertexBlend>},
+        {"D3DDevice_SetRenderState_FogColor", &SetComplexRenderState<rs::kFogColor>},
+        {"D3DDevice_SetRenderState_FillMode", &SetComplexRenderState<rs::kFillMode>},
+        {"D3DDevice_SetRenderState_BackFillMode", &SetComplexRenderState<rs::kBackFillMode>},
+        {"D3DDevice_SetRenderState_TwoSidedLighting", &SetComplexRenderState<rs::kTwoSidedLighting>},
+        {"D3DDevice_SetRenderState_NormalizeNormals", &SetComplexRenderState<rs::kNormalizeNormals>},
+        {"D3DDevice_SetRenderState_ZEnable", &SetComplexRenderState<rs::kZEnable>},
+        {"D3DDevice_SetRenderState_StencilEnable", &SetComplexRenderState<rs::kStencilEnable>},
+        {"D3DDevice_SetRenderState_StencilFail", &SetComplexRenderState<rs::kStencilFail>},
+        {"D3DDevice_SetRenderState_FrontFace", &SetComplexRenderState<rs::kFrontFace>},
+        {"D3DDevice_SetRenderState_CullMode", &SetComplexRenderState<rs::kCullMode>},
+        {"D3DDevice_SetRenderState_TextureFactor", &SetComplexRenderState<rs::kTextureFactor>},
+        {"D3DDevice_SetRenderState_LogicOp", &SetComplexRenderState<rs::kLogicOp>},
+        {"D3DDevice_SetRenderState_EdgeAntiAlias", &SetComplexRenderState<rs::kEdgeAntiAlias>},
+        {"D3DDevice_SetRenderState_MultiSampleAntiAlias", &SetComplexRenderState<rs::kMultiSampleAntiAlias>},
+        {"D3DDevice_SetRenderState_MultiSampleMask", &SetComplexRenderState<rs::kMultiSampleMask>},
+        {"D3DDevice_SetRenderState_MultiSampleMode", &SetComplexRenderState<rs::kMultiSampleMode>},
+        {"D3DDevice_SetRenderState_MultiSampleRenderTargetMode",
+         &SetComplexRenderState<rs::kMultiSampleRenderTargetMode>},
+        {"D3DDevice_SetRenderState_ShadowFunc", &SetComplexRenderState<rs::kShadowFunc>},
+        {"D3DDevice_SetRenderState_LineWidth", &SetComplexRenderState<rs::kLineWidth>},
+        {"D3DDevice_SetRenderState_Dxt1NoiseEnable", &SetComplexRenderState<rs::kDxt1NoiseEnable>},
+        {"D3DDevice_SetRenderState_YuvEnable", &SetComplexRenderState<rs::kYuvEnable>},
+        {"D3DDevice_SetRenderState_OcclusionCullEnable", &SetComplexRenderState<rs::kOcclusionCullEnable>},
+        {"D3DDevice_SetRenderState_StencilCullEnable", &SetComplexRenderState<rs::kStencilCullEnable>},
+        {"D3DDevice_SetRenderState_RopZCmpAlwaysRead", &SetComplexRenderState<rs::kRopZCmpAlwaysRead>},
+        {"D3DDevice_SetRenderState_RopZRead", &SetComplexRenderState<rs::kRopZRead>},
+        {"D3DDevice_SetRenderState_DoNotCullUncompressed", &SetComplexRenderState<rs::kDoNotCullUncompressed>},
+    };
+    for (const ComplexSetter& setter : kComplexSetters)
+    {
+        registry.AddExport("d3d8", setter.name, setter.function);
+    }
+    registry.AddExport("d3d8", "D3DDevice_SetRenderState_ZBias", &D3DDevice_SetRenderState_ZBias);
     registry.AddExport("d3d8", "D3DDevice_SetRenderStateNotInline", &D3DDevice_SetRenderStateNotInline);
     registry.AddExport("d3d8", "D3DDevice_SetRenderState_Simple", &D3DDevice_SetRenderState_Simple);
     registry.AddExport("d3d8", "D3DDevice_SetTextureStageStateNotInline", &D3DDevice_SetTextureStageStateNotInline);
-    registry.AddExport("d3d8", "D3DDevice_SetTextureState_TexCoordIndex", &D3DDevice_SetTextureState_TexCoordIndex);
-    registry.AddExport("d3d8", "D3DDevice_SetTextureState_BorderColor", &D3DDevice_SetTextureState_BorderColor);
-    registry.AddExport("d3d8", "D3DDevice_SetTextureState_ColorKeyColor", &D3DDevice_SetTextureState_ColorKeyColor);
+    registry.AddExport("d3d8", "D3DDevice_SetTextureState_TexCoordIndex", &SetTextureStateSlot<tss::kTexCoordIndex>);
+    registry.AddExport("d3d8", "D3DDevice_SetTextureState_BorderColor", &SetTextureStateSlot<tss::kBorderColor>);
+    registry.AddExport("d3d8", "D3DDevice_SetTextureState_ColorKeyColor", &SetTextureStateSlot<tss::kColorKeyColor>);
     registry.AddExport("d3d8", "D3DDevice_SetTextureState_BumpEnv", &D3DDevice_SetTextureState_BumpEnv);
     registry.AddExport("d3d8", "D3DDevice_SetTexture", &D3DDevice_SetTexture);
     registry.AddExport("d3d8", "D3DDevice_SetTransform", &D3DDevice_SetTransform);

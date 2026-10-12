@@ -3,15 +3,21 @@
 // targets, viewport, Clear and Swap.
 
 #include "d3d8_gl.h"
+#include "d3d8_gl_targets.h"
+#include "d3d8_globals.h"
+#include "d3d8_render_state.h"
 #include "d3d8_internal.h"
 #include "d3d8_resource.h"
 #include "d3d8_state.h"
+#include "d3d8_vblank.h"
 #include "rexbox/platform/display.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <vector>
 
 namespace rexbox::hle::d3d8
 {
@@ -19,7 +25,10 @@ namespace rexbox::hle::d3d8
 namespace
 {
 
-constexpr uint32_t kDeviceObjectSize = 0x1000;
+// Large enough for the device fields the library's own routines touch (the
+// identified m_VerticalBlankEvent is at +0x2430).
+constexpr uint32_t kDeviceObjectSize = 0x3000;
+constexpr const char* kInitializeDeviceStateName = "D3D_InitializeDeviceState";
 constexpr uint32_t kBackBufferCount = 2;
 
 // REXBOX_DISPLAY=none runs without a window (headless diagnostics, CI).
@@ -63,6 +72,9 @@ bool OpenDisplay(const PresentParameters& pp, std::string* error)
     config.height = pp.back_buffer_height;
     config.title = "reJSRF";
     config.api = platform::GlApi::kDesktopGl;
+    // REXBOX_DISPLAY=hidden: a GL context without a visible window (frame dumps in unattended runs).
+    const char* display = std::getenv("REXBOX_DISPLAY");
+    config.hidden = display != nullptr && std::strcmp(display, "hidden") == 0;
     if (!platform::CreateDisplay(config, error))
     {
         return false;
@@ -77,6 +89,7 @@ bool OpenDisplay(const PresentParameters& pp, std::string* error)
     }
     platform::DisplayInfo info;
     platform::GetDisplayInfo(&info);
+    SetGlIsEs(info.gl_es);
     std::fprintf(stderr, "[d3d8] display %ux%u, %s %d.%d, %s / %s\n", info.drawable_width, info.drawable_height,
                  info.gl_es ? "OpenGL ES" : "OpenGL", info.gl_major, info.gl_minor,
                  reinterpret_cast<const char*>(gl.GetString(kGlRenderer)),
@@ -99,7 +112,7 @@ void ApplyViewport()
     }
     D3dState& state = State();
     const Viewport& vp = state.viewport;
-    const uint32_t target_height = state.present.back_buffer_height;
+    const uint32_t target_height = RenderTargetHeight();
     const GLint y = static_cast<GLint>(target_height) - static_cast<GLint>(vp.y + vp.height);
     Gl().Viewport(static_cast<GLint>(vp.x), y, static_cast<GLsizei>(vp.width), static_cast<GLsizei>(vp.height));
     GlDepthRange(vp.min_z, vp.max_z);
@@ -134,6 +147,31 @@ bool CreateDeviceSurfaces(D3dState& state)
     return true;
 }
 
+// The original's hardware initialization ends by setting the default render,
+// texture-stage and transform state through the public setters. The title
+// profile binds that routine (it has no XbSymbolDatabase name); running it
+// leaves the library globals as the original device would. ZEnable follows
+// the depth buffer, as the routine's own D3DRS_ZENABLE call reads it from a
+// device field the HLE does not keep.
+void InitializeDeviceState(const D3dState& state)
+{
+    const GuestAddress routine = runtime::Env().registry->FindVariable(kInitializeDeviceStateName);
+    if (routine == 0)
+    {
+        std::fprintf(stderr, "[d3d8] no %s binding; render and texture-stage state start empty\n",
+                     kInitializeDeviceStateName);
+        return;
+    }
+    bool called = false;
+    runtime::Env().executor->CallGuest(routine, nullptr, 0, &called);
+    if (!called)
+    {
+        std::fprintf(stderr, "[d3d8] %s (%08X) has no code; render state starts empty\n",
+                     kInitializeDeviceStateName, routine);
+    }
+    SetRenderStateValue(rs::kZEnable, state.depth_stencil != 0 ? 1u : 0u);
+}
+
 // HRESULT Direct3D_CreateDevice(UINT Adapter, D3DDEVTYPE DeviceType, HWND hFocusWindow,
 //     DWORD BehaviorFlags, D3DPRESENT_PARAMETERS* pPresentationParameters,
 //     IDirect3DDevice8** ppReturnedDeviceInterface)
@@ -154,7 +192,7 @@ void Direct3D_CreateDevice()
     }
 
     D3dState& state = State();
-    std::lock_guard<std::mutex> lock(state.mutex);
+    std::unique_lock<std::mutex> lock(state.mutex);
     if (state.device != 0)
     {
         std::fprintf(stderr, "[d3d8] Direct3D_CreateDevice called again; the device already exists\n");
@@ -178,6 +216,7 @@ void Direct3D_CreateDevice()
                  pp.multi_sample_type, pp.enable_auto_depth_stencil != 0 ? "on" : "off",
                  pp.auto_depth_stencil_format, pp.flags, pp.presentation_interval, call.Arg(3));
     state.present = pp;
+    SetVerticalBlankRate(pp.refresh_rate);
 
     if (!DisplayDisabled())
     {
@@ -199,6 +238,16 @@ void Direct3D_CreateDevice()
     }
     Memory().Fill(*device, 0, kDeviceObjectSize);
     state.device = *device;
+    // The library global the original sets; its own functions (and the
+    // binding fences, d3d8_globals.h) read the device through it.
+    SetDeviceObject(state.device);
+    if (state.display_created)
+    {
+        BindRenderTarget(state.render_target, state.depth_target);
+        ApplyViewport();
+    }
+    lock.unlock();
+    InitializeDeviceState(state);
     Memory().Write32(out, state.device);
     call.Return(kD3dOk, 6);
 }
@@ -242,8 +291,9 @@ void D3DDevice_GetDepthStencilSurface()
 }
 
 // HRESULT D3DDevice_SetRenderTarget(D3DSurface* pRenderTarget, D3DSurface* pNewZStencil)
-// A null render target keeps the current one (as on the Xbox); only the
-// device's own surfaces can be drawn to so far.
+// A null render target keeps the current one (as on the Xbox). Surfaces
+// other than the back buffers get their own GL texture (d3d8_gl_targets.cpp
+// reports them; sampling them as textures comes later).
 void D3DDevice_SetRenderTarget()
 {
     HleCall call;
@@ -252,22 +302,20 @@ void D3DDevice_SetRenderTarget()
     const GuestAddress depth = call.Arg(1);
     if (target != 0)
     {
-        const HostResource* host = FindResource(target);
-        if (host == nullptr || host->kind != ResourceKind::kBackBuffer)
-        {
-            static bool warned = false;
-            if (!warned)
-            {
-                warned = true;
-                std::fprintf(stderr, "[d3d8] SetRenderTarget to %08X: only the back buffers can be targets yet\n",
-                             target);
-            }
-        }
         state.render_target = target;
-        state.viewport = Viewport{0, 0, state.present.back_buffer_width, state.present.back_buffer_height, 0.0f, 1.0f};
-        ApplyViewport();
     }
     state.depth_target = depth;
+    if (HaveGl())
+    {
+        BindRenderTarget(state.render_target, state.depth_target);
+    }
+    if (target != 0)
+    {
+        // The viewport resets to the whole new target.
+        const LevelLayout layout = HeaderLevelLayout(target, 0);
+        state.viewport = Viewport{0, 0, layout.width, layout.height, 0.0f, 1.0f};
+        ApplyViewport();
+    }
     call.Return(kD3dOk, 2);
 }
 
@@ -334,7 +382,8 @@ void D3DDevice_Clear()
     GLbitfield mask = 0;
     if ((flags & kClearTarget) != 0)
     {
-        gl.ColorMask(1, 1, 1, 1);
+        gl.ColorMask((flags & kClearTargetR) != 0 ? 1 : 0, (flags & kClearTargetG) != 0 ? 1 : 0,
+                     (flags & kClearTargetB) != 0 ? 1 : 0, (flags & kClearTargetA) != 0 ? 1 : 0);
         gl.ClearColor(((color >> 16) & 0xFF) / 255.0f, ((color >> 8) & 0xFF) / 255.0f, (color & 0xFF) / 255.0f,
                       ((color >> 24) & 0xFF) / 255.0f);
         mask |= kGlColorBufferBit;
@@ -356,7 +405,7 @@ void D3DDevice_Clear()
         call.Return(kD3dOk, 6);
         return;
     }
-    const uint32_t target_height = State().present.back_buffer_height;
+    const uint32_t target_height = RenderTargetHeight();
     if (count == 0 || rects == 0)
     {
         gl.Disable(kGlScissorTest);
@@ -381,15 +430,66 @@ void D3DDevice_Clear()
     call.Return(kD3dOk, 6);
 }
 
+// REXBOX_FRAME_DUMP=<n>[,<n>...]: writes the back buffer shown by the n-th
+// present to frame_<n>.bmp in REXBOX_FRAME_DUMP_DIR (default: the current
+// folder), to check output without watching the window (diagnostic).
+void DumpFrameIfRequested(GuestAddress shown, uint32_t frame)
+{
+    static const std::vector<uint32_t> frames = [] {
+        std::vector<uint32_t> list;
+        if (const char* value = std::getenv("REXBOX_FRAME_DUMP"))
+        {
+            const char* cursor = value;
+            while (*cursor != '\0')
+            {
+                char* end = nullptr;
+                const unsigned long number = std::strtoul(cursor, &end, 10);
+                if (end == cursor)
+                {
+                    break;
+                }
+                list.push_back(static_cast<uint32_t>(number));
+                cursor = *end == ',' ? end + 1 : end;
+            }
+        }
+        return list;
+    }();
+    if (std::find(frames.begin(), frames.end(), frame) == frames.end())
+    {
+        return;
+    }
+    const char* directory = std::getenv("REXBOX_FRAME_DUMP_DIR");
+    std::string path = directory != nullptr ? std::string(directory) + "/" : std::string();
+    path += "frame_" + std::to_string(frame) + ".bmp";
+    if (DumpRenderTarget(shown, path))
+    {
+        std::fprintf(stderr, "[d3d8] frame %u written to %s\n", frame, path.c_str());
+    }
+    else
+    {
+        std::fprintf(stderr, "[d3d8] cannot write frame %u to %s\n", frame, path.c_str());
+    }
+}
+
 // void D3DDevice_Swap(DWORD Flags)
 void D3DDevice_Swap()
 {
     HleCall call;
     D3dState& state = State();
     ++state.frame_count;
+    bool presented = false;
     if (HaveGl())
     {
-        platform::PresentDisplay();
+        // The back buffer drawn to is the one shown (the library rotates the
+        // surfaces behind the same header); anything else shows back buffer 0.
+        const HostResource* host = FindResource(state.render_target);
+        const GuestAddress shown = host != nullptr && host->kind == ResourceKind::kBackBuffer
+                                       ? state.render_target
+                                       : state.back_buffers[0];
+        DumpFrameIfRequested(shown, state.frame_count);
+        WaitForPresentInterval(state.present.presentation_interval);
+        PresentRenderTarget(shown);
+        presented = true;
         bool close = false;
         platform::PumpDisplayEvents(&close);
         if (close && !state.close_requested)
@@ -397,6 +497,11 @@ void D3DDevice_Swap()
             state.close_requested = true;
             std::fprintf(stderr, "[d3d8] window close requested\n");
         }
+    }
+    if (!presented)
+    {
+        // Without a display the frame loop keeps the same pace.
+        WaitForPresentInterval(state.present.presentation_interval);
     }
     if (state.frame_count == 1)
     {
@@ -439,18 +544,18 @@ void D3DDevice_Release()
 }
 
 // void D3DDevice_GetRasterStatus(D3DRASTER_STATUS* pRasterStatus)
-// {BOOL InVBlank; UINT ScanLine}. The host has no scan-out position; the
-// answer alternates so a title polling for the vertical blank proceeds.
+// {BOOL InVBlank; UINT ScanLine}, from the virtual vertical-blank clock.
 void D3DDevice_GetRasterStatus()
 {
     HleCall call;
     const GuestAddress out = call.Arg(0);
-    const uint32_t calls = ++State().raster_status_calls;
     if (out != 0)
     {
-        const bool in_vblank = (calls & 1) != 0;
+        bool in_vblank = false;
+        uint32_t scan_line = 0;
+        RasterPosition(&in_vblank, &scan_line, State().present.back_buffer_height);
         Memory().Write32(out + 0, in_vblank ? 1 : 0);
-        Memory().Write32(out + 4, in_vblank ? 0 : (calls * 37) % 480);
+        Memory().Write32(out + 4, scan_line);
     }
     call.Return(kD3dOk, 1);
 }
@@ -503,7 +608,7 @@ void D3DDevice_GetTexture2()
     GuestAddress texture = 0;
     if (stage < kMaxTextureStages)
     {
-        texture = Pipeline().stages[stage].texture;
+        texture = Pipeline().textures[stage];
     }
     if (texture != 0)
     {
@@ -578,10 +683,10 @@ void AcceptTwoArguments()
 }
 
 // void D3DDevice_BlockUntilVerticalBlank(void)
-// Presentation is synchronized to the host's vertical blank in Swap.
 void D3DDevice_BlockUntilVerticalBlank()
 {
     HleCall call;
+    WaitForVerticalBlank();
     call.Return(kD3dOk, 0);
 }
 

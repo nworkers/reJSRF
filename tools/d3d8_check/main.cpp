@@ -42,6 +42,45 @@ extern "C" void sub_00192990_gen(void);  // D3DResource_Release
 extern "C" void sub_00192790_gen(void);  // D3DResource_GetType
 extern "C" void sub_0018E730_gen(void);  // D3DSurface_GetDesc
 extern "C" void sub_001929E0_gen(void);  // D3DResource_Register
+// State setters (issue #23): compared by the library globals they leave behind.
+extern "C" void sub_0018DF10_gen(void);  // D3DDevice_SetTexture
+extern "C" void sub_0018E090_gen(void);  // D3DDevice_SetIndices
+extern "C" void sub_0018E8A0_gen(void);  // D3DDevice_SetRenderState_MultiSampleMode
+extern "C" void sub_0018E8D0_gen(void);  // D3DDevice_SetRenderState_MultiSampleRenderTargetMode
+extern "C" void sub_0018E900_gen(void);  // D3DDevice_SetRenderState_PSTextureModes
+extern "C" void sub_0018E960_gen(void);  // D3DDevice_SetRenderStateNotInline
+extern "C" void sub_0018EB00_gen(void);  // D3DDevice_SetRenderState_EdgeAntiAlias
+extern "C" void sub_0018EB40_gen(void);  // D3DDevice_SetRenderState_ShadowFunc
+extern "C" void sub_0018EB80_gen(void);  // D3DDevice_SetRenderState_FogColor
+extern "C" void sub_0018EBD0_gen(void);  // D3DDevice_SetRenderState_CullMode
+extern "C" void sub_0018EC40_gen(void);  // D3DDevice_SetRenderState_FrontFace
+extern "C" void sub_0018EC80_gen(void);  // D3DDevice_SetRenderState_NormalizeNormals
+extern "C" void sub_0018ECC0_gen(void);  // D3DDevice_SetRenderState_TextureFactor
+extern "C" void sub_0018ED20_gen(void);  // D3DDevice_SetRenderState_LineWidth
+extern "C" void sub_0018ED90_gen(void);  // D3DDevice_SetRenderState_Dxt1NoiseEnable
+extern "C" void sub_0018EE10_gen(void);  // D3DDevice_SetRenderState_ZBias
+extern "C" void sub_0018EE90_gen(void);  // D3DDevice_SetRenderState_LogicOp
+extern "C" void sub_0018EEF0_gen(void);  // D3DDevice_SetRenderState_FillMode
+extern "C" void sub_0018EF40_gen(void);  // D3DDevice_SetRenderState_BackFillMode
+extern "C" void sub_0018EFA0_gen(void);  // D3DDevice_SetRenderState_TwoSidedLighting
+extern "C" void sub_0018F010_gen(void);  // D3DDevice_SetRenderState_VertexBlend
+extern "C" void sub_0018F060_gen(void);  // D3DDevice_SetTextureState_TexCoordIndex
+extern "C" void sub_0018F180_gen(void);  // D3DDevice_SetTextureState_BumpEnv
+extern "C" void sub_0018F1F0_gen(void);  // D3DDevice_SetTextureState_BorderColor
+extern "C" void sub_0018F230_gen(void);  // D3DDevice_SetTextureState_ColorKeyColor
+extern "C" void sub_0018F270_gen(void);  // D3DDevice_SetTextureStageStateNotInline
+extern "C" void sub_0018F6C0_gen(void);  // D3DDevice_SetRenderState_ZEnable
+extern "C" void sub_0018F760_gen(void);  // D3DDevice_SetRenderState_StencilEnable
+extern "C" void sub_0018F7F0_gen(void);  // D3DDevice_SetRenderState_StencilFail
+extern "C" void sub_0018F860_gen(void);  // D3DDevice_SetRenderState_YuvEnable
+extern "C" void sub_0018F890_gen(void);  // D3DDevice_SetRenderState_OcclusionCullEnable
+extern "C" void sub_0018F900_gen(void);  // D3DDevice_SetRenderState_StencilCullEnable
+extern "C" void sub_0018F970_gen(void);  // D3DDevice_SetRenderState_RopZCmpAlwaysRead
+extern "C" void sub_0018F990_gen(void);  // D3DDevice_SetRenderState_RopZRead
+extern "C" void sub_0018F9B0_gen(void);  // D3DDevice_SetRenderState_DoNotCullUncompressed
+extern "C" void sub_0018F9D0_gen(void);  // D3DDevice_SetRenderState_MultiSampleAntiAlias
+extern "C" void sub_0018FA30_gen(void);  // D3DDevice_SetRenderState_MultiSampleMask
+extern "C" void sub_001900D0_gen(void);  // D3DDevice_SetStreamSource
 // XGRAPHC is not an HLE library; its lifted code is the function itself.
 extern "C" void sub_001BBCA5(void);  // XGSetSurfaceHeader(Width, Height, Format, pSurface, Data, Pitch)
 
@@ -93,9 +132,13 @@ void Write32(GuestAddress address, uint32_t value)
 // Calls `function` as a guest `call` would, with `args` on the stack and the
 // scratch area filled with a pattern (then prepared by `setup`), and collects
 // what it left behind.
-Outcome Run(GuestFunction function, const std::vector<uint32_t>& args, const Setup& setup = nullptr)
+Outcome Run(GuestFunction function, const std::vector<uint32_t>& args, const Setup& setup = nullptr,
+            bool fill_scratch = true)
 {
-    g_memory->Fill(g_output, kFillPattern, kOutputBytes);
+    if (fill_scratch)
+    {
+        g_memory->Fill(g_output, kFillPattern, kOutputBytes);
+    }
     if (setup)
     {
         setup();
@@ -596,6 +639,216 @@ void CheckDeviceSurfaces(const rexbox::runtime::HleRegistry& registry)
 
 }  // namespace
 
+// State setters write the library globals the title's inlines also use
+// (docs/design/20261012-i023-d3d8-fixed-function-draw.md section 2). Each
+// case runs a sequence of calls on each side from the same globals and a
+// fresh stand-in device (push buffer pointers only), then compares eax/esp of
+// the last call, the scratch area (resource headers) and the globals. The
+// dirty-flag word is left out: only the library's own draw path consumes it.
+struct StateArea
+{
+    GuestAddress device_slot = 0;  // D3D_g_pDevice
+    GuestAddress begin = 0;        // D3D_g_pDevice .. the end of D3D_g_RenderState
+    GuestAddress end = 0;
+    GuestAddress dirty = 0;
+    GuestAddress device = 0;       // the stand-in device and its push buffer
+    GuestAddress push = 0;
+};
+
+StateArea g_state_area;
+constexpr uint32_t kDeviceBytes = 0x3000;
+constexpr uint32_t kPushBytes = 0x10000;
+constexpr uint32_t kDevicePushFence = 0x00001234;
+
+using Call = std::vector<uint32_t>;
+
+struct SequenceOutcome
+{
+    Outcome last;
+    std::vector<uint8_t> globals;
+};
+
+SequenceOutcome RunSequence(GuestFunction function, const std::vector<Call>& calls, const Setup& setup,
+                            const std::vector<uint8_t>& initial_globals)
+{
+    const StateArea& area = g_state_area;
+    std::memcpy(g_memory->Translate(area.begin), initial_globals.data(), initial_globals.size());
+    g_memory->Fill(area.device, 0, kDeviceBytes);
+    Write32(area.device + 0x0, area.push);                    // push-buffer write pointer
+    Write32(area.device + 0x4, area.push + kPushBytes - 0x400);  // limit before a kick
+    Write32(area.device + 0x30, kDevicePushFence);
+    Write32(area.device_slot, area.device);
+    SequenceOutcome outcome;
+    for (size_t i = 0; i < calls.size(); ++i)
+    {
+        // The scratch area (and the setup's headers) is prepared once per sequence.
+        outcome.last = Run(function, calls[i], i == 0 ? setup : Setup([] {}), i == 0);
+    }
+    outcome.globals.assign(g_memory->Translate(area.begin), g_memory->Translate(area.end));
+    const size_t dirty = area.dirty - area.begin;
+    std::memset(outcome.globals.data() + dirty, 0, 4);
+    return outcome;
+}
+
+// The setters return void; what they leave in eax is not observable by a
+// correct caller, so only esp is compared for them.
+void CheckSequence(const Subject& subject, const std::vector<Call>& calls, const Setup& setup = nullptr)
+{
+    const StateArea& area = g_state_area;
+    const std::vector<uint8_t> initial(g_memory->Translate(area.begin), g_memory->Translate(area.end));
+    const SequenceOutcome original = RunSequence(subject.original, calls, setup, initial);
+    const SequenceOutcome hle = RunSequence(subject.hle, calls, setup, initial);
+    std::memcpy(g_memory->Translate(area.begin), initial.data(), initial.size());
+    ++g_cases;
+    std::string text;
+    for (const Call& call : calls)
+    {
+        text += (text.empty() ? "" : "; ") + Describe(call);
+    }
+    bool same = true;
+    if (original.last.esp != hle.last.esp)
+    {
+        std::printf("DIFF %s(%s): esp original %08X hle %08X\n", subject.name, text.c_str(), original.last.esp,
+                    hle.last.esp);
+        same = false;
+    }
+    if (original.last.output != hle.last.output)
+    {
+        size_t first = 0;
+        while (original.last.output[first] == hle.last.output[first])
+        {
+            ++first;
+        }
+        std::printf("DIFF %s(%s): scratch differs first at +%zX (original %02X hle %02X)\n", subject.name,
+                    text.c_str(), first, original.last.output[first], hle.last.output[first]);
+        same = false;
+    }
+    if (original.globals != hle.globals)
+    {
+        for (size_t offset = 0; offset < original.globals.size(); offset += 4)
+        {
+            uint32_t a = 0;
+            uint32_t b = 0;
+            std::memcpy(&a, original.globals.data() + offset, 4);
+            std::memcpy(&b, hle.globals.data() + offset, 4);
+            if (a != b)
+            {
+                std::printf("DIFF %s(%s): global %08X original %08X hle %08X\n", subject.name, text.c_str(),
+                            static_cast<uint32_t>(area.begin + offset), a, b);
+            }
+        }
+        same = false;
+    }
+    g_failures += same ? 0 : 1;
+}
+
+void CheckStateSetters(const rexbox::runtime::HleRegistry& registry)
+{
+    const auto subject = [&registry](const char* name, GuestFunction original) {
+        return Subject{name, original, registry.FindExport(name)->thunk};
+    };
+    struct Named
+    {
+        const char* name;
+        GuestFunction original;
+    };
+    // Complex render states: one slot each.
+    const Named complex_setters[] = {
+        {"D3DDevice_SetRenderState_PSTextureModes", &sub_0018E900_gen},
+        {"D3DDevice_SetRenderState_VertexBlend", &sub_0018F010_gen},
+        {"D3DDevice_SetRenderState_FogColor", &sub_0018EB80_gen},
+        {"D3DDevice_SetRenderState_FillMode", &sub_0018EEF0_gen},
+        {"D3DDevice_SetRenderState_BackFillMode", &sub_0018EF40_gen},
+        {"D3DDevice_SetRenderState_TwoSidedLighting", &sub_0018EFA0_gen},
+        {"D3DDevice_SetRenderState_NormalizeNormals", &sub_0018EC80_gen},
+        {"D3DDevice_SetRenderState_ZEnable", &sub_0018F6C0_gen},
+        {"D3DDevice_SetRenderState_StencilEnable", &sub_0018F760_gen},
+        {"D3DDevice_SetRenderState_StencilFail", &sub_0018F7F0_gen},
+        {"D3DDevice_SetRenderState_FrontFace", &sub_0018EC40_gen},
+        {"D3DDevice_SetRenderState_CullMode", &sub_0018EBD0_gen},
+        {"D3DDevice_SetRenderState_TextureFactor", &sub_0018ECC0_gen},
+        {"D3DDevice_SetRenderState_ZBias", &sub_0018EE10_gen},
+        {"D3DDevice_SetRenderState_LogicOp", &sub_0018EE90_gen},
+        {"D3DDevice_SetRenderState_EdgeAntiAlias", &sub_0018EB00_gen},
+        {"D3DDevice_SetRenderState_MultiSampleAntiAlias", &sub_0018F9D0_gen},
+        {"D3DDevice_SetRenderState_MultiSampleMask", &sub_0018FA30_gen},
+        {"D3DDevice_SetRenderState_MultiSampleMode", &sub_0018E8A0_gen},
+        {"D3DDevice_SetRenderState_MultiSampleRenderTargetMode", &sub_0018E8D0_gen},
+        {"D3DDevice_SetRenderState_ShadowFunc", &sub_0018EB40_gen},
+        {"D3DDevice_SetRenderState_LineWidth", &sub_0018ED20_gen},
+        {"D3DDevice_SetRenderState_Dxt1NoiseEnable", &sub_0018ED90_gen},
+        {"D3DDevice_SetRenderState_YuvEnable", &sub_0018F860_gen},
+        {"D3DDevice_SetRenderState_OcclusionCullEnable", &sub_0018F890_gen},
+        {"D3DDevice_SetRenderState_StencilCullEnable", &sub_0018F900_gen},
+        {"D3DDevice_SetRenderState_RopZCmpAlwaysRead", &sub_0018F970_gen},
+        {"D3DDevice_SetRenderState_RopZRead", &sub_0018F990_gen},
+        {"D3DDevice_SetRenderState_DoNotCullUncompressed", &sub_0018F9B0_gen},
+    };
+    for (const Named& setter : complex_setters)
+    {
+        const Subject s = subject(setter.name, setter.original);
+        for (const uint32_t value : {0u, 1u, 2u, 0x404u, 0x3F800000u})
+        {
+            CheckSequence(s, {{value}});
+        }
+    }
+
+    // NotInline: every slot of the array (deferred and complex states are
+    // stored; simple ones are stored and pushed).
+    const Subject not_inline = subject("D3DDevice_SetRenderStateNotInline", &sub_0018E960_gen);
+    for (uint32_t state = 0; state < 146; ++state)
+    {
+        CheckSequence(not_inline, {{state, 0x00000201u}});
+    }
+
+    // Texture-stage states.
+    const Subject stage_state = subject("D3DDevice_SetTextureStageStateNotInline", &sub_0018F270_gen);
+    for (uint32_t stage = 0; stage < 4; ++stage)
+    {
+        for (uint32_t type = 0; type < 31; ++type)
+        {
+            CheckSequence(stage_state, {{stage, type, 0x00000003u + type}});
+        }
+    }
+    const Subject tex_coord = subject("D3DDevice_SetTextureState_TexCoordIndex", &sub_0018F060_gen);
+    const Subject border = subject("D3DDevice_SetTextureState_BorderColor", &sub_0018F1F0_gen);
+    const Subject color_key = subject("D3DDevice_SetTextureState_ColorKeyColor", &sub_0018F230_gen);
+    const Subject bump_env = subject("D3DDevice_SetTextureState_BumpEnv", &sub_0018F180_gen);
+    for (uint32_t stage = 0; stage < 4; ++stage)
+    {
+        CheckSequence(tex_coord, {{stage, 1u}});
+        CheckSequence(tex_coord, {{stage, 0x00020000u}});
+        CheckSequence(border, {{stage, 0xFF00FF00u}});
+        CheckSequence(color_key, {{stage, 0x00FF00FFu}});
+        for (uint32_t type = 22; type <= 27; ++type)
+        {
+            CheckSequence(bump_env, {{stage, type, 0x3F000000u}});
+        }
+    }
+
+    // Bindings hold an internal reference on the resource and stamp Lock
+    // when dropped; every sequence ends unbound so both sides start clean.
+    const GuestAddress header_a = g_output + kHeaderA;
+    const GuestAddress header_b = g_output + kHeaderB;
+    const Setup buffers = [] {
+        WriteHeader(kHeaderA, 0x00000001, 0x00123000, 0, 0, 0);
+        WriteHeader(kHeaderB, 0x00010002, 0x00456000, 0, 0, 0);
+    };
+    const Subject indices = subject("D3DDevice_SetIndices", &sub_0018E090_gen);
+    CheckSequence(indices, {{header_a, 0}, {0, 0}}, buffers);
+    CheckSequence(indices, {{header_b, 7}, {header_a, 0}, {header_a, 3}, {0, 0}}, buffers);
+    const Subject streams = subject("D3DDevice_SetStreamSource", &sub_001900D0_gen);
+    CheckSequence(streams, {{0, header_a, 32}, {0, 0, 0}}, buffers);
+    CheckSequence(streams, {{0, header_a, 32}, {0, header_b, 16}, {3, header_a, 12}, {0, 0, 0}, {3, 0, 0}}, buffers);
+    const Setup textures = [] {
+        WriteHeader(kHeaderA, 0x00040001, 0x00200000, SwizzledFormat(0x06, 8, 8, 1, false), 0, 0);
+        WriteHeader(kHeaderB, 0x00040002, 0x00300000, 0x00011129, 0x13013FBF, 0);
+    };
+    const Subject texture = subject("D3DDevice_SetTexture", &sub_0018DF10_gen);
+    CheckSequence(texture, {{0, header_a}, {0, 0}}, textures);
+    CheckSequence(texture, {{0, header_a}, {1, header_a}, {0, header_b}, {0, 0}, {1, 0}}, textures);
+}
+
 int main(int argc, char** argv)
 {
     std::string xbe_path = kDefaultXbe;
@@ -676,6 +929,26 @@ int main(int argc, char** argv)
     CheckCaps(registry);
     CheckResources(registry);
     CheckDeviceSurfaces(registry);
+
+    // The setter cases need the title's identified D3D8 variables and a
+    // stand-in device for the originals to push into.
+    rejsrf::BindTitleHle(*image, registry);
+    const auto state_device = heap.Allocate(kDeviceBytes, rexbox::runtime::GuestHeap::kPageSize, false);
+    const auto state_push = heap.Allocate(kPushBytes, rexbox::runtime::GuestHeap::kPageSize, false);
+    g_state_area.device_slot = registry.FindVariable("D3D_g_pDevice");
+    const GuestAddress stream = registry.FindVariable("D3D_g_Stream");
+    const GuestAddress render_state = registry.FindVariable("D3D_g_RenderState");
+    if (!state_device || !state_push || g_state_area.device_slot == 0 || stream == 0 || render_state == 0)
+    {
+        std::fprintf(stderr, "error: D3D8 variables or stand-in device unavailable\n");
+        return 2;
+    }
+    g_state_area.device = *state_device;
+    g_state_area.push = *state_push;
+    g_state_area.begin = g_state_area.device_slot;
+    g_state_area.end = render_state + 146 * 4;
+    g_state_area.dirty = stream + 0x1F0;
+    CheckStateSetters(registry);
 
     std::printf("%d case(s), %d difference(s)\n", g_cases, g_failures);
     std::fflush(stdout);
