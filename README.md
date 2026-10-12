@@ -2,7 +2,9 @@
 
 Xbox 게임 **Jet Set Radio Future**를 정적 재컴파일과 디컴파일로 Win32, Win64, Linux x86, Linux x64, Web, Android에 네이티브 포팅하는 프로젝트입니다.
 
-> **초기 단계입니다.** 현재는 저장소 규칙, 레이어 구조, 재컴파일 파이프라인, 커널 HLE, D3D8 HLE 첫 묶음(디바이스 생성까지)이 되어 있습니다. 창은 열리지만 게임 화면은 아직 그려지지 않습니다.
+> **진행 중입니다.** 재컴파일된 US판이 Win32에서 로고 시퀀스(SEGA, Smilebit, ADX, Dolby Digital, 낙서 경고문)를 지나 스테이지를 읽고, 3D 어트랙트 데모를 음악과 함께 그립니다. 캐릭터(정점 셰이더 프로그램)는 아직 그리지 않습니다. 여기까지의 과정: [From XBE to First Screen — Work in Progress 1](docs/post/2026-10-13-031546-from-xbe-to-first-screen-wip.md)
+
+![reJSRF 창: 어트랙트 데모](docs/screenshots/first-screen-window.jpg)
 
 ## 게임 데이터는 포함되지 않습니다
 
@@ -38,7 +40,7 @@ cd reJSRF
 
 | 플랫폼 | 상태 |
 |---|---|
-| Win32 x86 | 빌드됨. 부팅이 첫 화면("Presented by SEGA" 로고)을 SDL3/OpenGL 창에 그린다(고정 기능 그리기; 프로그래머블 셰이더는 아직) |
+| Win32 x86 | 빌드됨. 로고 시퀀스와 3D 어트랙트 데모를 SDL3/OpenGL 창에 그리고 음악을 낸다(고정 기능 그리기; 프로그래머블 셰이더는 아직) |
 | Win64 | 예정 |
 | Linux x86 / x64 | 예정 |
 | Web (wasm32) | 예정 |
@@ -62,7 +64,9 @@ cd reJSRF
 
 A native port of the Xbox game **Jet Set Radio Future** to Win32, Win64, Linux x86, Linux x64, the web and Android through static recompilation and decompilation.
 
-> **Early stage.** What exists today is the repository rules, the layer structure, the recompilation pipeline, the kernel HLE and the first D3D8 HLE batch (up to device creation). A window opens, but the game does not draw yet.
+> **Work in progress.** On Win32 the recompiled US build runs the logo sequence (SEGA, Smilebit, ADX, Dolby Digital, the anti-graffiti notice), loads the stage and draws the 3D attract demo with music. Characters (vertex-shader programs) are not drawn yet. How it got here: [From XBE to First Screen — Work in Progress 1](docs/post/2026-10-13-031546-from-xbe-to-first-screen-wip.md)
+
+![The reJSRF window: the attract demo](docs/screenshots/first-screen-window.jpg)
 
 ## No game data included
 
@@ -82,7 +86,7 @@ See the commands above, and [Win32 development setup and build](docs/guides/win3
 
 ## Platform status
 
-Win32 x86 builds; the boot draws its first screen (the "Presented by SEGA" logo) in the SDL3/OpenGL window (fixed-function drawing; programmable shaders not yet). Win64, Linux x86/x64, the web (wasm32) and Android are planned.
+Win32 x86 builds; it draws the logo sequence and the 3D attract demo in the SDL3/OpenGL window and plays the music (fixed-function drawing; programmable shaders not yet). Win64, Linux x86/x64, the web (wasm32) and Android are planned.
 
 ## Contributing and working rules
 
