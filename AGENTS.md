@@ -224,7 +224,7 @@ If the requirement is a simple question or confirmation request, answer it direc
 
 ## 구현 규칙
 
-* 플랫폼(OS) 종속 코드는 `src/platform/win32/`, `src/platform/linux/`, `src/platform/web/`, `src/platform/android/` 아래에 둔다. 런타임·HLE·타이틀·도구 디렉터리에는 플랫폼·아키텍처 하위 디렉터리를 두지 않는다.
+* 플랫폼(OS) 종속 코드는 `src/platform/win32/`, `src/platform/linux/`, `src/platform/web/`, `src/platform/android/` 아래에 둔다. 여러 OS가 공유하는 호스트 라이브러리 백엔드(예: SDL3)는 `src/platform/<라이브러리>/`(예: `src/platform/sdl/`)에 두고, 각 OS가 `src/platform/CMakeLists.txt`의 소스 목록에서 선택한다. 런타임·HLE·타이틀·도구 디렉터리에는 플랫폼·아키텍처 하위 디렉터리를 두지 않는다.
 * 한 플랫폼 안에서 CPU 아키텍처에 따라 갈리는 코드는 그 플랫폼 디렉터리의 아키텍처 하위 디렉터리(예: `src/platform/linux/x86/`, `src/platform/linux/x64/`)에 둔다. 공개 헤더도 같은 규칙으로 `include/rexbox/platform/<플랫폼>/`에 두고, 모든 호스트가 쓰는 플랫폼 중립 계약만 `include/rexbox/platform/`에 둔다.
 * 게스트 주소는 항상 32비트 `GuestAddress`이며 호스트 포인터로 바꿀 때는 `GuestMemory::Translate`를 거친다(based 주소 모델). 32비트 호스트에서도 게스트 주소를 호스트 포인터로 직접 쓰지 않는다.
 * 새 기능을 추가할 때는 테스트 전략 또는 최소 검증 절차를 문서에 함께 남긴다.
@@ -235,7 +235,7 @@ If the requirement is a simple question or confirmation request, answer it direc
 
 ## Implementation Rules
 
-* Put platform (OS) specific code under `src/platform/win32/`, `src/platform/linux/`, `src/platform/web/`, or `src/platform/android/`. The runtime, HLE, title and tool directories have no platform or architecture subdirectories.
+* Put platform (OS) specific code under `src/platform/win32/`, `src/platform/linux/`, `src/platform/web/`, or `src/platform/android/`. A backend on a host library several OSes share (for example SDL3) goes in `src/platform/<library>/` (for example `src/platform/sdl/`), and each OS selects it in the source list of `src/platform/CMakeLists.txt`. The runtime, HLE, title and tool directories have no platform or architecture subdirectories.
 * Within one platform, put code that differs by CPU architecture in an architecture subdirectory of that platform (for example `src/platform/linux/x86/` and `src/platform/linux/x64/`). Public headers follow the same rule under `include/rexbox/platform/<platform>/`; only platform-neutral contracts every host uses stay in `include/rexbox/platform/`.
 * A guest address is always a 32-bit `GuestAddress`, turned into a host pointer only through `GuestMemory::Translate` (the based address model). Even on a 32-bit host, guest addresses are not used directly as host pointers.
 * When adding a feature, document the test strategy or minimum verification procedure.
@@ -270,6 +270,7 @@ If the requirement is a simple question or confirmation request, answer it direc
 * 전염성 라이선스 프로젝트(xemu, Cxbx-Reloaded 등)는 동작을 이해하는 지식 출처로만 참고하고, 코드를 옮기지 않는다.
 * 라이선스가 명시되지 않았거나 LLM 기여를 금지한 프로젝트(예: Codeberg `KeybadeBlox/JSRF-Decompilation`)의 코드는 가져오지 않는다. 공개 문서의 사실은 출처를 달아 참고할 수 있다.
 * 서드파티 코드를 가져오면 같은 작업에서 `THIRD_PARTY_NOTICES.md`를 갱신한다. 예외가 필요하면 먼저 문서화하고 사용자 확인을 받는다.
+* 가져온 서드파티 코드에서 문제(버그, 이식성)를 찾으면 우리 사본만 고치지 않고 업스트림에 기여한다. 특히 같은 호스트 계층을 쓰는 [reexec/re2DJ](https://github.com/reexec/re2DJ)(BSD-3-Clause)는 필요할 때 참고하고, 얻어온 코드의 수정은 re2DJ에 되돌려 보낸다.
 
 ## License Rules
 
@@ -279,6 +280,7 @@ If the requirement is a simple question or confirmation request, answer it direc
 * Copyleft projects (xemu, Cxbx-Reloaded, ...) are consulted only as sources of knowledge about behavior; their code is not carried over.
 * Do not take code from projects with no stated license or that forbid LLM contributions (for example Codeberg `KeybadeBlox/JSRF-Decompilation`). Facts from their public documents may be used with attribution.
 * When bringing in third-party code, update `THIRD_PARTY_NOTICES.md` in the same task. If an exception is needed, document it and confirm with the user first.
+* When a problem (a bug, a portability issue) is found in third-party code we took, contribute the fix upstream instead of fixing only our copy. In particular, consult [reexec/re2DJ](https://github.com/reexec/re2DJ) (BSD-3-Clause), which shares our host layer, when useful, and send fixes to code taken from it back to re2DJ.
 
 ---
 

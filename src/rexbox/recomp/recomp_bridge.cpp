@@ -28,6 +28,8 @@ namespace
 runtime::GuestMemory* g_memory = nullptr;
 runtime::HleRegistry* g_registry = nullptr;
 bool g_stop_on_unresolved = false;
+// -1: not decided yet (read REXBOX_HLE_FALLBACK on first use), 0 stop, 1 run the lifted original.
+int g_hle_fallback_lifted = -1;
 
 thread_local runtime::GuestAddress t_stop_target = 0;
 thread_local const RexboxHleSlot* t_stop_slot = nullptr;
@@ -58,6 +60,21 @@ void AttachBridge(runtime::GuestMemory* memory, runtime::HleRegistry* registry)
 void SetStopOnUnresolvedCall(bool stop)
 {
     g_stop_on_unresolved = stop;
+}
+
+void SetUnimplementedHleFallback(bool run_lifted)
+{
+    g_hle_fallback_lifted = run_lifted ? 1 : 0;
+}
+
+bool BridgeHleFallbackLifted()
+{
+    if (g_hle_fallback_lifted < 0)
+    {
+        const char* value = std::getenv("REXBOX_HLE_FALLBACK");
+        g_hle_fallback_lifted = value != nullptr && std::strcmp(value, "lifted") == 0 ? 1 : 0;
+    }
+    return g_hle_fallback_lifted == 1;
 }
 
 void TakeStopSymbol(const char** library, const char** name)
@@ -154,14 +171,11 @@ void rexbox_hle_enter(RexboxHleSlot* slot)
         slot->resolved();
         return;
     }
-    // Diagnostic: REXBOX_HLE_FALLBACK=lifted runs the original body of an
-    // unimplemented function instead of stopping, logging each one once, to
-    // reveal the order in which a title calls a library.
-    static const bool fall_back_to_lifted = [] {
-        const char* value = std::getenv("REXBOX_HLE_FALLBACK");
-        return value != nullptr && std::strcmp(value, "lifted") == 0;
-    }();
-    if (fall_back_to_lifted && slot->lifted != nullptr)
+    // Diagnostic: REXBOX_HLE_FALLBACK=lifted (or SetUnimplementedHleFallback)
+    // runs the original body of an unimplemented function instead of
+    // stopping, logging each one once, to reveal the order in which a title
+    // calls a library.
+    if (bridge::BridgeHleFallbackLifted() && slot->lifted != nullptr)
     {
         if (bridge::BridgeFirstTimeAt(slot->va))
         {

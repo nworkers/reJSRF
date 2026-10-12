@@ -2,7 +2,7 @@
 
 Xbox 게임 **Jet Set Radio Future**를 정적 재컴파일과 디컴파일로 Win32, Win64, Linux x86, Linux x64, Web, Android에 네이티브 포팅하는 프로젝트입니다.
 
-> **초기 단계입니다.** 현재는 저장소 규칙, 레이어 구조, Win32 빌드 골격, XBE 분석까지 되어 있습니다. 게임은 아직 실행되지 않습니다.
+> **초기 단계입니다.** 현재는 저장소 규칙, 레이어 구조, 재컴파일 파이프라인, 커널 HLE, D3D8 HLE 첫 묶음(디바이스 생성까지)이 되어 있습니다. 창은 열리지만 게임 화면은 아직 그려지지 않습니다.
 
 ## 게임 데이터는 포함되지 않습니다
 
@@ -38,7 +38,7 @@ cd reJSRF
 
 | 플랫폼 | 상태 |
 |---|---|
-| Win32 x86 | 빌드됨(로드 단계까지) |
+| Win32 x86 | 빌드됨. 부팅이 D3D8 디바이스 생성까지 가서 SDL3/OpenGL 창을 연다(그리기 전) |
 | Win64 | 예정 |
 | Linux x86 / x64 | 예정 |
 | Web (wasm32) | 예정 |
@@ -62,7 +62,7 @@ cd reJSRF
 
 A native port of the Xbox game **Jet Set Radio Future** to Win32, Win64, Linux x86, Linux x64, the web and Android through static recompilation and decompilation.
 
-> **Early stage.** What exists today is the repository rules, the layer structure, a Win32 build skeleton and the XBE analysis. The game does not run yet.
+> **Early stage.** What exists today is the repository rules, the layer structure, the recompilation pipeline, the kernel HLE and the first D3D8 HLE batch (up to device creation). A window opens, but the game does not draw yet.
 
 ## No game data included
 
@@ -82,7 +82,7 @@ See the commands above, and [Win32 development setup and build](docs/guides/win3
 
 ## Platform status
 
-Win32 x86 builds (up to the load stage). Win64, Linux x86/x64, the web (wasm32) and Android are planned.
+Win32 x86 builds; boot reaches D3D8 device creation and opens the SDL3/OpenGL window (no drawing yet). Win64, Linux x86/x64, the web (wasm32) and Android are planned.
 
 ## Contributing and working rules
 

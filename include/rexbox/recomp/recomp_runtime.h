@@ -40,6 +40,11 @@ bool Attach(runtime::GuestMemory& memory, runtime::HleRegistry& registry, const 
 // instead of being skipped the way the lifter's fallback does.
 void SetStopOnUnresolvedCall(bool stop);
 
+// When true, an overridden XDK function with no HLE export runs its lifted
+// original (logged once per function) instead of stopping the run. Defaults
+// to the environment variable REXBOX_HLE_FALLBACK=lifted. Diagnostic only.
+void SetUnimplementedHleFallback(bool run_lifted);
+
 enum class StopReason
 {
     kReturned,               // the start function returned

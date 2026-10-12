@@ -16,7 +16,8 @@
 | [xboxdevwiki](https://xboxdevwiki.net/) | XBE, 커널, 하드웨어 문서 | 위키 문서 | 지식 출처 |
 | [N64Recomp](https://github.com/N64Recomp/N64Recomp), [XenonRecomp](https://github.com/hedge-dev/XenonRecomp) | 다른 플랫폼의 정적 재컴파일 사례 | MIT | 설계 참고 |
 | [capstone](https://github.com/capstone-engine/capstone) | 디스어셈블러(xboxrecomp 파이프라인이 사용) | BSD-3-Clause | 파이프라인 도구 의존성 |
-| [SDL3](https://github.com/libsdl-org/SDL) | 창·입력·오디오 크로스플랫폼 계층 | zlib | 플랫폼 백엔드 후보 |
+| [SDL3](https://github.com/libsdl-org/SDL) | 창·입력·오디오 크로스플랫폼 계층 | zlib | submodule(`third_party/SDL`, release-3.4.18). 표시 계약의 백엔드(`src/platform/sdl/`), 정적 링크 |
+| [reexec/re2DJ](https://github.com/reexec/re2DJ) | EZ2DJ(Win32 x86) HLE 런타임. DirectDraw/Direct3D 3 → OpenGL(SDL3 공용 백엔드), DirectSound → SDL3 + SDL_mixer, SDL3 게임패드. rePIU와 같은 작업 규칙 | BSD-3-Clause | 필요할 때 참고하고 코드도 가져올 수 있다(고지 필요). 가져온 코드에서 문제를 찾으면 우리 쪽만 고치지 말고 re2DJ에 업스트림 기여한다(사용자 결정, 2026-10-12). 호스트 계층(SDL3 창·GL·오디오·입력)과 DSOUND 버퍼 모델이 공유 후보. D3D3 고정 기능 HLE는 Xbox D3D8(셰이더·푸시버퍼)과 API 세대가 달라 직접 재사용 범위가 좁다 |
 
 `scripts/fetch_references.ps1`은 참고용 저장소를 `third_party/refs/`(gitignore)에 받아 둔다. 그 안의 코드는 빌드에 쓰지 않는다.
 
@@ -34,6 +35,7 @@ The table above lists each project, what it is, its license, and how we may use 
 * **xemu** (GPL/LGPL) and **Cxbx-Reloaded** (GPL-2.0): behavior and comparison only; no code.
 * **nxdk**: licenses differ per component; check per file before adopting anything.
 * **XbSymbolDatabase** (MIT) identifies XDK functions in an XBE; a submodule at `third_party/XbSymbolDatabase` (`20eced5`) linked into the `rexbox_xdk_symbols` tool.
-* **capstone** (BSD-3-Clause) is a pipeline dependency; **SDL3** (zlib) is the platform-backend candidate.
+* **capstone** (BSD-3-Clause) is a pipeline dependency; **SDL3** (zlib) is a submodule at `third_party/SDL` (release-3.4.18), the statically linked backend of the display contract (`src/platform/sdl/`).
+* **re2DJ** (BSD-3-Clause): an HLE runtime for the Win32 x86 EZ2DJ games (DirectDraw/Direct3D 3 → OpenGL on a shared SDL3 backend, DirectSound → SDL3 + SDL_mixer, SDL3 gamepads), under the same working rules as rePIU. Consult it when useful and take code from it (with notice); when a problem is found in code taken from it, contribute the fix upstream to re2DJ rather than fixing only our copy (user decision, 2026-10-12). Its host layer (SDL3 window, GL context, audio, input) and DirectSound buffer model are the sharing candidates; its fixed-function Direct3D 3 HLE is a different API generation from Xbox D3D8 (shaders, push buffers), so direct reuse there is narrow.
 
 `scripts/fetch_references.ps1` clones the reference repositories into `third_party/refs/` (gitignored). Nothing there is built.
