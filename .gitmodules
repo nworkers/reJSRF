@@ -4,3 +4,7 @@
 [submodule "third_party/XbSymbolDatabase"]
 	path = third_party/XbSymbolDatabase
 	url = https://github.com/Cxbx-Reloaded/XbSymbolDatabase
+[submodule "third_party/SDL"]
+	path = third_party/SDL
+	url = https://github.com/libsdl-org/SDL
+	branch = release-3.4.x

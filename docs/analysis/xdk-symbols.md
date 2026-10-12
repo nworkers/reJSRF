@@ -36,7 +36,7 @@ flowchart LR
 ```
 
 * **확인됨**: i003에서 추정한 "디바이스 생성 중 GPU 초기화"는 `Direct3D_CreateDevice` → `CMiniport_InitHardware`의 NV2A 접근이다.
-* **추정**: D3D8 HLE의 첫 구현 묶음은 이 아홉 개(어댑터·모드·Caps 질의와 디바이스 생성)다.
+* **확인됨**(issue #7): 이 아홉 개가 D3D8 HLE 첫 묶음으로 구현됐고 질의 8개는 원본과 답이 일치한다([d3d8-adapter](d3d8-adapter.md)). 그 다음 호출은 `D3DDevice_GetBackBuffer`다.
 
 * **Confirmed**: the "GPU initialization during device creation" inferred in i003 is `Direct3D_CreateDevice` → `CMiniport_InitHardware` touching the NV2A.
-* **Inferred**: the first D3D8 HLE batch is these nine (adapter, mode and caps queries, and device creation).
+* **Confirmed** (issue #7): these nine are implemented as the first D3D8 HLE batch, and the eight queries answer like the originals ([d3d8-adapter](d3d8-adapter.md)); the next call is `D3DDevice_GetBackBuffer`.

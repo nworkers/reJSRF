@@ -35,6 +35,10 @@ void TakeStopSymbol(const char** library, const char** name);
 // The VA that caused the last stop on this thread; clears it.
 runtime::GuestAddress TakeStopTarget();
 
+// Whether an unimplemented XDK function runs its lifted original (see
+// SetUnimplementedHleFallback in recomp_runtime.h).
+bool BridgeHleFallbackLifted();
+
 }  // namespace rexbox::recomp
 
 #endif  // REXBOX_RECOMP_RECOMP_BRIDGE_H

@@ -48,10 +48,21 @@ add_library(rexbox_hle_kernel STATIC
 )
 target_link_libraries(rexbox_hle_kernel PUBLIC rexbox_runtime)
 
-foreach(module IN ITEMS xapi d3d8 dsound xinput)
+foreach(module IN ITEMS xapi dsound xinput)
     add_library(rexbox_hle_${module} STATIC hle/${module}/${module}_hle.cpp)
     target_link_libraries(rexbox_hle_${module} PUBLIC rexbox_runtime)
 endforeach()
+
+# Direct3D 8 on the platform display contract (OpenGL family). One file per
+# area; d3d8_hle.cpp only registers.
+add_library(rexbox_hle_d3d8 STATIC
+    hle/d3d8/d3d8_adapter.cpp
+    hle/d3d8/d3d8_caps.cpp
+    hle/d3d8/d3d8_device.cpp
+    hle/d3d8/d3d8_gl.cpp
+    hle/d3d8/d3d8_hle.cpp
+)
+target_link_libraries(rexbox_hle_d3d8 PUBLIC rexbox_runtime)
 
 add_library(rexbox_hle INTERFACE)
 target_link_libraries(rexbox_hle INTERFACE

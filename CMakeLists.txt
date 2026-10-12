@@ -95,6 +95,25 @@ if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/XbSymbolDatabase/CMakeLis
 endif()
 add_subdirectory(third_party/XbSymbolDatabase EXCLUDE_FROM_ALL)
 
+# SDL3 (zlib): the host library behind the display contract on every target
+# OS (docs/design/20261012-i007-d3d8-hle-first-batch.md section 2). Static
+# library only; subsystems no HLE module uses yet stay off. Audio, joystick
+# and gamepad remain for the DSOUND and XInput tasks.
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/SDL/CMakeLists.txt")
+    message(FATAL_ERROR "third_party/SDL is missing; run: git submodule update --init")
+endif()
+set(SDL_SHARED OFF CACHE BOOL "" FORCE)
+set(SDL_STATIC ON CACHE BOOL "" FORCE)
+set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
+set(SDL_TESTS OFF CACHE BOOL "" FORCE)
+set(SDL_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(SDL_INSTALL OFF CACHE BOOL "" FORCE)
+set(SDL_UNINSTALL OFF CACHE BOOL "" FORCE)
+foreach(subsystem IN ITEMS GPU RENDER CAMERA HAPTIC SENSOR DIALOG TRAY)
+    set(SDL_${subsystem} OFF CACHE BOOL "" FORCE)
+endforeach()
+add_subdirectory(third_party/SDL EXCLUDE_FROM_ALL)
+
 # Lifted C for the primary variant, produced by scripts/recomp/regenerate.py.
 # Without it the game links no recompiled code and the app stops after load.
 set(REJSRF_RECOMP_GEN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/gen/jsrf_us/gen" CACHE PATH

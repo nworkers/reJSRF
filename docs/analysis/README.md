@@ -12,9 +12,10 @@
 flowchart LR
     XBE["XBE overview"] --> SECT["Sections & XDK libraries"]
     XBE --> KIMP["Kernel imports"]
-    SECT --> FID["Function identification (planned)"]
-    KIMP --> KHLE["Kernel HLE (planned)"]
-    FID --> XHLE["XDK HLE bindings (planned)"]
+    SECT --> FID["Function identification (xdk-symbols)"]
+    KIMP --> KHLE["Kernel HLE (boot-frontier)"]
+    FID --> XHLE["XDK HLE bindings"]
+    XHLE --> D3D["D3D8 adapter/mode/caps answers (d3d8-adapter)"]
 ```
 
 ## 문서
@@ -22,6 +23,7 @@ flowchart LR
 * [JSRF XBE 개요: 빌드 변형, 섹션, XDK 라이브러리, 커널 import, 디스크 자산](jsrf-xbe-overview.md)
 * [부팅 frontier: 재컴파일 코드가 어디까지 실행되는가](boot-frontier.md)
 * [XDK 심볼 식별: 라이브러리별 함수, jsrf-recomp 대조, 부팅 중 D3D8 호출 순서](xdk-symbols.md)
+* [D3D8 어댑터·모드·Caps 질의: 원본 라이브러리의 답, 호출 규약, 게임이 요청한 디바이스](d3d8-adapter.md)
 
 ---
 
@@ -40,3 +42,4 @@ Labels:
 * [JSRF XBE overview: build variants, sections, XDK libraries, kernel imports, disc assets](jsrf-xbe-overview.md)
 * [Boot frontier: how far the recompiled code runs](boot-frontier.md)
 * [XDK symbol identification: functions per library, comparison with jsrf-recomp, D3D8 call order during boot](xdk-symbols.md)
+* [D3D8 adapter, mode and caps queries: the original library's answers, calling conventions, the device the game asks for](d3d8-adapter.md)
