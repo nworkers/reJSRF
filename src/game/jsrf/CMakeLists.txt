@@ -37,6 +37,12 @@ if(EXISTS "${REJSRF_RECOMP_GEN_DIR}/recomp_dispatch.c")
     else()
         target_compile_options(rejsrf_recomp PRIVATE -w)
     endif()
+    # Diagnostic: every direct call in the generated code reports its target
+    # (recomp_call_profile_hit in rexbox_recomp); rejsrf's REXBOX_WATCHDOG dumps it.
+    option(REJSRF_RECOMP_CALL_PROFILE "Build the generated code with per-call profiling (slow)" OFF)
+    if(REJSRF_RECOMP_CALL_PROFILE)
+        target_compile_definitions(rejsrf_recomp PRIVATE RECOMP_CALL_PROFILE)
+    endif()
     target_link_libraries(rejsrf_recomp PUBLIC rexbox_recomp)
 
     # Decompiled sources include the generated declarations.

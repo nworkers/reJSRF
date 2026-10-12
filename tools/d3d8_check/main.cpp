@@ -1,8 +1,10 @@
 // rejsrf_d3d8_check: runs each D3D8 HLE export and the lifted XDK original it
 // replaces (sub_X_gen) from identical guest states and compares eax, esp and
-// the bytes written to the output buffer. The adapter, mode, format and caps
-// queries never touch the GPU, so their originals run unchanged on top of
-// the kernel HLE (docs/design/20261012-i007-d3d8-hle-first-batch.md section 4).
+// the bytes of a scratch area (output buffers, resource headers). The
+// adapter, mode, format and caps queries and the resource-header functions
+// never touch the GPU, so their originals run unchanged on top of the kernel
+// HLE (docs/design/20261012-i007-d3d8-hle-first-batch.md section 4,
+// docs/design/20261012-i012-d3d8-surfaces-first-frame.md section 4).
 //
 // Usage: rejsrf_d3d8_check [--dump] [<path to default_eng.xbe>]
 //   --dump   print the originals' answers (mode table, caps, format verdicts)
@@ -23,6 +25,7 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -34,6 +37,13 @@ extern "C" void sub_00199A60_gen(void);  // D3D_CheckDeviceFormat
 extern "C" void sub_00199AE0_gen(void);  // Direct3D_CheckDeviceMultiSampleType
 extern "C" void sub_00199A30_gen(void);  // D3D_GetDeviceCaps
 extern "C" void sub_0018CB40_gen(void);  // D3DDevice_GetDeviceCaps
+extern "C" void sub_00192950_gen(void);  // D3DResource_AddRef
+extern "C" void sub_00192990_gen(void);  // D3DResource_Release
+extern "C" void sub_00192790_gen(void);  // D3DResource_GetType
+extern "C" void sub_0018E730_gen(void);  // D3DSurface_GetDesc
+extern "C" void sub_001929E0_gen(void);  // D3DResource_Register
+// XGRAPHC is not an HLE library; its lifted code is the function itself.
+extern "C" void sub_001BBCA5(void);  // XGSetSurfaceHeader(Width, Height, Format, pSurface, Data, Pitch)
 
 namespace
 {
@@ -41,10 +51,17 @@ namespace
 using rexbox::runtime::GuestAddress;
 using rexbox::runtime::GuestMemory;
 using GuestFunction = void (*)();
+using Setup = std::function<void()>;
 
 constexpr const char* kDefaultXbe = "roms/Jet Set Radio Future/default_eng.xbe";
 constexpr uint32_t kOutputBytes = 0x200;  // generous; the largest output is 53 DWORDs
 constexpr uint8_t kFillPattern = 0xCC;
+
+// Resource headers used by the header cases live inside the scratch area so
+// their changes are compared too.
+constexpr uint32_t kHeaderA = 0x100;  // offsets into the scratch area
+constexpr uint32_t kHeaderB = 0x140;
+constexpr uint32_t kHeaderSize = 0x18;
 
 struct Subject
 {
@@ -64,22 +81,33 @@ GuestMemory* g_memory = nullptr;
 GuestAddress g_stack_top = 0;
 GuestAddress g_output = 0;
 bool g_dump = false;
+std::string g_note;  // appended to DIFF lines by cases that set it
 int g_failures = 0;
 int g_cases = 0;
 
+void Write32(GuestAddress address, uint32_t value)
+{
+    g_memory->Write32(address, value);
+}
+
 // Calls `function` as a guest `call` would, with `args` on the stack and the
-// output buffer filled with a pattern, and collects what it left behind.
-Outcome Run(GuestFunction function, const std::vector<uint32_t>& args)
+// scratch area filled with a pattern (then prepared by `setup`), and collects
+// what it left behind.
+Outcome Run(GuestFunction function, const std::vector<uint32_t>& args, const Setup& setup = nullptr)
 {
     g_memory->Fill(g_output, kFillPattern, kOutputBytes);
+    if (setup)
+    {
+        setup();
+    }
     uint32_t esp = g_stack_top;
     for (size_t i = args.size(); i-- > 0;)
     {
         esp -= 4;
-        g_memory->Write32(esp, args[i]);
+        Write32(esp, args[i]);
     }
     esp -= 4;
-    g_memory->Write32(esp, 0);  // return address
+    Write32(esp, 0);  // return address
     rexbox_recomp_reset_thread(esp, 0);
     RexboxRecompGprs gprs = {};
     gprs.esp = esp;
@@ -107,23 +135,22 @@ std::string Describe(const std::vector<uint32_t>& args)
 
 // Compares the HLE with the original for one argument list; returns the
 // original's outcome for dumping.
-Outcome Check(const Subject& subject, const std::vector<uint32_t>& args)
+Outcome Check(const Subject& subject, const std::vector<uint32_t>& args, const Setup& setup = nullptr)
 {
-    const Outcome original = Run(subject.original, args);
-    const Outcome hle = Run(subject.hle, args);
+    const Outcome original = Run(subject.original, args, setup);
+    const Outcome hle = Run(subject.hle, args, setup);
     ++g_cases;
     bool same = true;
     if (original.eax != hle.eax)
     {
-        std::printf("DIFF %s(%s): eax original %08X hle %08X\n", subject.name, Describe(args).c_str(), original.eax,
-                    hle.eax);
+        std::printf("DIFF %s(%s)%s: eax original %08X hle %08X\n", subject.name, Describe(args).c_str(),
+                    g_note.c_str(), original.eax, hle.eax);
         same = false;
     }
     if (original.esp != hle.esp)
     {
-        std::printf("DIFF %s(%s): esp original %08X hle %08X (stack arguments popped: %u vs %u)\n", subject.name,
-                    Describe(args).c_str(), original.esp, hle.esp, (original.esp - g_stack_top) / 4 + args.size(),
-                    (hle.esp - g_stack_top) / 4 + args.size());
+        std::printf("DIFF %s(%s): esp original %08X hle %08X\n", subject.name, Describe(args).c_str(), original.esp,
+                    hle.esp);
         same = false;
     }
     if (original.output != hle.output)
@@ -133,7 +160,7 @@ Outcome Check(const Subject& subject, const std::vector<uint32_t>& args)
         {
             ++first;
         }
-        std::printf("DIFF %s(%s): output differs first at +%zX (original %02X hle %02X)\n", subject.name,
+        std::printf("DIFF %s(%s): scratch differs first at +%zX (original %02X hle %02X)\n", subject.name,
                     Describe(args).c_str(), first, original.output[first], hle.output[first]);
         same = false;
     }
@@ -142,9 +169,9 @@ Outcome Check(const Subject& subject, const std::vector<uint32_t>& args)
 }
 
 // Bytes of the output buffer the function wrote (the pattern is gone).
-size_t WrittenBytes(const Outcome& outcome)
+size_t WrittenBytes(const Outcome& outcome, size_t limit = kOutputBytes)
 {
-    size_t end = outcome.output.size();
+    size_t end = limit;
     while (end > 0 && outcome.output[end - 1] == kFillPattern)
     {
         --end;
@@ -169,6 +196,11 @@ char VerdictChar(uint32_t hresult)
     }
 }
 
+uint32_t Read32(GuestAddress address)
+{
+    return g_memory->Read32(address);
+}
+
 void CheckAdapterCount(const rexbox::runtime::HleRegistry& registry)
 {
     const Subject subject{"Direct3D_GetAdapterCount", &sub_00199820_gen,
@@ -185,9 +217,8 @@ uint32_t CheckModeCount(const rexbox::runtime::HleRegistry& registry)
 {
     const Subject subject{"D3D_GetAdapterModeCount", &sub_00199830_gen,
                           registry.FindExport("D3D_GetAdapterModeCount")->thunk};
-    const Outcome original = Check(subject, {0, 0});
-    Check(subject, {1, 0});
-    Check(subject, {0, 0x12});
+    const Outcome original = Check(subject, {0});
+    Check(subject, {1});
     if (g_dump)
     {
         std::printf("GetAdapterModeCount(0): %u\n", original.eax);
@@ -204,8 +235,8 @@ void CheckModes(const rexbox::runtime::HleRegistry& registry, uint32_t count)
         if (g_dump)
         {
             std::printf("EnumAdapterModes(0, %u): hr %08X, %zu byte(s) written:", mode, original.eax,
-                        WrittenBytes(original));
-            for (size_t i = 0; i + 4 <= WrittenBytes(original); i += 4)
+                        WrittenBytes(original, 0x40));
+            for (size_t i = 0; i + 4 <= WrittenBytes(original, 0x40); i += 4)
             {
                 uint32_t value;
                 std::memcpy(&value, &original.output[i], 4);
@@ -215,7 +246,6 @@ void CheckModes(const rexbox::runtime::HleRegistry& registry, uint32_t count)
         }
     }
     Check(subject, {1, 0, g_output});
-    Check(subject, {0, 0, 0});
 }
 
 void CheckFormats(const rexbox::runtime::HleRegistry& registry)
@@ -224,7 +254,7 @@ void CheckFormats(const rexbox::runtime::HleRegistry& registry)
     Check(subject, {1, 1, 0x12, 0, 1, 0x12});
     Check(subject, {0, 0, 0x12, 0, 1, 0x12});
     Check(subject, {0, 2, 0x12, 0, 1, 0x12});
-    const uint32_t adapter_formats[] = {0x12, 0x1E, 0x11, 0x1C, 0x06};
+    const uint32_t adapter_formats[] = {0x12, 0x1E, 0x11, 0x1C, 0x06, 0x00};
     const uint32_t usages[] = {0, 1, 2, 3};
     const uint32_t types[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 0};
     if (g_dump)
@@ -249,8 +279,6 @@ void CheckFormats(const rexbox::runtime::HleRegistry& registry)
             std::printf("  format %02X: %s\n", format, row.c_str());
         }
     }
-    // Does the adapter format matter? Compare a few other adapter formats on
-    // the formats a title asks about most.
     for (const uint32_t adapter_format : adapter_formats)
     {
         for (uint32_t format = 0; format < 0x80; ++format)
@@ -270,8 +298,8 @@ void CheckMultiSample(const rexbox::runtime::HleRegistry& registry)
                           registry.FindExport("Direct3D_CheckDeviceMultiSampleType")->thunk};
     Check(subject, {1, 1, 0x12, 0, 0x11});
     Check(subject, {0, 0, 0x12, 0, 0x11});
-    const uint32_t samples[] = {0x0000, 0x0001, 0x0002, 0x0004, 0x0011, 0x1021, 0x1121, 0x2021, 0x2012,
-                                0x1022, 0x1222, 0x2022, 0x2222, 0x1233, 0x2233};
+    const uint32_t samples[] = {0x0000, 0x0001, 0x0002, 0x0004, 0x0011, 0x002A, 0x0030, 0x1021, 0x1121, 0x2021,
+                                0x2012, 0x1022, 0x1222, 0x2022, 0x2222, 0x1233, 0x2233};
     if (g_dump)
     {
         std::printf("CheckDeviceMultiSampleType(0, HAL, format f, 0, type): columns are types");
@@ -302,8 +330,9 @@ void CheckCaps(const rexbox::runtime::HleRegistry& registry)
     const Outcome original = Check(device, {g_output});
     if (g_dump)
     {
-        std::printf("D3DDevice_GetDeviceCaps: eax %08X, %zu byte(s) written\n", original.eax, WrittenBytes(original));
-        for (size_t i = 0; i + 4 <= WrittenBytes(original); i += 4)
+        std::printf("D3DDevice_GetDeviceCaps: eax %08X, %zu byte(s) written\n", original.eax,
+                    WrittenBytes(original, 0x100));
+        for (size_t i = 0; i + 4 <= WrittenBytes(original, 0x100); i += 4)
         {
             uint32_t value;
             std::memcpy(&value, &original.output[i], 4);
@@ -316,6 +345,253 @@ void CheckCaps(const rexbox::runtime::HleRegistry& registry)
     Check(d3d, {1, 1, g_output});
     Check(d3d, {0, 0, g_output});
     Check(d3d, {0, 2, g_output});
+}
+
+// Writes a resource header into the scratch area.
+void WriteHeader(uint32_t offset, uint32_t common, uint32_t data, uint32_t format, uint32_t size, uint32_t parent)
+{
+    const GuestAddress header = g_output + offset;
+    Write32(header + 0x00, common);
+    Write32(header + 0x04, data);
+    Write32(header + 0x08, 0);
+    Write32(header + 0x0C, format);
+    Write32(header + 0x10, size);
+    Write32(header + 0x14, parent);
+}
+
+// XGRAPHC Format field for a swizzled power-of-two texture.
+uint32_t SwizzledFormat(uint32_t format, uint32_t log2_width, uint32_t log2_height, uint32_t levels, bool cube)
+{
+    return (log2_height << 24) | (log2_width << 20) | (levels << 16) | (format << 8) | (2u << 4) | 1u | 8u |
+           (cube ? 4u : 0u);
+}
+
+void CheckResources(const rexbox::runtime::HleRegistry& registry)
+{
+    const Subject add_ref{"D3DResource_AddRef", &sub_00192950_gen, registry.FindExport("D3DResource_AddRef")->thunk};
+    const Subject release{"D3DResource_Release", &sub_00192990_gen, registry.FindExport("D3DResource_Release")->thunk};
+    const Subject get_type{"D3DResource_GetType", &sub_00192790_gen, registry.FindExport("D3DResource_GetType")->thunk};
+    const Subject get_desc{"D3DSurface_GetDesc", &sub_0018E730_gen, registry.FindExport("D3DSurface_GetDesc")->thunk};
+    const GuestAddress header_a = g_output + kHeaderA;
+
+    // Reference counting: plain resources, a surface with a parent texture,
+    // and the paths that avoid the destroy routine.
+    const uint32_t commons[] = {0x00050001, 0x00050003, 0x00040002, 0x00000001, 0x00010005, 0x01050002,
+                                0x00850001, 0x01050001};
+    for (const uint32_t common : commons)
+    {
+        const Setup plain = [common] { WriteHeader(kHeaderA, common, 0x100000, 0x00011129, 0x13013FBF, 0); };
+        Check(add_ref, {header_a}, plain);
+        // Destroying needs the library's device; skip the one case that would (refcount 1, no internal count).
+        if ((common & 0xFFFF) != 1 || (common & 0x780000) != 0)
+        {
+            Check(release, {header_a}, plain);
+        }
+        Check(get_type, {header_a}, plain);
+    }
+    // A surface whose refcount is 0 or 1 propagates to its parent texture.
+    for (const uint32_t common : {0x00050000u, 0x00050001u, 0x00050002u})
+    {
+        const Setup with_parent = [common] {
+            WriteHeader(kHeaderA, common, 0x100000, 0x00011129, 0x13013FBF, g_output + kHeaderB);
+            WriteHeader(kHeaderB, 0x00040003, 0x200000, SwizzledFormat(0x06, 8, 8, 1, false), 0, 0);
+        };
+        Check(add_ref, {header_a}, with_parent);
+        if (common != 0x00050001u)
+        {
+            Check(release, {header_a}, with_parent);
+        }
+    }
+
+    // Register adds the base to Data and masks it to a physical address for
+    // everything but vertex buffers.
+    const Subject reg{"D3DResource_Register", &sub_001929E0_gen, registry.FindExport("D3DResource_Register")->thunk};
+    for (const uint32_t common : {0x00000001u, 0x00010001u, 0x00020001u, 0x00030001u, 0x00040001u, 0x00050001u, 0x00060001u})
+    {
+        for (const uint32_t base : {0x00100000u, 0x04000000u, 0x0F123456u})
+        {
+            char note[32];
+            std::snprintf(note, sizeof(note), " common %08X", common);
+            g_note = note;
+            Check(reg, {header_a, base},
+                  [common] { WriteHeader(kHeaderA, common, 0x00000800, 0x00011129, 0x13013FBF, 0); });
+            g_note.clear();
+        }
+    }
+
+    // Resource types from the header's type bits and dimension.
+    struct TypeCase
+    {
+        uint32_t common;
+        uint32_t format;
+    };
+    const TypeCase type_cases[] = {
+        {0x00000001, 0},                                        {0x00010001, 0},
+        {0x00020001, 0},                                        {0x00030001, 0},
+        {0x00040001, SwizzledFormat(0x06, 8, 8, 1, false)},     {0x00040001, SwizzledFormat(0x06, 8, 8, 1, true)},
+        {0x00040001, 0x00000039 | (6u << 8) | (8u << 20) | (8u << 24) | (3u << 28)},  // 3D dimension
+        {0x00050001, 0x00011129},                               {0x00050001, 0x00011139},
+        {0x00060001, 0},                                        {0x00070001, 0},
+    };
+    for (const TypeCase& type_case : type_cases)
+    {
+        Check(get_type, {header_a},
+              [type_case] { WriteHeader(kHeaderA, type_case.common, 0x100000, type_case.format, 0, 0); });
+    }
+
+    // Surface descriptions: linear surfaces built by the lifted
+    // XGSetSurfaceHeader, then swizzled textures encoded by hand.
+    struct LinearCase
+    {
+        uint32_t width;
+        uint32_t height;
+        uint32_t format;
+        uint32_t pitch;
+    };
+    const LinearCase linear_cases[] = {{640, 480, 0x11, 1280}, {640, 480, 0x12, 2560}, {640, 480, 0x2E, 2560},
+                                       {512, 256, 0x1E, 2048}, {720, 480, 0x1C, 1472}, {64, 64, 0x13, 64},
+                                       {320, 240, 0x11, 640},  {640, 480, 0x2C, 1280}};
+    for (const LinearCase& linear : linear_cases)
+    {
+        const Setup setup = [linear] {
+            // The lifted XGSetSurfaceHeader fills header A in place.
+            uint32_t esp = g_stack_top;
+            const uint32_t args[] = {linear.width, linear.height, linear.format, g_output + kHeaderA, 0x100000,
+                                     linear.pitch};
+            for (size_t i = 6; i-- > 0;)
+            {
+                esp -= 4;
+                Write32(esp, args[i]);
+            }
+            esp -= 4;
+            Write32(esp, 0);
+            rexbox_recomp_reset_thread(esp, 0);
+            RexboxRecompGprs gprs = {};
+            gprs.esp = esp;
+            rexbox_recomp_set_gprs(&gprs);
+            sub_001BBCA5();
+        };
+        const Outcome original = Check(get_desc, {header_a, g_output}, setup);
+        if (g_dump)
+        {
+            std::printf("XGSetSurfaceHeader(%u, %u, %02X, pitch %u): Format %08X Size %08X; GetDesc:", linear.width,
+                        linear.height, linear.format, linear.pitch, Read32(header_a + 0xC), Read32(header_a + 0x10));
+            for (size_t i = 0; i < 0x20; i += 4)
+            {
+                uint32_t value;
+                std::memcpy(&value, &original.output[i], 4);
+                std::printf(" %08X", value);
+            }
+            std::printf("\n");
+        }
+    }
+    struct SwizzledCase
+    {
+        uint32_t format;
+        uint32_t log2_width;
+        uint32_t log2_height;
+        uint32_t levels;
+    };
+    const SwizzledCase swizzled_cases[] = {{0x06, 8, 8, 1}, {0x06, 8, 8, 9}, {0x05, 7, 6, 1}, {0x0C, 7, 7, 8},
+                                           {0x0E, 6, 6, 1}, {0x0F, 2, 2, 1}, {0x00, 4, 3, 1}, {0x19, 0, 0, 1}};
+    for (const SwizzledCase& swizzled : swizzled_cases)
+    {
+        const uint32_t format_field =
+            SwizzledFormat(swizzled.format, swizzled.log2_width, swizzled.log2_height, swizzled.levels, false);
+        Check(get_desc, {header_a, g_output},
+              [format_field] { WriteHeader(kHeaderA, 0x00040001, 0x100000, format_field, 0, 0); });
+    }
+}
+
+// The device's own surfaces must carry the same header a title would build
+// with XGSetSurfaceHeader for the same size and format.
+void CheckDeviceSurfaces(const rexbox::runtime::HleRegistry& registry)
+{
+    rexbox::hle::d3d8::SetD3d8Headless(true);
+    const GuestAddress pp = g_output;
+    const GuestAddress out = g_output + 0x40;
+    g_memory->Fill(g_output, 0, kOutputBytes);
+    Write32(pp + 0x00, 640);
+    Write32(pp + 0x04, 480);
+    Write32(pp + 0x08, 0x11);
+    Write32(pp + 0x0C, 2);
+    Write32(pp + 0x10, 0x0011);
+    Write32(pp + 0x20, 1);
+    Write32(pp + 0x24, 0x2E);
+    Write32(pp + 0x30, 1);
+    Outcome created = Run(registry.FindExport("Direct3D_CreateDevice")->thunk, {0, 1, 0, 0x40, pp, out},
+                          [pp] {
+                              Write32(pp + 0x00, 640);
+                              Write32(pp + 0x04, 480);
+                              Write32(pp + 0x08, 0x11);
+                              Write32(pp + 0x0C, 2);
+                              Write32(pp + 0x10, 0x0011);
+                              Write32(pp + 0x14, 0);
+                              Write32(pp + 0x18, 0);
+                              Write32(pp + 0x1C, 0);
+                              Write32(pp + 0x20, 1);
+                              Write32(pp + 0x24, 0x2E);
+                              Write32(pp + 0x28, 0x100);
+                              Write32(pp + 0x2C, 0);
+                              Write32(pp + 0x30, 1);
+                          });
+    ++g_cases;
+    if (created.eax != 0)
+    {
+        std::printf("DIFF Direct3D_CreateDevice (headless): hr %08X\n", created.eax);
+        ++g_failures;
+        return;
+    }
+    struct SurfaceCase
+    {
+        const char* name;
+        const char* export_name;
+        std::vector<uint32_t> args;
+        uint32_t format;
+        uint32_t pitch;
+    };
+    const SurfaceCase cases[] = {
+        {"back buffer 0", "D3DDevice_GetBackBuffer", {0, 0, out}, 0x11, 1280},
+        {"back buffer -1", "D3DDevice_GetBackBuffer", {0xFFFFFFFFu, 0, out}, 0x11, 1280},
+        {"depth stencil", "D3DDevice_GetDepthStencilSurface", {out}, 0x2E, 2560},
+    };
+    for (const SurfaceCase& surface : cases)
+    {
+        const Outcome got = Run(registry.FindExport(surface.export_name)->thunk, surface.args);
+        ++g_cases;
+        uint32_t header = 0;
+        std::memcpy(&header, &got.output[0x40], 4);
+        if (got.eax != 0 || header == 0)
+        {
+            std::printf("DIFF %s: hr %08X header %08X\n", surface.name, got.eax, header);
+            ++g_failures;
+            continue;
+        }
+        // The reference header from the lifted XGSetSurfaceHeader.
+        Run(&sub_001BBCA5, {640, 480, surface.format, g_output + kHeaderA, Read32(header + 4), surface.pitch});
+        const uint32_t expected_format = Read32(g_output + kHeaderA + 0xC);
+        const uint32_t expected_size = Read32(g_output + kHeaderA + 0x10);
+        const uint32_t actual_format = Read32(header + 0xC);
+        const uint32_t actual_size = Read32(header + 0x10);
+        const uint32_t common = Read32(header);
+        bool same = expected_format == actual_format && expected_size == actual_size;
+        // GetBackBuffer/GetDepthStencilSurface AddRef: refcount 2 (device + caller), surface type, D3DCREATED.
+        if ((common & 0xFFFF) != 2 || (common & 0x70000) != 0x50000 || (common & 0x01000000) == 0)
+        {
+            same = false;
+        }
+        if (!same)
+        {
+            std::printf("DIFF %s: Common %08X Format %08X (XGSetSurfaceHeader %08X) Size %08X (%08X)\n",
+                        surface.name, common, actual_format, expected_format, actual_size, expected_size);
+            ++g_failures;
+        }
+        else if (g_dump)
+        {
+            std::printf("%s: header %08X Common %08X Format %08X Size %08X\n", surface.name, header, common,
+                        actual_format, actual_size);
+        }
+    }
 }
 
 }  // namespace
@@ -398,6 +674,8 @@ int main(int argc, char** argv)
     CheckFormats(registry);
     CheckMultiSample(registry);
     CheckCaps(registry);
+    CheckResources(registry);
+    CheckDeviceSurfaces(registry);
 
     std::printf("%d case(s), %d difference(s)\n", g_cases, g_failures);
     std::fflush(stdout);

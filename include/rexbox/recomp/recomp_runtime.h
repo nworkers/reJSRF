@@ -10,6 +10,7 @@
 
 #include <condition_variable>
 #include <cstdint>
+#include <cstdio>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -44,6 +45,11 @@ void SetStopOnUnresolvedCall(bool stop);
 // original (logged once per function) instead of stopping the run. Defaults
 // to the environment variable REXBOX_HLE_FALLBACK=lifted. Diagnostic only.
 void SetUnimplementedHleFallback(bool run_lifted);
+
+// Writes the direct-call profile of every guest thread (recent targets and
+// counts) when the generated code was built with REJSRF_RECOMP_CALL_PROFILE;
+// otherwise says so. Diagnostic for a thread that stopped calling the HLE.
+void DumpCallProfile(FILE* out);
 
 enum class StopReason
 {

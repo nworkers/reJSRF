@@ -17,6 +17,10 @@ namespace rexbox::hle::d3d8
 
 void RegisterD3d8Hle(runtime::HleRegistry& registry);
 
+// Runs without a window: Direct3D_CreateDevice creates no display and the
+// drawing exports do nothing (tools, CI). REXBOX_DISPLAY=none does the same.
+void SetD3d8Headless(bool headless);
+
 }  // namespace rexbox::hle::d3d8
 
 #endif  // REXBOX_HLE_D3D8_D3D8_HLE_H

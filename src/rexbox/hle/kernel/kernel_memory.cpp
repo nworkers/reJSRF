@@ -56,6 +56,7 @@ void NtAllocateVirtualMemory()
     const uint32_t protect = call.Arg(4);
     GuestAddress base = memory.Read32(base_io);
     const uint32_t size = memory.Read32(size_io);
+    const GuestAddress requested = base;
 
     if (base != 0)
     {
@@ -67,12 +68,21 @@ void NtAllocateVirtualMemory()
         {
             memory.Write32(size_io, RoundUp(size, runtime::GuestHeap::kPageSize));
             memory.Write32(base_io, base & ~(runtime::GuestHeap::kPageSize - 1));
+            if (MemoryTraceEnabled())
+            {
+                std::fprintf(stderr,
+                             "[kernel] NtAllocateVirtualMemory commit %08X size %X type %X inside block %08X+%X\n",
+                             requested, size, type, block, block_size);
+            }
             call.Return(kStatusSuccess, 5);
             return;
         }
         base &= ~(kAllocationGranularity - 1);
         if (!Heap().AllocateAt(base, RoundUp(size, runtime::GuestHeap::kPageSize)))
         {
+            std::fprintf(stderr,
+                         "[kernel] NtAllocateVirtualMemory at %08X size %X type %X: pages in use (block %08X+%X)\n",
+                         requested, size, type, block, block_size);
             call.Return(kStatusNoMemory, 5);
             return;
         }
@@ -91,8 +101,11 @@ void NtAllocateVirtualMemory()
     RecordProtection(base, protect);
     memory.Write32(base_io, base);
     memory.Write32(size_io, RoundUp(size, runtime::GuestHeap::kPageSize));
-    (void)kMemCommit;
-    (void)kMemReserve;
+    if (MemoryTraceEnabled())
+    {
+        std::fprintf(stderr, "[kernel] NtAllocateVirtualMemory requested %08X size %X type %X protect %X -> %08X\n",
+                     requested, size, type, protect, base);
+    }
     call.Return(kStatusSuccess, 5);
 }
 

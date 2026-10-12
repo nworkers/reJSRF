@@ -1,5 +1,7 @@
 #include "kernel_internal.h"
 
+#include <cstdlib>
+
 #include <set>
 #include <utility>
 
@@ -38,6 +40,12 @@ std::shared_ptr<KernelObject> LookupHandle(uint32_t handle)
     std::lock_guard<std::mutex> lock(state.dispatcher);
     const auto it = state.handles.find(handle);
     return it == state.handles.end() ? nullptr : it->second;
+}
+
+bool MemoryTraceEnabled()
+{
+    static const bool enabled = std::getenv("REXBOX_TRACE_MEMORY") != nullptr;
+    return enabled;
 }
 
 void TraceOnce(const char* function, const std::string& detail)

@@ -97,3 +97,29 @@ The `D3DPRESENT_PARAMETERS` the game passes to `Direct3D_CreateDevice` during bo
 | Flags | `0x00000100` |
 | FullScreen_PresentationInterval | 1 |
 | BehaviorFlags (CreateDevice) | `0x40` `D3DCREATE_HARDWARE_VERTEXPROCESSING` |
+
+## 6. 리소스 함수 / Resource functions (issue #12)
+
+`rejsrf_d3d8_check`에 헤더 케이스를 더해 측정했다(13,557 케이스, 차이 0).
+
+Measured with header cases added to `rejsrf_d3d8_check` (13,557 cases, 0 differences).
+
+| 함수 / Function | 주소 / Address | `ret n` | 확인된 동작 / Confirmed behavior |
+|---|---|---|---|
+| `D3DResource_AddRef` | `0x00192950` | 4 | `Common` 하위 16비트 +1, 그 값을 반환; refcount 0인 서피스는 `Parent`(+0x14)도 AddRef / increments the low 16 bits and returns them; a zero-count surface AddRefs its parent |
+| `D3DResource_Release` | `0x00192990` | 4 | refcount 1이고 내부 refcount(`0x780000`) 0 → 파괴 후 0; 아니면 −1 값 반환; 서피스는 같은 조건에서 `Parent` Release / destroys and returns 0 at count 1 with no internal count, else returns the decremented count |
+| `D3DResource_GetType` | `0x00192790` | 4 | `Common` 타입 비트와 `Format` 차원·큐브맵 비트로 `D3DRESOURCETYPE` / type bits plus dimension and cube bits of `Format` |
+| `D3DSurface_GetDesc` | `0x0018E730` | 8 | 28바이트 `D3DSURFACE_DESC`; eax는 HRESULT가 아니라 레벨 폭이 남는다 / 28-byte desc; eax is the level width, not an HRESULT |
+| `D3DResource_Register` | `0x001929E0` | 8 | `Data += pBase`, push buffer(타입 2)가 아니면 `& 0x03FFFFFF`; eax = 새 `Data` / adds the base, masks except for push buffers, returns the new `Data` |
+| `XGSetSurfaceHeader` (XGRAPHC, lift 원본 실행) | `0x001BBCA5` | 24 | `Common = 0x50001`, `Format` DMA 니블 2, 선형 `Size` 인코딩; 디바이스 서피스 헤더가 이것과 일치함을 확인 / `Common = 0x50001`, DMA nibble 2, linear `Size`; the device's own surface headers match it |
+
+* **확인됨**: `D3DDevice_GetBackBuffer`는 디바이스 구조체 `+0x207C + idx*4`(idx: 0→0, −1→1, 그 외→2), `GetDepthStencilSurface`는 `+0x2074`를 읽어 AddRef한다. 디바이스 refcount는 `+0x43C`.
+* **확인됨**: `D3DDevice_GetTexture2(Stage, ppTexture)`는 인자 2개(`ret 8`)다(데이터베이스는 1개로 적음).
+* **Confirmed**: `D3DDevice_GetBackBuffer` reads device `+0x207C + idx*4` (idx: 0→0, −1→1, else→2) and `GetDepthStencilSurface` `+0x2074`, AddRef'ing the result; the device refcount is at `+0x43C`.
+* **Confirmed**: `D3DDevice_GetTexture2(Stage, ppTexture)` takes two arguments (`ret 8`; the database lists one).
+
+## 7. 디바이스 생성 이후 / After device creation (issue #12)
+
+부팅은 `GetBackBuffer`, `GetDepthStencilSurface`, 렌더·텍스처 상태 setter 수십 개, `SetTransform`, `SetViewport`, `SetLight`/`LightEnable`, `GetGammaRamp`를 거친 뒤 게임 자체의 COM 식 객체 생성·해제로 들어간다. 그 Release(`lock xadd [obj+8], -1; jne`)가 lifter 버그로 항상 파괴 경로를 타 같은 객체를 두 번 해제했고, XAPI의 NT 힙 자유 리스트가 깨져 `RtlAllocateHeap`이 무한 루프했다. lifter 수정([xboxrecomp#198](https://github.com/sp00nznet/xboxrecomp/pull/198)) 뒤에는 커널 import 65 `IoCreateDevice`에서 멈춘다.
+
+After device creation the boot goes through `GetBackBuffer`, `GetDepthStencilSurface`, dozens of render and texture state setters, `SetTransform`, `SetViewport`, `SetLight`/`LightEnable` and `GetGammaRamp`, then into the game's own COM-style object creation and release. A lifter bug made every Release (`lock xadd [obj+8], -1; jne`) take the destroy arm, freeing the same object twice and corrupting XAPI's NT heap free list, which left `RtlAllocateHeap` spinning. With the lifter fixed ([xboxrecomp#198](https://github.com/sp00nznet/xboxrecomp/pull/198)) the boot stops at kernel import 65 `IoCreateDevice`.

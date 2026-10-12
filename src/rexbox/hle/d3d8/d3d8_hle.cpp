@@ -25,7 +25,17 @@ void RegisterD3d8Hle(runtime::HleRegistry& registry)
 {
     RegisterAdapterExports(registry);
     RegisterCapsExports(registry);
+    RegisterResourceExports(registry);
+    RegisterStateExports(registry);
+    RegisterCreateExports(registry);
+    RegisterShaderExports(registry);
+    RegisterDrawExports(registry);
     RegisterDeviceExports(registry);
+}
+
+void SetD3d8Headless(bool headless)
+{
+    State().headless = headless;
 }
 
 }  // namespace rexbox::hle::d3d8
