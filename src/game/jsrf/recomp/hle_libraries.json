@@ -1,5 +1,5 @@
 {
-  "comment": "XDK functions replaced by HLE exports. 'libraries' selects every identified function of a library; 'functions' selects single functions of libraries whose other functions stay lifted. regenerate.py generates an override for each (docs/design/20261012-i006-xdk-symbol-binding.md, docs/design/20261012-i015-xinput-hle.md). XGetDevices and XGetDeviceChanges are HLE too: they model when a device arrives (docs/design/20261012-i015-xinput-hle.md section 4).",
+  "comment": "XDK functions replaced by HLE exports. 'libraries' selects every identified function of a library; 'functions' selects single functions of libraries whose other functions stay lifted. regenerate.py generates an override for each (docs/design/20261012-i006-xdk-symbol-binding.md, docs/design/20261012-i015-xinput-hle.md). XGetDevices and XGetDeviceChanges are HLE too: they model when a device arrives (docs/design/20261012-i015-xinput-hle.md section 4). The DSOUND entries are the functions the game calls (docs/design/20261012-i017-dsound-hle.md section 2).",
   "libraries": [
     "D3D8",
     "D3D8LTCG"
@@ -48,6 +48,206 @@
     {
       "library": "XAPILIB",
       "name": "XUnmountMU"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSound_AddRef"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSound_Release"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSoundBuffer_Unlock"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSoundBuffer_AddRef"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSoundBuffer_Release"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSound_GetCaps"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSound_GetSpeakerConfig"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSound_DownloadEffectsImage"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSound_GetEffectData"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSound_SetEffectData"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSoundBuffer_SetVolume"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSoundBuffer_SetLFO"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSoundBuffer_SetEG"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSoundBuffer_SetFilter"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSoundBuffer_SetHeadroom"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSoundBuffer_SetMixBins"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSoundBuffer_Play"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSoundBuffer_Stop"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSoundBuffer_SetLoopRegion"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSoundBuffer_GetStatus"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSoundBuffer_GetCurrentPosition"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSoundBuffer_SetCurrentPosition"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSoundBuffer_Lock"
+    },
+    {
+      "library": "DSOUND",
+      "name": "DirectSoundDoWork"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSound_CommitDeferredSettings"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSoundBuffer_SetFrequency"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSoundBuffer_SetAllParameters"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSoundBuffer_SetConeAngles"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSoundBuffer_SetConeOrientation"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSoundBuffer_SetConeOutsideVolume"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSoundBuffer_SetMaxDistance"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSoundBuffer_SetMinDistance"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSoundBuffer_SetMode"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSoundBuffer_SetPosition"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSoundBuffer_SetVelocity"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSoundBuffer_SetDistanceFactor"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSoundBuffer_SetDopplerFactor"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSoundBuffer_SetRolloffFactor"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSoundBuffer_SetI3DL2Source"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSound_SetAllParameters"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSound_SetDistanceFactor"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSound_SetDopplerFactor"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSound_SetOrientation"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSound_SetPosition"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSound_SetRolloffFactor"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSound_SetVelocity"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSound_SetI3DL2Listener"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSoundBuffer_SetBufferData"
+    },
+    {
+      "library": "DSOUND",
+      "name": "IDirectSound_CreateSoundBuffer"
+    },
+    {
+      "library": "DSOUND",
+      "name": "DirectSoundCreate"
     }
   ]
 }

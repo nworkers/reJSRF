@@ -25,7 +25,7 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 GEN = ROOT / "gen" / "jsrf_us"
-HLE_DIRS = [ROOT / "src" / "rexbox" / "hle" / name for name in ("d3d8", "xinput")]
+HLE_DIRS = [ROOT / "src" / "rexbox" / "hle" / name for name in ("d3d8", "dsound", "xinput")]
 
 
 def main():
@@ -51,8 +51,12 @@ def main():
         for match in re.finditer(r"^(?:template <[^>]*>\n)?void (\w+)\(\)\n\{(.*?)^\}", source, re.S | re.M):
             pops = set(int(x) for x in re.findall(r"Return(?:64)?\([^;]*?,\s*(\d+)\);", match.group(2)))
             functions[match.group(1)] = pops
-        for match in re.finditer(r'AddExport\("\w+", "(\w+)", &([\w:<>]+)\)', source):
-            hle[match.group(1)] = functions.get(match.group(2).split("<")[0], set())
+        for match in re.finditer(r'AddExport\("\w+", "(\w+)", &(\w+)(?:<(\d+)>)?\)', source):
+            pops = functions.get(match.group(2), set())
+            if not pops and match.group(3) is not None:
+                # A template whose argument is the pop count (dsound's AcceptSetting<N>).
+                pops = {int(match.group(3))}
+            hle[match.group(1)] = pops
 
     mismatches = 0
     for address, name in sorted(name_by_address.items(), key=lambda item: item[1]):

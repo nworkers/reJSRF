@@ -12,6 +12,7 @@ flowchart TD
     KSTRUCT["Xbox kernel structures"] --> HLE
     D3D["Xbox D3D8 API"] --> HLE
     XIN["Xbox XInput"] --> HLE
+    DSND["Xbox DirectSound"] --> HLE
 ```
 
 ## 문서
@@ -22,6 +23,7 @@ flowchart TD
 * [Xbox 커널 구조와 서비스: KPCR, KTHREAD, TLS, 디스패처 객체, 객체 이름공간](xbox-kernel-structures.md)
 * [Xbox D3D8 API: PC와 다른 점, 구조체 레이아웃, 상수](xbox-d3d8-api.md)
 * [Xbox XInput: 장치 종류, 구조체, 오류 코드, 키보드 대응](xbox-xinput.md)
+* [Xbox DirectSound: PC와 다른 점, 구조체, 상수, ADPCM, 믹스 빈, 효과 이미지](xbox-dsound.md)
 
 ---
 
@@ -37,3 +39,4 @@ This directory holds general technical knowledge needed to understand the projec
 * [Xbox kernel structures and services: KPCR, KTHREAD, TLS, dispatcher objects, object namespace](xbox-kernel-structures.md)
 * [The Xbox D3D8 API: differences from the PC, structure layouts, constants](xbox-d3d8-api.md)
 * [Xbox XInput: device types, structures, error codes, keyboard mapping](xbox-xinput.md)
+* [Xbox DirectSound: differences from PC, structures, constants, ADPCM, mix bins, effects image](xbox-dsound.md)

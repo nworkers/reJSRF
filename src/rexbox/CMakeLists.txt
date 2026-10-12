@@ -48,10 +48,19 @@ add_library(rexbox_hle_kernel STATIC
 )
 target_link_libraries(rexbox_hle_kernel PUBLIC rexbox_runtime)
 
-foreach(module IN ITEMS xapi dsound)
-    add_library(rexbox_hle_${module} STATIC hle/${module}/${module}_hle.cpp)
-    target_link_libraries(rexbox_hle_${module} PUBLIC rexbox_runtime)
-endforeach()
+add_library(rexbox_hle_xapi STATIC hle/xapi/xapi_hle.cpp)
+target_link_libraries(rexbox_hle_xapi PUBLIC rexbox_runtime)
+
+# DirectSound on the platform audio contract (the APU it would drive is not
+# emulated). One file per area; dsound_hle.cpp only registers.
+add_library(rexbox_hle_dsound STATIC
+    hle/dsound/dsound_buffer.cpp
+    hle/dsound/dsound_device.cpp
+    hle/dsound/dsound_effects.cpp
+    hle/dsound/dsound_hle.cpp
+    hle/dsound/dsound_mixer.cpp
+)
+target_link_libraries(rexbox_hle_dsound PUBLIC rexbox_runtime)
 
 # XAPI's device and input functions on the platform input contract (the
 # USB stack they would drive is not run). xinput_hle.cpp only registers.

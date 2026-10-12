@@ -16,6 +16,7 @@ flowchart LR
     KIMP --> KHLE["Kernel HLE (boot-frontier)"]
     FID --> XHLE["XDK HLE bindings"]
     XHLE --> D3D["D3D8 adapter/mode/caps answers (d3d8-adapter)"]
+    XHLE --> DSND["DSOUND calls and semantics (dsound)"]
 ```
 
 ## 문서
@@ -24,6 +25,7 @@ flowchart LR
 * [부팅 frontier: 재컴파일 코드가 어디까지 실행되는가](boot-frontier.md)
 * [XDK 심볼 식별: 라이브러리별 함수, jsrf-recomp 대조, 부팅 중 D3D8 호출 순서](xdk-symbols.md)
 * [D3D8 어댑터·모드·Caps 질의: 원본 라이브러리의 답, 호출 규약, 게임이 요청한 디바이스](d3d8-adapter.md)
+* [DSOUND: 게임이 부르는 함수, 원본 의미, 효과 이미지, 부팅에서 본 호출](dsound.md)
 
 ---
 

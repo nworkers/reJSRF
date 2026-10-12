@@ -11,6 +11,12 @@ target_link_libraries(rexbox_kernel_probe PRIVATE rexbox_hle_kernel)
 rejsrf_check_license(rexbox_kernel_probe)
 rejsrf_strict_warnings(rexbox_kernel_probe)
 
+# DSOUND HLE checks that need no game data (run in CI).
+add_executable(rexbox_dsound_probe dsound_probe/main.cpp)
+target_link_libraries(rexbox_dsound_probe PRIVATE rexbox_hle_dsound)
+rejsrf_check_license(rexbox_dsound_probe)
+rejsrf_strict_warnings(rexbox_dsound_probe)
+
 # Compares decompiled functions with the lifted bodies they replace; needs the
 # generated code.
 if(TARGET rejsrf_recomp)
