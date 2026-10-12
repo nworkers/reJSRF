@@ -102,12 +102,16 @@ def identify_symbols(tool, xbe, out_dir):
 
 def write_hle_overrides(symbols, functions_json, out_dir):
     """One override per function of an HLE library that the disassembler found."""
-    libraries = set(json.loads(HLE_LIBRARIES.read_text(encoding="utf-8"))["libraries"]) if HLE_LIBRARIES.is_file() else set()
+    config = json.loads(HLE_LIBRARIES.read_text(encoding="utf-8")) if HLE_LIBRARIES.is_file() else {}
+    libraries = set(config.get("libraries", []))
+    single = {(f["library"], f["name"]) for f in config.get("functions", [])}
     starts = {int(f["start"], 16) for f in json.loads(functions_json.read_text(encoding="utf-8"))}
     chosen = {}
     skipped = []
     for symbol in symbols:
-        if symbol["kind"] != "function" or symbol["library"] not in libraries:
+        if symbol["kind"] != "function":
+            continue
+        if symbol["library"] not in libraries and (symbol["library"], symbol["name"]) not in single:
             continue
         address = int(symbol["address"], 16)
         if address not in starts:
@@ -134,10 +138,26 @@ def write_hle_overrides(symbols, functions_json, out_dir):
             "}",
             "",
         ]
+    # Identified XDK variables, for HLE modules that receive their addresses
+    # (XInput's device types are &g_DeviceType_*). Absolute-looking values below
+    # the image are structure offsets the database reports as variables; they
+    # are kept, the binding is by name.
+    variables = sorted({(s["library"], s["name"], int(s["address"], 16))
+                        for s in symbols if s["kind"] == "variable"}, key=lambda v: (v[2], v[1]))
+    lines += [
+        "const RexboxXdkVariable rexbox_xdk_variables[] = {",
+    ] + [f"    {{\"{lib}\", \"{name}\", 0x{addr:08X}u}}," for lib, name, addr in variables] + [
+        "    {0, 0, 0},",
+        "};",
+        "",
+    ]
+    missing = sorted(single - {(s["library"], s["name"]) for s in chosen.values()})
+    for library, name in missing:
+        skipped.append(f"{library} {name} (selected function not identified)")
     target = out_dir / "hle_overrides.c"
     target.write_text("\n".join(lines), encoding="utf-8", newline="\n")
-    print(f"    hle overrides: {len(chosen)} function(s) of {sorted(libraries)}; "
-          f"{len(skipped)} not at a detected function start")
+    print(f"    hle overrides: {len(chosen)} function(s) of {sorted(libraries)} and {len(single)} selected; "
+          f"{len(skipped)} skipped; {len(variables)} XDK variable(s)")
     for item in skipped:
         print(f"      skipped {item}")
     return target

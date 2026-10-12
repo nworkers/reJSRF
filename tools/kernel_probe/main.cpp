@@ -17,6 +17,7 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <initializer_list>
 #include <string>
 
@@ -226,6 +227,35 @@ void ProbeMemory()
     Check(Call("MmQueryAllocationSize", {block}) == 0, "the block is gone");
 }
 
+// XAPI opens "D:\..." with RootDirectory = ObDosDevicesDirectory() (-3);
+// \??\D: is the disc, i.e. the game directory.
+void ProbeDosDevicesRoot(const std::filesystem::path& game_directory)
+{
+    std::filesystem::create_directories(game_directory);
+    {
+        std::ofstream(game_directory / "probe.bin", std::ios::binary) << "probe";
+    }
+    const GuestAddress text = kScratch + 0x600;
+    const GuestAddress name = kScratch + 0x640;
+    const GuestAddress attributes = kScratch + 0x650;
+    const GuestAddress handle_out = kScratch + 0x660;
+    const GuestAddress io_status = kScratch + 0x668;
+    const char path[] = "D:\\probe.bin";
+    std::memcpy(g_memory->Translate(text), path, sizeof(path));
+    g_memory->Write16(name + 0, static_cast<uint16_t>(sizeof(path) - 1));
+    g_memory->Write16(name + 2, static_cast<uint16_t>(sizeof(path)));
+    g_memory->Write32(name + 4, text);
+    g_memory->Write32(attributes + 0, 0xFFFFFFFD);  // ObDosDevicesDirectory()
+    g_memory->Write32(attributes + 4, name);
+    g_memory->Write32(attributes + 8, 0x40);         // OBJ_CASE_INSENSITIVE
+    const uint32_t status = Call("NtOpenFile", {handle_out, 0x80100000, attributes, io_status, 1, 0x60});
+    Check(status == 0, "NtOpenFile D:\\probe.bin relative to ObDosDevicesDirectory()");
+    if (status == 0)
+    {
+        Call("NtClose", {g_memory->Read32(handle_out)});
+    }
+}
+
 }  // namespace
 
 int main()
@@ -255,6 +285,7 @@ int main()
     ProbeSha1();
     ProbeTime();
     ProbeMemory();
+    ProbeDosDevicesRoot(scratch);
 
     std::printf("%d check(s), %d failure(s)\n", g_checks, g_failures);
     std::fflush(stdout);

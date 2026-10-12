@@ -4,7 +4,34 @@
 
 This records how far the recompiled US build gets when run from its entry point. It is updated by each task; earlier frontiers stay in the history below.
 
-## 현재 / Current (issue #12, 2026-10-12, 진행 중 / in progress)
+## 현재 / Current (issue #15, 2026-10-12)
+
+| 항목 / Item | 값 / Value |
+|---|---|
+| 생성 코드 / Generated code | 함수 8,852개(디스어셈블러 수정 뒤 +117), 미해결 스텁 109개(184에서), XDK override 147개(D3D8 136 + XAPILIB 11), XDK 변수 43개 바인딩 / 8,852 functions (+117 after the disassembler fix), 109 unresolved stubs (from 184), 147 XDK overrides (136 D3D8 + 11 XAPILIB), 43 XDK variables bound |
+| 실행 결과 / Outcome | **입력 초기화, 폰트 텍스처, 정점 셰이더 154개, 픽셀 셰이더 11개, 버퍼 생성을 지나 thread 2가 `DirectSoundCreate`(`0x001A0D9C`) 안에서 MCPX APU 레지스터 `0xFE801100`을 읽다 fault / past input initialization, the font texture, 154 vertex shaders, 11 pixel shaders and buffers, thread 2 faults reading MCPX APU register `0xFE801100` inside `DirectSoundCreate` (`0x001A0D9C`)** |
+
+* **확인됨**: XAPI 입력 API를 HLE로 바꾸자 `IoCreateDevice` 등 I/O 관리자 export는 더 이상 닿지 않는다. 게임의 DirectInput식 열거는 `XGetDeviceChanges`(FALSE) → `XGetDevices`(포트 0) → `XInputOpen` → `XInputGetCapabilities` → `XInputPoll` → `XInputGetState` 순서다([xdk-symbols §4](xdk-symbols.md)).
+* **확인됨**: 게임 객체 생성 실패의 원인은 두 가지였다. (1) 게임패드가 `XInitDevices` 직후 "변경 대기"로 보이면 열거가 `E_FAIL`을 돌려준다. (2) xboxrecomp 디스어셈블러가 별칭 본문의 분기 대상(`0x00154DAA`)을 놓쳐 미해결 스텁이 되어 스택이 12바이트 어긋났다(업스트림 PR [#199](https://github.com/sp00nznet/xboxrecomp/pull/199)). 둘 다 고친 뒤 건너뛴 간접 호출은 0건이다.
+* **확인됨**: XAPI는 `D:\…` 파일을 `RootDirectory = ObDosDevicesDirectory()`(`0xFFFFFFFD`)로 열고, 이름 있는 객체는 `0xFFFFFFFC`로 연다. 커널 HLE가 이 의사 핸들을 해석하게 되어 `D:\Media\Font\TNRoman.bin`이 열린다.
+* **미확정**: DSOUND HLE(다음 task). 그 뒤 첫 `D3DDevice_Swap`.
+* **Confirmed**: with the XAPI input API on HLE, the I/O-manager exports (`IoCreateDevice`, …) are no longer reached. The game's DirectInput-style enumeration runs `XGetDeviceChanges` (FALSE) → `XGetDevices` (port 0) → `XInputOpen` → `XInputGetCapabilities` → `XInputPoll` → `XInputGetState` ([xdk-symbols §4](xdk-symbols.md)).
+* **Confirmed**: the game's object creation failed for two reasons: (1) its enumeration returns `E_FAIL` when the gamepad shows as a pending change right after `XInitDevices`; (2) the xboxrecomp disassembler missed a branch target of an alias body (`0x00154DAA`), which became an unresolved stub and left the stack 12 bytes off (upstream PR [#199](https://github.com/sp00nznet/xboxrecomp/pull/199)). With both fixed, no indirect call is skipped.
+* **Confirmed**: XAPI opens `D:\…` files with `RootDirectory = ObDosDevicesDirectory()` (`0xFFFFFFFD`) and named objects with `0xFFFFFFFC`; the kernel HLE now resolves these pseudo-handles, and `D:\Media\Font\TNRoman.bin` opens.
+* **Unresolved**: the DSOUND HLE (next task), then the first `D3DDevice_Swap`.
+
+## 이력 / History
+
+| issue | frontier |
+|---|---|
+| #2 | 첫 실행: 미구현 커널 import 255 `PsCreateSystemThreadEx` / first run: unimplemented kernel import 255 `PsCreateSystemThreadEx` |
+| #3 | `NtOpenFile` → `HalReturnToFirmware`(Partition0 없음) → D3D8의 NV2A `0xFD001804` 읽기 / `NtOpenFile` → `HalReturnToFirmware` (no Partition0) → D3D8 reading NV2A `0xFD001804` |
+| #6 | 첫 D3D8 API `Direct3D_GetAdapterCount` / the first D3D8 API, `Direct3D_GetAdapterCount` |
+| #7 | `Direct3D_CreateDevice` 통과(SDL3 창), `D3DDevice_GetBackBuffer` / past `Direct3D_CreateDevice` (SDL3 window), `D3DDevice_GetBackBuffer` |
+| #12 | D3D8 초기화·게임 객체 생성 통과, 커널 import 65 `IoCreateDevice` / past D3D8 initialization and object setup, kernel import 65 `IoCreateDevice` |
+| #15 | 입력·폰트·셰이더 생성 통과, `DirectSoundCreate`의 APU `0xFE801100` / past input, font and shader creation, APU `0xFE801100` in `DirectSoundCreate` |
+
+### issue #12 frontier 상세 / issue #12 frontier details
 
 | 항목 / Item | 값 / Value |
 |---|---|
@@ -19,16 +46,6 @@ This records how far the recompiled US build gets when run from its entry point.
 * **Confirmed** (resolved): `0x001BD274` in the XPP section is the init function of a USB class-driver table (`0x001BC970`) and calls `KeInitializeTimerEx(0x002649A8, NotificationTimer)`. It starts right after a `ret` with no prologue, so it was not detected and the indirect call to it was skipped. It was seeded together with eight more FPO functions referenced only from the same XPP driver tables ([xdk-symbols §3](xdk-symbols.md)).
 * **Confirmed**: `IoCreateDevice` is called at `0x001BCA34` in XAPI's `MU_Init` (`0x001BC98C`, called by `XInitDevices`): creating the memory-unit device object.
 * **Unresolved**: the kernel services the USB device layer (XPP) needs after `IoCreateDevice`. The first `D3DDevice_Swap` has not been reached.
-
-## 이력 / History
-
-| issue | frontier |
-|---|---|
-| #2 | 첫 실행: 미구현 커널 import 255 `PsCreateSystemThreadEx` / first run: unimplemented kernel import 255 `PsCreateSystemThreadEx` |
-| #3 | `NtOpenFile` → `HalReturnToFirmware`(Partition0 없음) → D3D8의 NV2A `0xFD001804` 읽기 / `NtOpenFile` → `HalReturnToFirmware` (no Partition0) → D3D8 reading NV2A `0xFD001804` |
-| #6 | 첫 D3D8 API `Direct3D_GetAdapterCount` / the first D3D8 API, `Direct3D_GetAdapterCount` |
-| #7 | `Direct3D_CreateDevice` 통과(SDL3 창), `D3DDevice_GetBackBuffer` / past `Direct3D_CreateDevice` (SDL3 window), `D3DDevice_GetBackBuffer` |
-| #12 | D3D8 초기화·게임 객체 생성 통과, 커널 import 65 `IoCreateDevice` / past D3D8 initialization and object setup, kernel import 65 `IoCreateDevice` |
 
 ### issue #7 frontier 상세 / issue #7 frontier details
 

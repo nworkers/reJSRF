@@ -1,7 +1,7 @@
 [submodule "third_party/xboxrecomp"]
 	path = third_party/xboxrecomp
 	url = https://github.com/nworkers/xboxrecomp
-	branch = fix/xadd-flags
+	branch = rejsrf
 [submodule "third_party/XbSymbolDatabase"]
 	path = third_party/XbSymbolDatabase
 	url = https://github.com/Cxbx-Reloaded/XbSymbolDatabase

@@ -42,8 +42,14 @@ bool BridgeHleFallbackLifted();
 // Whether the next diagnostic trace line may be written (REXBOX_HLE_TRACE).
 bool BridgeTraceEnabled();
 
+// The guest return address at [esp] (the call site of an indirect call being made).
+uint32_t BridgeReturnAddress();
+
 // Validates the heap named by REXBOX_HEAP_CHECK (diagnostic; see recomp_bridge.cpp).
 void CheckWatchedHeap(const char* where);
+
+// Logs changes of the DWORDs named by REXBOX_WATCH32 (diagnostic; see recomp_bridge.cpp).
+void CheckWatchedDwords(const char* where);
 
 }  // namespace rexbox::recomp
 

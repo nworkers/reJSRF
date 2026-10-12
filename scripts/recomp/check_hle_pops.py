@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare each D3D8 HLE export's stack pop count with the lifted original's `ret n`.
+"""Compare each XDK HLE export's stack pop count with the lifted original's `ret n`.
 
 An HLE export returns through HleCall::Return(value, n), popping n stack
 arguments. If n differs from the original function's `ret n`, the caller's
@@ -25,7 +25,7 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 GEN = ROOT / "gen" / "jsrf_us"
-HLE_DIR = ROOT / "src" / "rexbox" / "hle" / "d3d8"
+HLE_DIRS = [ROOT / "src" / "rexbox" / "hle" / name for name in ("d3d8", "xinput")]
 
 
 def main():
@@ -34,7 +34,7 @@ def main():
     extra = json.load(open(ROOT / "src/game/jsrf/recomp/xdk_symbols_extra.json", encoding="utf-8"))["symbols"]
     name_by_address = {}
     for symbol in symbols + extra:
-        if symbol["kind"] == "function" and symbol["library"].startswith("D3D8"):
+        if symbol["kind"] == "function":
             name_by_address.setdefault(int(symbol["address"], 16), symbol["name"])
 
     rets = {}
@@ -45,13 +45,13 @@ def main():
             rets[int(match.group(2), 16)] = sorted(int(v) if v else 0 for v in values)
 
     hle = {}
-    for path in glob.glob(str(HLE_DIR / "*.cpp")):
+    for path in [p for d in HLE_DIRS for p in glob.glob(str(d / "*.cpp"))]:
         source = pathlib.Path(path).read_text(encoding="utf-8")
         functions = {}
         for match in re.finditer(r"^(?:template <[^>]*>\n)?void (\w+)\(\)\n\{(.*?)^\}", source, re.S | re.M):
             pops = set(int(x) for x in re.findall(r"Return(?:64)?\([^;]*?,\s*(\d+)\);", match.group(2)))
             functions[match.group(1)] = pops
-        for match in re.finditer(r'AddExport\("d3d8", "(\w+)", &([\w:<>]+)\)', source):
+        for match in re.finditer(r'AddExport\("\w+", "(\w+)", &([\w:<>]+)\)', source):
             hle[match.group(1)] = functions.get(match.group(2).split("<")[0], set())
 
     mismatches = 0

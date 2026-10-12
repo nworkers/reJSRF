@@ -63,3 +63,19 @@ The XPP section (XAPI's USB device layer: gamepads, memory units, keyboards, IR 
 * **추정**: 각 콜백의 역할(장치 추가·제거, 상태 폴링)은 XAPI의 USB 클래스 드라이버 구조(`XPP_DEVICE_TYPE`)에서 온 이름이며 아직 확인하지 않았다.
 * **Confirmed**: all nine were seeded in `src/game/jsrf/recomp/seed_functions.json`; after regeneration they are in the dispatch table and the boot no longer logs `[recomp] indirect call to 001BD274 has no target`. Every other code pointer inside the XPP section is the start of a detected function (data pointers into the tables themselves excluded).
 * **Inferred**: the callbacks' roles (device add/remove, state polling) follow XAPI's USB class-driver structure (`XPP_DEVICE_TYPE`) and are not confirmed yet.
+
+## 4. XInput HLE와 게임의 입력 계층 / The XInput HLE and the game's input layer (issue #15)
+
+| 함수 / Function | 주소 / Address | 처리 / Handling |
+|---|---|---|
+| `XInitDevices` | `0x001BCBCC` (게임은 `0x001BD5FA`의 `jmp`로 부름 / called through a `jmp` at `0x001BD5FA`) | HLE |
+| `XGetDevices`, `XGetDeviceChanges` | `0x001BD5FF`, `0x001BD621` | HLE(원본과 같은 구조체 의미, 도착 시점 모델 / same structure semantics as the original, arrival timing modelled) |
+| `XInputOpen`, `XInputClose`, `XInputGetCapabilities`, `XInputGetState`, `XInputSetState`, `XInputPoll` | `0x001C3BA1`–`0x001C3EBD` | HLE |
+| `XMountMUA`, `XUnmountMU` | `0x001BE7DE`, `0x001BE8ED` | HLE(메모리 유닛 없음 / no memory units) |
+
+* **확인됨**: 게임은 DirectInput 8을 흉내내는 자체 계층을 가진다(`0x00166800`: 버전 `0x800` 확인, 포트별 `0x480`바이트 장치 객체 4개). 장치 열거(`0x001669A0`)는 `XGetDeviceChanges(&g_DeviceType_Gamepad)`가 TRUE이면 `E_FAIL`, FALSE이면 `XGetDevices`로 연결된 포트를 열거해 `XInputOpen`한다.
+* **확인됨**: 이 열거는 게임의 그래픽·입력 래퍼(vtable `0x001E0F00`)의 `Init`(`+0x18`, `0x00155380`) 안에서 D3D 초기화 뒤에 불린다. 실패하면 생성 함수(`0x0005F2C0`)가 실패하고, 원본 코드는 실패 경로에서도 null 객체의 메서드를 부른다(콘솔에서는 실패하지 않는다는 뜻).
+* **추정**: 콘솔의 `XInitDevices`는 USB 열거를 시작만 하고 돌아오므로 첫 조회에는 장치가 없다. HLE는 첫 조회가 끝난 뒤 게임패드를 도착시킨다.
+* **Confirmed**: the game has its own DirectInput 8 emulation layer (`0x00166800`: checks version `0x800`, four `0x480`-byte per-port device objects). Its enumeration (`0x001669A0`) returns `E_FAIL` when `XGetDeviceChanges(&g_DeviceType_Gamepad)` is TRUE; when FALSE it enumerates the ports from `XGetDevices` and calls `XInputOpen`.
+* **Confirmed**: that enumeration runs inside `Init` (`+0x18`, `0x00155380`) of the game's graphics and input wrapper (vtable `0x001E0F00`), after D3D initialization. When it fails, the creating function (`0x0005F2C0`) fails, and the original code calls a method of the null object even on that path (so it never fails on the console).
+* **Inferred**: the console's `XInitDevices` only starts USB enumeration, so the first query sees no device; the HLE lets the gamepad arrive after the first query.

@@ -100,6 +100,8 @@ bool BridgeHleFallbackLifted()
 struct CallRecord
 {
     uint32_t va;
+    uint32_t esp;   // at the call, after the return address was pushed
+    uint32_t site;  // [esp]: the return address, i.e. the call site
     uint32_t arg0;  // [esp+4] and [esp+8] at the call: the first two stack arguments
     uint32_t arg1;
 };
@@ -145,7 +147,8 @@ void DumpCallProfile(FILE* out)
         for (uint32_t i = 0; i < count; ++i)
         {
             const CallRecord& record = profile->ring[(next - count + i) % 256];
-            std::fprintf(out, "%s%08X(%08X,%08X)", i % 4 == 0 ? "\n    " : "  ", record.va, record.arg0, record.arg1);
+            std::fprintf(out, "%s%08X(%08X,%08X)@%08X<%08X", i % 4 == 0 ? "\n    " : "  ", record.va, record.arg0,
+                         record.arg1, record.esp, record.site);
         }
         std::fprintf(out, "\n[profile] top targets by count:\n");
         std::vector<std::pair<uint32_t, uint64_t>> top(profile->counts.begin(), profile->counts.end());
@@ -221,6 +224,53 @@ void CheckWatchedHeap(const char* where)
     }
 }
 
+// Diagnostic: REXBOX_WATCH32=<hex>[,<hex>...]. At every HLE entry (XDK
+// override or kernel import) the DWORDs at those guest addresses are compared
+// with their last value; a change is logged with where the HLE was entered
+// from. Narrows an unexpected write to the guest code between two HLE calls.
+void CheckWatchedDwords(const char* where)
+{
+    struct Watch
+    {
+        uint32_t address;
+        uint32_t value;
+    };
+    static std::vector<Watch> watches = [] {
+        std::vector<Watch> list;
+        const char* value = std::getenv("REXBOX_WATCH32");
+        while (value != nullptr && *value != '\0')
+        {
+            char* end = nullptr;
+            const uint32_t address = static_cast<uint32_t>(std::strtoul(value, &end, 16));
+            list.push_back({address, 0});
+            value = (end != nullptr && *end == ',') ? end + 1 : nullptr;
+        }
+        return list;
+    }();
+    runtime::GuestMemory* memory = g_memory;
+    if (watches.empty() || memory == nullptr)
+    {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(g_log_mutex);
+    const uint32_t esp = rexbox_recomp_get_gpr(4);
+    const uint32_t caller = memory->IsValid(esp, 4) ? memory->Read32(esp) : 0;
+    for (Watch& watch : watches)
+    {
+        if (!memory->IsValid(watch.address, 4))
+        {
+            continue;
+        }
+        const uint32_t now = memory->Read32(watch.address);
+        if (now != watch.value)
+        {
+            std::fprintf(stderr, "[watch] [%08X] %08X -> %08X before %s (from %08X)\n", watch.address, watch.value,
+                         now, where, caller);
+            watch.value = now;
+        }
+    }
+}
+
 void TakeStopSymbol(const char** library, const char** name)
 {
     *library = t_stop_slot != nullptr ? t_stop_slot->library : nullptr;
@@ -255,6 +305,14 @@ bool BridgeStopOnUnresolved()
 void BridgeSetStopTarget(runtime::GuestAddress target)
 {
     t_stop_target = target;
+}
+
+// The guest return address on top of the stack: the lifter pushes it before an
+// indirect call, so it names the call site.
+uint32_t BridgeReturnAddress()
+{
+    const uint32_t esp = rexbox_recomp_get_gpr(4);
+    return g_memory != nullptr && g_memory->IsValid(esp, 4) ? g_memory->Read32(esp) : 0;
 }
 
 bool BridgeFirstTimeAt(uint32_t site)
@@ -301,6 +359,7 @@ recomp_func_t recomp_lookup_manual(uint32_t xbox_va)
     if (rexbox::runtime::IsKernelThunkVa(xbox_va))
     {
         bridge::CheckWatchedHeap("kernel import");
+        bridge::CheckWatchedDwords("kernel import");
     }
     if (rexbox::runtime::IsKernelThunkVa(xbox_va) && bridge::BridgeTraceEnabled())
     {
@@ -327,6 +386,7 @@ void rexbox_hle_enter(RexboxHleSlot* slot)
     if (slot->state == 1)
     {
         bridge::CheckWatchedHeap(slot->name);
+        bridge::CheckWatchedDwords(slot->name);
         // Diagnostic: REXBOX_HLE_TRACE=<n> logs the first n HLE entries (default 4000).
         if (bridge::BridgeTraceEnabled())
         {
@@ -362,6 +422,49 @@ void rexbox_hle_enter(RexboxHleSlot* slot)
     bridge::BridgeStopAtHle(slot);
 }
 
+// Generated code built with RECOMP_ABI_CHECK (CMake REJSRF_RECOMP_ABI_CHECK)
+// reports a direct call whose callee changed ebx/esi/edi or came back without
+// popping even its return address -- a stack imbalance that otherwise shows up
+// far away. The first 16 are logged with the call site.
+void recomp_abi_violation_log(uint32_t va, uint32_t ebx0, uint32_t esi0, uint32_t edi0, uint32_t esp0)
+{
+    // REXBOX_ABI_IGNORE=<hex>[,<hex>...] skips callees that move esp down by
+    // design (_chkstk, SEH prologs); REXBOX_ABI_ESP_ONLY reports only the
+    // missing-pop case, not register clobbers.
+    static const std::vector<uint32_t> ignored = [] {
+        std::vector<uint32_t> list;
+        const char* value = std::getenv("REXBOX_ABI_IGNORE");
+        while (value != nullptr && *value != '\0')
+        {
+            char* end = nullptr;
+            list.push_back(static_cast<uint32_t>(std::strtoul(value, &end, 16)));
+            value = (end != nullptr && *end == ',') ? end + 1 : nullptr;
+        }
+        return list;
+    }();
+    static const bool esp_only = std::getenv("REXBOX_ABI_ESP_ONLY") != nullptr;
+    if (std::find(ignored.begin(), ignored.end(), va) != ignored.end())
+    {
+        return;
+    }
+    if (esp_only && rexbox_recomp_get_gpr(4) >= esp0 + 4)
+    {
+        return;
+    }
+    static std::atomic<int> logged{0};
+    if (logged.fetch_add(1) >= 32)
+    {
+        return;
+    }
+    rexbox::runtime::GuestMemory* memory = bridge::BridgeMemory();
+    const uint32_t site = memory != nullptr && memory->IsValid(esp0 - 4, 4) ? memory->Read32(esp0 - 4) : 0;
+    std::fprintf(stderr,
+                 "[abi] call %08X (returns to %08X): ebx %08X->%08X esi %08X->%08X edi %08X->%08X "
+                 "esp %08X->%08X\n",
+                 va, site, ebx0, rexbox_recomp_get_gpr(3), esi0, rexbox_recomp_get_gpr(6), edi0,
+                 rexbox_recomp_get_gpr(7), esp0, rexbox_recomp_get_gpr(4));
+}
+
 // Generated code built with RECOMP_CALL_PROFILE reports every direct call.
 void recomp_call_profile_hit(uint32_t va)
 {
@@ -371,6 +474,8 @@ void recomp_call_profile_hit(uint32_t va)
     rexbox::runtime::GuestMemory* memory = bridge::BridgeMemory();
     bridge::CallRecord& record = profile->ring[index % 256];
     record.va = va;
+    record.esp = esp;
+    record.site = memory != nullptr && memory->IsValid(esp, 4) ? memory->Read32(esp) : 0;
     record.arg0 = memory != nullptr && memory->IsValid(esp + 4, 8) ? memory->Read32(esp + 4) : 0;
     record.arg1 = memory != nullptr && memory->IsValid(esp + 4, 8) ? memory->Read32(esp + 8) : 0;
     ++profile->counts[va];
@@ -398,7 +503,8 @@ void recomp_icall_fail_log(uint32_t va)
     }
     if (bridge::BridgeFirstTimeAt(va))
     {
-        std::fprintf(stderr, "[recomp] indirect call to %08X has no target; skipped\n", va);
+        std::fprintf(stderr, "[recomp] indirect call to %08X has no target; skipped (returns to %08X)\n", va,
+                     bridge::BridgeReturnAddress());
     }
 }
 
@@ -406,7 +512,34 @@ void recomp_icall_not_code_log(uint32_t va)
 {
     if (bridge::BridgeFirstTimeAt(va))
     {
-        std::fprintf(stderr, "[recomp] indirect call to %08X is outside code; skipped\n", va);
+        std::fprintf(stderr, "[recomp] indirect call to %08X is outside code; skipped (returns to %08X)\n", va,
+                     bridge::BridgeReturnAddress());
+        // Diagnostic: REXBOX_PROFILE_ON_SKIP dumps the direct-call profile at
+        // the first skipped call (generated code built with REJSRF_RECOMP_CALL_PROFILE).
+        static bool dumped = false;
+        if (!dumped && std::getenv("REXBOX_PROFILE_ON_SKIP") != nullptr)
+        {
+            dumped = true;
+            bridge::DumpCallProfile(stderr);
+        }
+        // Diagnostic: REXBOX_SKIP_DUMP=<file> writes the guest RAM and the
+        // registers at the first skipped call.
+        static bool memory_dumped = false;
+        const char* dump_path = std::getenv("REXBOX_SKIP_DUMP");
+        rexbox::runtime::GuestMemory* memory = bridge::BridgeMemory();
+        if (!memory_dumped && dump_path != nullptr && memory != nullptr)
+        {
+            memory_dumped = true;
+            if (FILE* dump = std::fopen(dump_path, "wb"))
+            {
+                std::fwrite(memory->base(), 1, memory->size(), dump);
+                std::fclose(dump);
+            }
+            std::fprintf(stderr, "[recomp] skip dump %s: eax %08X ecx %08X edx %08X ebx %08X esp %08X esi %08X edi %08X\n",
+                         dump_path, rexbox_recomp_get_gpr(0), rexbox_recomp_get_gpr(1), rexbox_recomp_get_gpr(2),
+                         rexbox_recomp_get_gpr(3), rexbox_recomp_get_gpr(4), rexbox_recomp_get_gpr(6),
+                         rexbox_recomp_get_gpr(7));
+        }
     }
 }
 
