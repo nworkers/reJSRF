@@ -1,18 +1,20 @@
-// rejsrf: application entry. Orchestration only -- load the user's XBE, place
-// it in guest memory, install the runtime environment, register the HLE
-// modules, apply the title profile and, when the build carries recompiled
-// code, boot the entry point as the first guest thread and report how the
-// guest threads ended.
+// rejsrf: application entry. Orchestration only -- find the user's XBE in the
+// game directory, place it in guest memory, install the runtime environment,
+// register the HLE modules, apply the title profile and, when the build
+// carries recompiled code, boot the entry point as the first guest thread and
+// report how the guest threads ended.
 //
-// Usage: rejsrf <path to default.xbe>
+// Usage: rejsrf <game directory>   (the folder extracted from the disc)
 
 #include "rejsrf/jsrf_profile.h"
+#include "rejsrf_build_stamp.h"
 #include "rexbox/hle/d3d8/d3d8_hle.h"
 #include "rexbox/hle/dsound/dsound_hle.h"
 #include "rexbox/hle/kernel/kernel_exports.h"
 #include "rexbox/hle/kernel/kernel_hle.h"
 #include "rexbox/hle/xapi/xapi_hle.h"
 #include "rexbox/hle/xinput/xinput_hle.h"
+#include "rexbox/platform/display.h"
 #include "rexbox/recomp/recomp_runtime.h"
 #include "rexbox/runtime/environment.h"
 #include "rexbox/runtime/guest_heap.h"
@@ -22,15 +24,119 @@
 #include "rexbox/runtime/xbe_loader.h"
 #include "rexbox/xbe/xbe_image.h"
 
+#include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <thread>
+#include <vector>
 
 namespace
 {
+
+// "Win32/x86 Release": which binary a screenshot or a report came from.
+std::string BuildIdentity()
+{
+#if defined(_WIN32)
+    std::string identity = "Win32";
+#elif defined(__ANDROID__)
+    std::string identity = "Android";
+#elif defined(__APPLE__)
+    std::string identity = "macOS";
+#elif defined(__linux__)
+    std::string identity = "Linux";
+#else
+    std::string identity = "unknown";
+#endif
+#if defined(_M_IX86) || defined(__i386__)
+    identity += "/x86";
+#elif defined(_M_X64) || defined(__x86_64__)
+    identity += "/x64";
+#elif defined(_M_ARM64) || defined(__aarch64__)
+    identity += "/arm64";
+#endif
+    // A single-config generator without CMAKE_BUILD_TYPE leaves $<CONFIG> empty.
+    const std::string config = REJSRF_BUILD_CONFIG;
+#if defined(NDEBUG)
+    identity += " " + (config.empty() ? std::string("Release") : config);
+#else
+    identity += " " + (config.empty() ? std::string("Debug") : config);
+#endif
+    return identity;
+}
+
+struct GameXbe
+{
+    std::filesystem::path path;
+    std::optional<rexbox::xbe::XbeImage> image;
+    const rejsrf::XbeVariant* variant = nullptr;
+};
+
+bool HasXbeExtension(const std::filesystem::path& path)
+{
+    std::string extension = path.extension().string();
+    std::transform(extension.begin(), extension.end(), extension.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return extension == ".xbe";
+}
+
+// The XBE to run from the game directory, identified by content rather than
+// by name: the primary variant if the directory has it, otherwise another
+// supported build (which is loaded but not run). Reports every XBE it looked
+// at when none is supported.
+std::optional<GameXbe> FindGameXbe(const std::filesystem::path& directory)
+{
+    std::vector<std::filesystem::path> candidates;
+    std::error_code ec;
+    for (const auto& entry : std::filesystem::directory_iterator(directory, ec))
+    {
+        if (entry.is_regular_file(ec) && HasXbeExtension(entry.path()))
+        {
+            candidates.push_back(entry.path());
+        }
+    }
+    std::sort(candidates.begin(), candidates.end());
+    std::optional<GameXbe> fallback;
+    for (const auto& path : candidates)
+    {
+        std::string error;
+        GameXbe found;
+        found.path = path;
+        found.image = rexbox::xbe::XbeImage::Load(path, &error);
+        if (!found.image)
+        {
+            std::fprintf(stderr, "  %s: %s\n", path.filename().string().c_str(), error.c_str());
+            continue;
+        }
+        found.variant = rejsrf::IdentifyXbe(*found.image);
+        if (found.variant == nullptr)
+        {
+            std::fprintf(stderr,
+                         "  %s: not a supported Jet Set Radio Future build "
+                         "(title id %08X, certificate version %08X)\n",
+                         path.filename().string().c_str(), found.image->certificate().title_id,
+                         found.image->certificate().version);
+            continue;
+        }
+        if (found.variant == rejsrf::PrimaryVariant())
+        {
+            return found;
+        }
+        if (!fallback)
+        {
+            fallback = std::move(found);
+        }
+    }
+    if (!fallback && candidates.empty())
+    {
+        std::fprintf(stderr, "  no .xbe file\n");
+    }
+    return fallback;
+}
 
 void PrintThreadReport(const rexbox::recomp::ThreadReport& report)
 {
@@ -81,28 +187,36 @@ int main(int argc, char** argv)
     // Diagnostics interleave with the guest's output; keep stderr unbuffered even when redirected.
     std::setvbuf(stderr, nullptr, _IONBF, 0);
     std::printf("reJSRF %s\n", REJSRF_VERSION);
+    // The window adds the renderer and the FPS (rePIU's form).
+    rexbox::platform::SetDisplayTitle(std::string("reJSRF v" REJSRF_VERSION " (") + BuildIdentity() +
+                                      ") - Build " REJSRF_BUILD_TIME);
     if (argc < 2)
     {
-        std::fprintf(stderr, "usage: %s <path to default.xbe>\n", argv[0]);
+        std::fprintf(stderr, "usage: %s <game directory>\n"
+                             "  the folder extracted from the disc, holding default_eng.xbe and Media\\\n",
+                     argv[0]);
         return 2;
     }
 
+    // The game directory is the disc (D:); the XBE to run is found in it.
+    const std::filesystem::path game_directory = std::filesystem::absolute(argv[1]);
+    std::error_code ec;
+    if (!std::filesystem::is_directory(game_directory, ec))
+    {
+        std::fprintf(stderr, "error: %s is not a directory; pass the game directory (the folder holding the XBE)\n",
+                     argv[1]);
+        return 1;
+    }
+    std::optional<GameXbe> game = FindGameXbe(game_directory);
+    if (!game)
+    {
+        std::fprintf(stderr, "error: no supported Jet Set Radio Future XBE in %s\n", argv[1]);
+        return 1;
+    }
+    const rexbox::xbe::XbeImage* image = &*game->image;
+    const rejsrf::XbeVariant* variant = game->variant;
     std::string error;
-    const auto image = rexbox::xbe::XbeImage::Load(argv[1], &error);
-    if (!image)
-    {
-        std::fprintf(stderr, "error: %s: %s\n", argv[1], error.c_str());
-        return 1;
-    }
-    const rejsrf::XbeVariant* variant = rejsrf::IdentifyXbe(*image);
-    if (variant == nullptr)
-    {
-        std::fprintf(stderr, "error: %s is not a supported Jet Set Radio Future build "
-                             "(title id %08X, certificate version %08X)\n",
-                     argv[1], image->certificate().title_id, image->certificate().version);
-        return 1;
-    }
-    std::printf("xbe: %s\n", variant->label);
+    std::printf("xbe: %s (%s)\n", variant->label, game->path.filename().string().c_str());
 
     rexbox::runtime::GuestMemory memory;
     if (!memory.Initialize(rexbox::runtime::GuestMemory::kAddressSpaceSize))
@@ -131,10 +245,10 @@ int main(int argc, char** argv)
     rexbox::hle::d3d8::RegisterD3d8Hle(registry);
     rexbox::hle::dsound::RegisterDsoundHle(registry);
     rexbox::hle::xinput::RegisterXinputHle(registry);
-    // The disc is the XBE's folder; the hard disk lives under ./hdd unless
+    // The disc is the game directory; the hard disk lives under ./hdd unless
     // REJSRF_HDD_ROOT names another place.
     rexbox::hle::kernel::KernelConfig kernel_config;
-    kernel_config.game_directory = std::filesystem::absolute(argv[1]).parent_path();
+    kernel_config.game_directory = game_directory;
     const char* hdd_root = std::getenv("REJSRF_HDD_ROOT");
     kernel_config.hdd_root = hdd_root != nullptr ? std::filesystem::path(hdd_root)
                                                  : std::filesystem::current_path() / "hdd";
