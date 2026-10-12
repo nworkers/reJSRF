@@ -1,10 +1,9 @@
 // Xbox D3D8 (XDK 4134) state numbering: D3DRENDERSTATETYPE slots of
-// D3D__RenderState, D3DTEXTURESTAGESTATETYPE slots of D3D__TextureState, and
-// the NV2A (Kelvin) methods the simple render states arrive as through
-// D3DDevice_SetRenderState_Simple. Each block notes its evidence
-// (docs/kb/xbox-d3d8-api.md section 7):
-//   confirmed - the slot a lifted original setter writes, or a method
-//               constant the title passes for a known state;
+// D3D__RenderState and D3DTEXTURESTAGESTATETYPE slots of D3D__TextureState.
+// Each block notes its evidence (docs/kb/xbox-d3d8-api.md section 7):
+//   confirmed - the slot a lifted original setter writes, or a slot whose
+//               value equals what the title passes with a known NV2A method
+//               to D3DDevice_SetRenderState_Simple;
 //   inferred  - XDK 4134 ordering known from other projects (knowledge
 //               only), consistent with the confirmed block boundaries.
 
@@ -19,8 +18,30 @@ namespace rexbox::hle::d3d8
 // D3D__RenderState slots.
 namespace rs
 {
-// Simple block (below 82): the polygon-offset states ZBias derives
-// (confirmed: the slots the lifted ZBias setter writes, in this order).
+// Simple block, 57..81 (confirmed: each slot holds the value the title passes
+// with the NV2A method of that state, e.g. slot 57 with 0x354 DEPTH_FUNC; the
+// values are in NV2A/GL encoding: comparisons 0x200.., blend factors 0x300..,
+// stencil operations 0x1E00..). 77..81 are the polygon-offset states ZBias
+// derives (the slots the lifted ZBias setter writes, in this order).
+constexpr uint32_t kZFunc = 57;
+constexpr uint32_t kAlphaFunc = 58;
+constexpr uint32_t kAlphaBlendEnable = 59;
+constexpr uint32_t kAlphaTestEnable = 60;
+constexpr uint32_t kAlphaRef = 61;
+constexpr uint32_t kSrcBlend = 62;
+constexpr uint32_t kDestBlend = 63;
+constexpr uint32_t kZWriteEnable = 64;
+constexpr uint32_t kDitherEnable = 65;
+constexpr uint32_t kShadeMode = 66;
+constexpr uint32_t kColorWriteEnable = 67;  // per-byte enables, 0x01010101 = all (inferred)
+constexpr uint32_t kStencilZFail = 68;
+constexpr uint32_t kStencilPass = 69;
+constexpr uint32_t kStencilFunc = 70;
+constexpr uint32_t kStencilRef = 71;
+constexpr uint32_t kStencilMask = 72;
+constexpr uint32_t kStencilWriteMask = 73;
+constexpr uint32_t kBlendOp = 74;
+constexpr uint32_t kBlendColor = 75;
 constexpr uint32_t kPolygonOffsetZSlopeScale = 77;
 constexpr uint32_t kPolygonOffsetZOffset = 78;
 constexpr uint32_t kPointOffsetEnable = 79;
@@ -111,40 +132,6 @@ constexpr uint32_t kBorderColor = 29;
 constexpr uint32_t kColorKeyColor = 30;
 }  // namespace tss
 
-// NV2A Kelvin (NV097) methods, as D3DDevice_SetRenderState_Simple receives
-// them in ecx (bits 12:2 are the method; the title's constants also carry the
-// count 1 in bits 28:18). Method numbers from envytools' rnndb (MIT);
-// kShadeMode 0x37C and kDepthTestEnable 0x30C confirmed in our binary
-// (SHADEMODE passes 0x1D00/0x1D01, the ZEnable setter writes 0x30C).
-namespace nv2a
-{
-constexpr uint32_t kMethodMask = 0x1FFC;
-constexpr uint32_t kAlphaTestEnable = 0x300;
-constexpr uint32_t kBlendEnable = 0x304;
-constexpr uint32_t kCullFaceEnable = 0x308;
-constexpr uint32_t kDepthTestEnable = 0x30C;
-constexpr uint32_t kDitherEnable = 0x310;
-constexpr uint32_t kLightingEnable = 0x314;
-constexpr uint32_t kStencilTestEnable = 0x32C;
-constexpr uint32_t kAlphaFunc = 0x33C;
-constexpr uint32_t kAlphaRef = 0x340;
-constexpr uint32_t kBlendFuncSFactor = 0x344;
-constexpr uint32_t kBlendFuncDFactor = 0x348;
-constexpr uint32_t kBlendColor = 0x34C;
-constexpr uint32_t kBlendEquation = 0x350;
-constexpr uint32_t kDepthFunc = 0x354;
-constexpr uint32_t kColorMask = 0x358;
-constexpr uint32_t kDepthMask = 0x35C;
-constexpr uint32_t kStencilMask = 0x360;
-constexpr uint32_t kStencilFunc = 0x364;
-constexpr uint32_t kStencilFuncRef = 0x368;
-constexpr uint32_t kStencilFuncMask = 0x36C;
-constexpr uint32_t kStencilOpFail = 0x370;
-constexpr uint32_t kStencilOpZFail = 0x374;
-constexpr uint32_t kStencilOpZPass = 0x378;
-constexpr uint32_t kShadeMode = 0x37C;
-constexpr uint32_t kMethodSlots = (kMethodMask >> 2) + 1;
-}  // namespace nv2a
 
 }  // namespace rexbox::hle::d3d8
 

@@ -3,6 +3,8 @@
 // drawing batch replaces these with the GL pipeline.
 
 #include "d3d8_internal.h"
+#include "d3d8_state.h"
+#include "d3d8_trace.h"
 
 #include <mutex>
 #include <unordered_set>
@@ -18,6 +20,10 @@ std::unordered_set<const char*> g_logged;
 
 void LogOnce(const char* name, const HleCall& call, int args)
 {
+    const PipelineState& pipeline = Pipeline();
+    TraceOnce(Format("draw %s vs %08X ps %08X", name, pipeline.vertex_shader, pipeline.pixel_shader),
+              Format("%s: vertex shader %08X, pixel shader %08X, primitive %u", name, pipeline.vertex_shader,
+                     pipeline.pixel_shader, call.Arg(0)));
     std::lock_guard<std::mutex> lock(g_log_mutex);
     if (!g_logged.insert(name).second)
     {

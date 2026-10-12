@@ -5,6 +5,7 @@
 #include "rexbox/xbe/xbe_image.h"
 
 #include <array>
+#include <cstdint>
 
 namespace rejsrf
 {
@@ -21,6 +22,21 @@ constexpr std::array<XbeVariant, 2> kVariants = {{
     {"USA (region 1)", 0x5345000A, 0x3C5881D9, 0x00000001, 0x3C558EA7},
     // Recognized only: the Japan-region build, default.xbe on this disc.
     {"Japan (region 2)", 0x5345000A, 0x3C56850C, 0x00000001, 0x3C559627},
+}};
+
+struct XdkInternal
+{
+    const char* name;
+    uint32_t address;
+};
+
+// D3D8: the device's default-state routine the hardware initialization
+// (0x00192090, under Direct3D_CreateDevice) ends with. It sets the identity
+// transforms, the render states from its table, the texture-stage defaults
+// and the screen-space offset through the public setters, so the HLE device
+// runs it to start from the original defaults.
+constexpr std::array<XdkInternal, 1> kXdkInternals = {{
+    {"D3D_InitializeDeviceState", 0x001919C0},
 }};
 
 }  // namespace
@@ -56,6 +72,13 @@ size_t BindTitleHle(const rexbox::xbe::XbeImage& image, rexbox::runtime::HleRegi
     for (; variables[count].name != nullptr; ++count)
     {
         registry.BindVariable(variables[count].name, variables[count].address);
+    }
+    // XDK internals XbSymbolDatabase does not name, found by reading the
+    // lifted library (docs/analysis/d3d8-adapter.md section 7).
+    for (const auto& internal : kXdkInternals)
+    {
+        registry.BindVariable(internal.name, internal.address);
+        ++count;
     }
     return count;
 }

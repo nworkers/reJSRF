@@ -50,6 +50,10 @@ jobs:
         shell: powershell
         run: .\build\win32_x86\tools\${{ matrix.configuration }}\rexbox_dsound_probe.exe
 
+      - name: Probe - D3D8 HLE
+        shell: powershell
+        run: .\build\win32_x86\tools\${{ matrix.configuration }}\rexbox_d3d8_probe.exe
+
       - name: Smoke - app rejects a non-XBE file
         shell: powershell
         run: |

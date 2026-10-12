@@ -3,8 +3,7 @@
 // Render and texture-stage state lives in the library's own globals
 // (d3d8_globals.h): the setters write the slots the originals write, and the
 // title's inlines write the rest directly. What the globals do not hold is
-// kept here: texture bindings, transforms, shader handles and the NV2A
-// methods the simple render states arrive as.
+// kept here: texture bindings, transforms and shader handles.
 
 #ifndef REXBOX_HLE_D3D8_D3D8_STATE_H
 #define REXBOX_HLE_D3D8_D3D8_STATE_H
@@ -36,8 +35,6 @@ struct PipelineState
 {
     std::array<runtime::GuestAddress, kMaxTextureStages> textures = {};  // bound texture headers
     std::array<std::array<float, 16>, kMaxTransforms> transforms = {};
-    std::array<uint32_t, nv2a::kMethodSlots> nv2a = {};  // SetRenderState_Simple values by method
-    std::array<bool, nv2a::kMethodSlots> nv2a_set = {};
     runtime::GuestAddress index_buffer = 0;
     uint32_t base_vertex_index = 0;
     uint32_t vertex_shader = 0;
@@ -49,10 +46,6 @@ struct PipelineState
 };
 
 PipelineState& Pipeline();
-
-// The value last given for an NV2A method, or `fallback` when the title has
-// not set it yet.
-uint32_t Nv2aState(uint32_t method, uint32_t fallback);
 
 void RegisterStateExports(runtime::HleRegistry& registry);
 

@@ -17,6 +17,15 @@ target_link_libraries(rexbox_dsound_probe PRIVATE rexbox_hle_dsound)
 rejsrf_check_license(rexbox_dsound_probe)
 rejsrf_strict_warnings(rexbox_dsound_probe)
 
+# D3D8 HLE checks of the pure parts (texture formats, FVF, fixed-function
+# GLSL) that need no game data or GPU (run in CI). White-box: includes the
+# module's own headers.
+add_executable(rexbox_d3d8_probe d3d8_probe/main.cpp)
+target_link_libraries(rexbox_d3d8_probe PRIVATE rexbox_hle_d3d8)
+target_include_directories(rexbox_d3d8_probe PRIVATE ${PROJECT_SOURCE_DIR}/src/rexbox/hle/d3d8)
+rejsrf_check_license(rexbox_d3d8_probe)
+rejsrf_strict_warnings(rexbox_d3d8_probe)
+
 # Compares decompiled functions with the lifted bodies they replace; needs the
 # generated code.
 if(TARGET rejsrf_recomp)

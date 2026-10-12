@@ -4,6 +4,7 @@
 
 #include "d3d8_gl.h"
 #include "d3d8_globals.h"
+#include "d3d8_render_state.h"
 #include "d3d8_internal.h"
 #include "d3d8_resource.h"
 #include "d3d8_state.h"
@@ -20,7 +21,10 @@ namespace rexbox::hle::d3d8
 namespace
 {
 
-constexpr uint32_t kDeviceObjectSize = 0x1000;
+// Large enough for the device fields the library's own routines touch (the
+// identified m_VerticalBlankEvent is at +0x2430).
+constexpr uint32_t kDeviceObjectSize = 0x3000;
+constexpr const char* kInitializeDeviceStateName = "D3D_InitializeDeviceState";
 constexpr uint32_t kBackBufferCount = 2;
 
 // REXBOX_DISPLAY=none runs without a window (headless diagnostics, CI).
@@ -135,6 +139,31 @@ bool CreateDeviceSurfaces(D3dState& state)
     return true;
 }
 
+// The original's hardware initialization ends by setting the default render,
+// texture-stage and transform state through the public setters. The title
+// profile binds that routine (it has no XbSymbolDatabase name); running it
+// leaves the library globals as the original device would. ZEnable follows
+// the depth buffer, as the routine's own D3DRS_ZENABLE call reads it from a
+// device field the HLE does not keep.
+void InitializeDeviceState(const D3dState& state)
+{
+    const GuestAddress routine = runtime::Env().registry->FindVariable(kInitializeDeviceStateName);
+    if (routine == 0)
+    {
+        std::fprintf(stderr, "[d3d8] no %s binding; render and texture-stage state start empty\n",
+                     kInitializeDeviceStateName);
+        return;
+    }
+    bool called = false;
+    runtime::Env().executor->CallGuest(routine, nullptr, 0, &called);
+    if (!called)
+    {
+        std::fprintf(stderr, "[d3d8] %s (%08X) has no code; render state starts empty\n",
+                     kInitializeDeviceStateName, routine);
+    }
+    SetRenderStateValue(rs::kZEnable, state.depth_stencil != 0 ? 1u : 0u);
+}
+
 // HRESULT Direct3D_CreateDevice(UINT Adapter, D3DDEVTYPE DeviceType, HWND hFocusWindow,
 //     DWORD BehaviorFlags, D3DPRESENT_PARAMETERS* pPresentationParameters,
 //     IDirect3DDevice8** ppReturnedDeviceInterface)
@@ -155,7 +184,7 @@ void Direct3D_CreateDevice()
     }
 
     D3dState& state = State();
-    std::lock_guard<std::mutex> lock(state.mutex);
+    std::unique_lock<std::mutex> lock(state.mutex);
     if (state.device != 0)
     {
         std::fprintf(stderr, "[d3d8] Direct3D_CreateDevice called again; the device already exists\n");
@@ -203,6 +232,8 @@ void Direct3D_CreateDevice()
     // The library global the original sets; its own functions (and the
     // binding fences, d3d8_globals.h) read the device through it.
     SetDeviceObject(state.device);
+    lock.unlock();
+    InitializeDeviceState(state);
     Memory().Write32(out, state.device);
     call.Return(kD3dOk, 6);
 }

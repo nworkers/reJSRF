@@ -3,6 +3,7 @@
 #include "d3d8_globals.h"
 #include "d3d8_internal.h"
 #include "d3d8_resource.h"
+#include "d3d8_trace.h"
 
 #include <cstring>
 
@@ -63,14 +64,11 @@ void D3DDevice_SetRenderState_ZBias()
 }
 
 // void __fastcall D3DDevice_SetRenderState_Simple(DWORD Method, DWORD Value)
-// The title's inline already stored the D3D__RenderState slot; Method is the
-// NV2A register with the value in NV2A encoding.
+// The title's inline already stored the D3D__RenderState slot, which drawing
+// reads; Method and Value only feed the original's push buffer.
 void D3DDevice_SetRenderState_Simple()
 {
     HleCall call;
-    const uint32_t slot = (call.Ecx() & nv2a::kMethodMask) >> 2;
-    g_pipeline.nv2a[slot] = call.Edx();
-    g_pipeline.nv2a_set[slot] = true;
     call.Return(kD3dOk, 0);
 }
 
@@ -133,6 +131,20 @@ void D3DDevice_SetTexture()
         if (texture != 0)
         {
             AddResourceBinding(texture);
+            if (D3d8TraceEnabled())
+            {
+                const uint32_t format_field = Memory().Read32(texture + header::kFormat);
+                const uint32_t size_field = Memory().Read32(texture + header::kSize);
+                const uint32_t common = Memory().Read32(texture + header::kCommon);
+                TraceOnce(Format("texture %08X %08X", format_field & 0xFFFFFF0C, size_field != 0 ? 1u : 0u),
+                          Format("texture format %02X dim %u levels %u cube %u %s, type %X (first: header %08X, "
+                                 "Format %08X Size %08X)",
+                                 HeaderFormat(texture), (format_field >> header::kFormatDimensionShift) & 0xF,
+                                 (format_field >> header::kFormatMipLevelsShift) & 0xF,
+                                 (format_field & header::kFormatCubeMap) != 0 ? 1u : 0u,
+                                 size_field != 0 ? "linear" : "swizzled", (common & header::kTypeMask) >> 16,
+                                 texture, format_field, size_field));
+            }
         }
         g_pipeline.textures[stage] = texture;
         if (previous != 0)
@@ -258,12 +270,6 @@ void AcceptThree()
 PipelineState& Pipeline()
 {
     return g_pipeline;
-}
-
-uint32_t Nv2aState(uint32_t method, uint32_t fallback)
-{
-    const uint32_t slot = (method & nv2a::kMethodMask) >> 2;
-    return g_pipeline.nv2a_set[slot] ? g_pipeline.nv2a[slot] : fallback;
 }
 
 void RegisterStateExports(runtime::HleRegistry& registry)
