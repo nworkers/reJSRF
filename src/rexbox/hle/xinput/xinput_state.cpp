@@ -61,7 +61,7 @@ void XInputOpen()
         call.Return(0, 4);
         return;
     }
-    const auto block = Heap().Allocate(kHandleBlockSize, runtime::GuestHeap::kPageSize, false);
+    const auto block = Heap().AllocateSmall(kHandleBlockSize);
     if (!block)
     {
         call.Return(0, 4);

@@ -4,17 +4,17 @@
 
 This records how far the recompiled US build gets when run from its entry point. It is updated by each task; earlier frontiers stay in the history below.
 
-## 현재 / Current (issue #27, 2026-10-13)
+## 현재 / Current (issue #29, 2026-10-13)
 
 | 항목 / Item | 값 / Value |
 |---|---|
-| 생성 코드 / Generated code | xboxrecomp `rejsrf` `500de2b1`(+`FCMOVcc`): `FPU: fcmov` 주석 0건 / no `FPU: fcmov` comments left |
-| 실행 결과 / Outcome | **로고 시퀀스가 끝까지 진행한다: SEGA → Smilebit → ADX → Dolby Digital → 낙서 경고문, 각각 감마 램프 페이드. 약 2,400프레임(40초) 뒤 스테이지 자원과 사운드 버퍼를 대량으로 만들다가 `NtAllocateVirtualMemory out of guest memory`로 멈추고(간접 호출 0 건너뜀), 프로세스가 끝난다(종료 코드 3). 정점 셰이더 프로그램 그리기가 처음 나온다 / the logo sequence runs to the end: SEGA → Smilebit → ADX → Dolby Digital → the anti-graffiti notice, each with gamma-ramp fades. After about 2,400 frames (40 s), while creating stage assets and many sound buffers, it hits `NtAllocateVirtualMemory out of guest memory` (an indirect call to 0 is skipped) and the process ends (exit code 3). The first draws with a vertex-shader program appear** |
+| 게스트 메모리 / Guest memory | 주소 공간 128 MiB: 아래 64 MiB 물리 RAM, 위 64 MiB 가상 메모리 전용, 작은 객체 slab / a 128 MiB address space: the low 64 MiB physical RAM, the upper 64 MiB virtual memory only, slabs for small objects |
+| 실행 결과 / Outcome | **로고 시퀀스 뒤 스테이지를 읽고 3D 어트랙트 데모(도시 비행과 거리)가 이어진다. 150초 실행에서 메모리 부족 없이 watchdog으로 끝난다. 가상 메모리는 `0x04000000`~`0x05830000`에 놓인다. 3,600번째 present는 검은 화면이다(원인 미확인). 아직 그리지 않는 경로: 정점 셰이더 프로그램(`DrawIndexedVertices ... 03FD63C1`), `Begin`/`End` 즉시 모드, 고정 기능 조명, 텍스처 변환·좌표 생성 / after the logo sequence the stage loads and the 3D attract demo (a flight over the city, then the streets) follows. A 150 s run ends by watchdog with no memory exhaustion. Virtual memory sits at `0x04000000`–`0x05830000`. The 3,600th present is black (cause not known). Paths not drawn yet: vertex-shader programs (`DrawIndexedVertices ... 03FD63C1`), `Begin`/`End` immediate mode, fixed-function lighting, texture transforms and coordinate generation** |
 
-* **확인됨**: 로고에 머물던 원인은 lift되지 않은 `FCMOVcc`였다. 페이드 색을 자르는 min/max가 항상 1과 0을 돌려 페이드가 끝나지 않았다([설계 i027](../design/20261013-i027-fcmov-logo-fade.md)).
-* **미확정**: 게스트 메모리 부족의 원인(64 MiB 안의 할당 방식, 해제 누락, 실제 요구량). 다음 task.
-* **Confirmed**: the unlifted `FCMOVcc` kept the boot on the logo. The min/max that clamp the fade color always returned 1 and 0, so the fade never completed ([design i027](../design/20261013-i027-fcmov-logo-fade.md)).
-* **Unresolved**: why guest memory runs out (allocation within 64 MiB, missing frees, or the real demand). Next task.
+* **확인됨**: 메모리 부족은 평면 64 MiB가 예약한 페이지를 모두 차지한 탓이었다. 작은 예약의 64 KiB 올림(약 19 MiB), 커밋되지 않은 예약 3.8 MiB, 페이지 하나씩 쓰던 HLE 객체가 겹쳤다([설계 i029](../design/20261013-i029-guest-memory.md)).
+* **미확정**: 3,600번째 present의 검은 화면이 장면 전환인지, 그리지 않는 경로 탓인지.
+* **Confirmed**: memory ran out because the flat 64 MiB backed every reserved page. Three costs added up: small reservations rounded to 64 KiB (about 19 MiB), 3.8 MiB of uncommitted reservations, and HLE objects that took a page each ([design i029](../design/20261013-i029-guest-memory.md)).
+* **Unresolved**: whether the black 3,600th present is a scene transition or a path not drawn yet.
 
 ## 이력 / History
 
@@ -31,6 +31,14 @@ This records how far the recompiled US build gets when run from its entry point.
 | #21 | 노드 순회 fault 해결(xboxrecomp #200), 프레임 루프가 계속 돎, 그리기·`Play` 없음 / node-walk fault fixed (xboxrecomp #200); the frame loop keeps running, no drawing or `Play` yet |
 | #23 | 고정 기능 그리기(GL), 60 Hz 페이싱, "Presented by SEGA" 로고 표시 뒤 로고에 머묾 / fixed-function drawing on GL, 60 Hz pacing; shows the "Presented by SEGA" logo and stays on it |
 | #27 | `FCMOVcc` lift; 로고 시퀀스 완료, 스테이지 로드 중 게스트 메모리 부족 / `FCMOVcc` lifted; the logo sequence completes, guest memory runs out while loading the stage |
+| #29 | 게스트 주소 공간 128 MiB와 slab; 스테이지 로드 통과, 3D 어트랙트 데모 / a 128 MiB guest address space and slabs; past the stage load, the 3D attract demo |
+
+### issue #27 frontier 상세 / issue #27 frontier details
+
+| 항목 / Item | 값 / Value |
+|---|---|
+| 생성 코드 / Generated code | xboxrecomp `rejsrf` `500de2b1`(+`FCMOVcc`) |
+| 실행 결과 / Outcome | **로고 시퀀스(SEGA → Smilebit → ADX → Dolby Digital → 낙서 경고문)가 끝까지 진행하고, 약 40초 뒤 스테이지 자원을 만들다가 `NtAllocateVirtualMemory out of guest memory`로 멈춘다(종료 코드 3) / the logo sequence (SEGA → Smilebit → ADX → Dolby Digital → the anti-graffiti notice) runs to the end; after about 40 s, while creating stage assets, it hits `NtAllocateVirtualMemory out of guest memory` (exit code 3)** |
 
 ### issue #23 frontier 상세 / issue #23 frontier details
 

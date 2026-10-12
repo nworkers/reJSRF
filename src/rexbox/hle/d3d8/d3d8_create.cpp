@@ -48,7 +48,9 @@ uint32_t Log2Ceil(uint32_t value)
 // pixel or vertex memory (0 for none). Returns 0 when memory is exhausted.
 GuestAddress AllocateObject(uint32_t header_bytes, uint32_t data_bytes, GuestAddress* data)
 {
-    const auto header = Heap().Allocate(header_bytes, runtime::GuestHeap::kPageSize, false);
+    const auto header = header_bytes <= runtime::GuestHeap::kSmallMax
+                            ? Heap().AllocateSmall(header_bytes)
+                            : Heap().Allocate(header_bytes, runtime::GuestHeap::kPageSize, false);
     if (!header)
     {
         return 0;

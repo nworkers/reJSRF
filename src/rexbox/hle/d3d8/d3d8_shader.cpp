@@ -19,6 +19,7 @@ namespace
 // A vertex shader handle from CreateVertexShader is a pointer with bit 0 set
 // (D3DFVF_RESERVED0); plain FVF codes have it clear.
 constexpr uint32_t kVertexShaderHandleFlag = 0x1;
+constexpr uint32_t kVertexShaderObjectSize = 0x40;
 constexpr uint32_t kDeclarationEnd = 0xFFFFFFFF;
 constexpr uint32_t kMaxDeclarationTokens = 256;
 constexpr uint32_t kPixelShaderDefBytes = 0xBC;  // D3DPIXELSHADERDEF (inferred size)
@@ -55,15 +56,16 @@ void D3DDevice_CreateVertexShader()
         call.Return(kD3dErrInvalidCall, 4);
         return;
     }
-    // The handle must be a valid guest pointer: one zeroed page stands for the object.
-    const auto object = Heap().Allocate(runtime::GuestHeap::kPageSize, runtime::GuestHeap::kPageSize, false);
+    // The handle must be a valid guest pointer: a zeroed small block stands for
+    // the object. Its 16-byte alignment leaves bit 0 free for the handle flag.
+    const auto object = Heap().AllocateSmall(kVertexShaderObjectSize);
     if (!object)
     {
         call.Return(kD3dErrNotAvailable, 4);
         return;
     }
     runtime::GuestMemory& memory = Memory();
-    memory.Fill(*object, 0, runtime::GuestHeap::kPageSize);
+    memory.Fill(*object, 0, kVertexShaderObjectSize);
     VertexShader shader;
     for (uint32_t i = 0; i < kMaxDeclarationTokens; ++i)
     {

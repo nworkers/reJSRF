@@ -29,9 +29,6 @@ namespace rexbox::hle::d3d8
 namespace
 {
 
-// Vertex and index data are physical addresses for the NV2A (see d3d8_gl_textures.cpp).
-constexpr uint32_t kPhysicalMask = 0x03FFFFFF;
-
 // D3DPRIMITIVETYPE (Xbox; inferred, the title's 5 draws a triangle list).
 namespace prim
 {
