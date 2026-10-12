@@ -122,6 +122,115 @@ GLuint Framebuffer(GuestAddress color, GuestAddress depth)
     return framebuffer;
 }
 
+struct RampPresenter
+{
+    bool tried = false;
+    GLuint program = 0;
+    GLuint vertex_array = 0;
+    GLuint ramp_texture = 0;
+};
+
+RampPresenter g_ramp_presenter;
+
+GLuint CompileStage(GLenum type, const std::string& source)
+{
+    GlFunctions& gl = Gl();
+    const GLuint shader = gl.CreateShader(type);
+    const GLchar* text = source.c_str();
+    gl.ShaderSource(shader, 1, &text, nullptr);
+    gl.CompileShader(shader);
+    GLint ok = 0;
+    gl.GetShaderiv(shader, kGlCompileStatus, &ok);
+    if (ok == 0)
+    {
+        GLchar log[1024] = {};
+        gl.GetShaderInfoLog(shader, sizeof(log), nullptr, log);
+        ReportOnce("gamma shader", Format("gamma present shader does not compile: %s", log));
+        gl.DeleteShader(shader);
+        return 0;
+    }
+    return shader;
+}
+
+// Builds the gamma present program once; false (reported) when it cannot.
+bool PrepareRampPresenter()
+{
+    RampPresenter& p = g_ramp_presenter;
+    if (p.tried)
+    {
+        return p.program != 0;
+    }
+    p.tried = true;
+    GlFunctions& gl = Gl();
+    const bool es = GlIsEs();
+    const GLuint vertex = CompileStage(kGlVertexShader, GammaPresentVertexShader(es));
+    const GLuint fragment = CompileStage(kGlFragmentShader, GammaPresentFragmentShader(es));
+    if (vertex == 0 || fragment == 0)
+    {
+        return false;
+    }
+    const GLuint program = gl.CreateProgram();
+    gl.AttachShader(program, vertex);
+    gl.AttachShader(program, fragment);
+    gl.LinkProgram(program);
+    gl.DeleteShader(vertex);
+    gl.DeleteShader(fragment);
+    GLint linked = 0;
+    gl.GetProgramiv(program, kGlLinkStatus, &linked);
+    if (linked == 0)
+    {
+        ReportOnce("gamma link", "gamma present program does not link");
+        return false;
+    }
+    gl.UseProgram(program);
+    gl.Uniform1i(gl.GetUniformLocation(program, "u_image"), 0);
+    gl.Uniform1i(gl.GetUniformLocation(program, "u_ramp"), 1);
+    gl.GenVertexArrays(1, &p.vertex_array);
+    gl.GenTextures(1, &p.ramp_texture);
+    gl.BindTexture(kGlTexture2D, p.ramp_texture);
+    gl.TexParameteri(kGlTexture2D, kGlTextureMinFilter, static_cast<GLint>(kGlNearest));
+    gl.TexParameteri(kGlTexture2D, kGlTextureMagFilter, static_cast<GLint>(kGlNearest));
+    gl.TexParameteri(kGlTexture2D, kGlTextureMaxLevel, 0);
+    p.program = program;
+    return true;
+}
+
+// Draws `texture` into the bound draw framebuffer's (x, y, width, height)
+// with each channel looked up in `ramp`. False when the program is missing.
+bool DrawThroughRamp(GLuint texture, const GammaRamp& ramp, GLint x, GLint y, uint32_t width, uint32_t height)
+{
+    if (!PrepareRampPresenter())
+    {
+        return false;
+    }
+    GlFunctions& gl = Gl();
+    const RampPresenter& p = g_ramp_presenter;
+    const auto texels = GammaRampTexels(ramp);
+    gl.ActiveTexture(kGlTexture0 + 1);
+    gl.BindSampler(1, 0);
+    gl.BindTexture(kGlTexture2D, p.ramp_texture);
+    gl.PixelStorei(kGlUnpackAlignment, 1);
+    gl.TexImage2D(kGlTexture2D, 0, static_cast<GLint>(kGlRgba8), static_cast<GLsizei>(GammaRamp::kEntries), 1, 0,
+                  kGlRgba, kGlUnsignedByte, texels.data());
+    gl.ActiveTexture(kGlTexture0);
+    gl.BindSampler(0, 0);
+    gl.BindTexture(kGlTexture2D, texture);
+    gl.Disable(kGlDepthTest);
+    gl.Disable(kGlBlend);
+    gl.Disable(kGlCullFace);
+    gl.Disable(kGlStencilTest);
+    gl.Disable(kGlPolygonOffsetFill);
+    if (gl.PolygonMode != nullptr)
+    {
+        gl.PolygonMode(kGlFrontAndBack, kGlFill);
+    }
+    gl.Viewport(x, y, static_cast<GLsizei>(width), static_cast<GLsizei>(height));
+    gl.UseProgram(p.program);
+    gl.BindVertexArray(p.vertex_array);
+    gl.DrawArrays(kGlTriangles, 0, 3);
+    return true;
+}
+
 void WriteLittleEndian(std::vector<uint8_t>* out, uint32_t value, int bytes)
 {
     for (int i = 0; i < bytes; ++i)
@@ -167,7 +276,7 @@ uint32_t RenderTargetTexture(GuestAddress color)
     return it != g_colors.end() ? it->second.texture : 0;
 }
 
-void PresentRenderTarget(GuestAddress color)
+void PresentRenderTarget(GuestAddress color, const GammaRamp& ramp)
 {
     GlFunctions& gl = Gl();
     const ColorTarget& source = Color(color);
@@ -192,13 +301,17 @@ void PresentRenderTarget(GuestAddress color)
     gl.ColorMask(1, 1, 1, 1);
     gl.ClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     gl.Clear(kGlColorBufferBit);
-    gl.BlitFramebuffer(0, 0, static_cast<GLint>(source.width), static_cast<GLint>(source.height), x, y,
-                       x + static_cast<GLint>(width), y + static_cast<GLint>(height), kGlColorBufferBit, kGlLinear);
+    if (ramp.IsIdentity() || !DrawThroughRamp(source.texture, ramp, x, y, width, height))
+    {
+        gl.BlitFramebuffer(0, 0, static_cast<GLint>(source.width), static_cast<GLint>(source.height), x, y,
+                           x + static_cast<GLint>(width), y + static_cast<GLint>(height), kGlColorBufferBit,
+                           kGlLinear);
+    }
     platform::PresentDisplay();
     gl.BindFramebuffer(kGlFramebuffer, Framebuffer(g_bound_color, g_bound_depth));
 }
 
-bool DumpRenderTarget(GuestAddress color, const std::string& path)
+bool DumpRenderTarget(GuestAddress color, const std::string& path, const GammaRamp& ramp)
 {
     GlFunctions& gl = Gl();
     const ColorTarget& source = Color(color);
@@ -208,6 +321,8 @@ bool DumpRenderTarget(GuestAddress color, const std::string& path)
     gl.ReadPixels(0, 0, static_cast<GLsizei>(source.width), static_cast<GLsizei>(source.height), kGlRgba,
                   kGlUnsignedByte, rgba.data());
     gl.BindFramebuffer(kGlFramebuffer, Framebuffer(g_bound_color, g_bound_depth));
+
+    ApplyGammaRamp(ramp, rgba.data(), static_cast<size_t>(source.width) * source.height);
 
     // 24-bit BMP rows are stored bottom-up like GL's, padded to 4 bytes, as B, G, R.
     const uint32_t row_bytes = (source.width * 3 + 3) & ~3u;

@@ -137,6 +137,10 @@ NV2A 색 포맷이다(추정, xboxrecomp `d3d8_xbox.h`(MIT)의 원래 Xbox 항�
 
 `D3DTOP` (1 `DISABLE` … 26 `BUMPENVMAPLUMINANCE`) and `D3DTA` keep the PC numbers. `D3DTA` is 0 `DIFFUSE`, 1 `CURRENT`, 2 `TEXTURE`, 3 `TFACTOR`, 4 `SPECULAR`, 5 `TEMP`, with the modifiers 0x10 `COMPLEMENT` and 0x20 `ALPHAREPLICATE` (inferred). The title's 4 `MODULATE`, 2 `TEXTURE`, 0 `DIFFUSE` and 1 `CURRENT` are confirmed on screen. The Xbox default is `MODULATE` (`TEXTURE`, `CURRENT`) on every stage, so a stage without a texture is treated as reading white (inferred; the logo screen comes out right that way).
 
+## 11. 감마 램프 / Gamma ramp
+
+* `D3DGAMMARAMP`(Xbox, **확인됨**: lift된 `SetGammaRamp` `0x0018CB60`)는 `BYTE red[256], green[256], blue[256]`, 768바이트다(PC는 WORD). `SetGammaRamp(Flags, pRamp)`는 이 표를 디바이스에 두고, `D3DSGR_IMMEDIATE`(bit 0)이면 RAMDAC 팔레트에 R, G, B 순서로 바로 쓰며, 아니면 다음 vblank에 반영한다. 게임은 로고 페이드를 이 표로 하며, 로고가 다 보이는 동안에는 단위 램프를 매 프레임 다시 설정한다.
+* The Xbox `D3DGAMMARAMP` (**confirmed** from the lifted `SetGammaRamp` at `0x0018CB60`) is `BYTE red[256], green[256], blue[256]`, 768 bytes (the PC's is WORD). `SetGammaRamp(Flags, pRamp)` keeps the table in the device and, with `D3DSGR_IMMEDIATE` (bit 0), writes it to the RAMDAC palette at once, R, G, B per entry; otherwise at the next vertical blank. The game fades its logos with it, and re-sets an identity ramp every frame while a logo is fully shown.
 ## 출처 / Sources
 
 * XbSymbolDatabase, `src/OOVPADatabase/D3D8_OOVPA.c` (MIT): 심볼 이름, 규약, 인자 / symbol names, conventions, parameters

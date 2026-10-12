@@ -52,7 +52,7 @@ flowchart BT
 | `rexbox_kernel_probe` | `tools/kernel_probe/` | 게임 없이 커널 export 검사(사용자 APC 포함 42개, CI) | 구현 |
 | `rexbox_dsound_probe` | `tools/dsound_probe/` | 게임 없이 DSOUND export 검사(수동 출력으로 믹서를 직접 돌림; Lock, 커서, 반복 구간, 형식 디코드, 믹스 빈, 효과 서술자, pop 수; 48개, CI) | 구현 |
 | `rejsrf_decomp_check` | `tools/decomp_check/` | 디컴파일 함수와 lift 본문 비교 | 구현 |
-| `rexbox_d3d8_probe` | `tools/d3d8_probe/` | 게임·GPU 없이 D3D8 HLE의 순수 부분 검사(스위즐 해제, 16·32비트 포맷, DXT1/3/5, FVF 배치, 고정 기능 GLSL 생성; 73개, CI) | 구현 |
+| `rexbox_d3d8_probe` | `tools/d3d8_probe/` | 게임·GPU 없이 D3D8 HLE의 순수 부분 검사(스위즐 해제, 16·32비트 포맷, DXT1/3/5, FVF 배치, 고정 기능 GLSL 생성, 감마 램프; 81개, CI) | 구현 |
 | `rejsrf_d3d8_check` | `tools/d3d8_check/` | D3D8 HLE export와 lift된 XDK 원본(`sub_X_gen`) 비교(eax, esp, 스크래치 메모리), `--dump`로 원본의 답 출력; 리소스 헤더 케이스, 디바이스 서피스 인코딩, 상태 setter가 남긴 라이브러리 전역 비교 포함 | 구현(14,018 케이스) |
 
 ### 커널 HLE 파일
@@ -80,7 +80,7 @@ flowchart BT
 | `d3d8_internal.h` | Xbox D3D 상수, 구조체 오프셋(`D3DDISPLAYMODE`, `D3DPRESENT_PARAMETERS`, `D3DCAPS8`), `D3dState` |
 | `d3d8_adapter.cpp` | `Direct3D_GetAdapterCount`, `D3D_GetAdapterModeCount`, `D3D_EnumAdapterModes`, `D3D_CheckDeviceFormat`, `Direct3D_CheckDeviceMultiSampleType`; 모드 표 24개와 포맷 능력 바이트 표(측정값) |
 | `d3d8_caps.cpp` | `D3D_GetDeviceCaps`, `D3DDevice_GetDeviceCaps`; `D3DCAPS8` 53 DWORD 표(측정값) |
-| `d3d8_device.cpp` | `Direct3D_CreateDevice`(표시 생성, 백버퍼 2개·깊이 서피스 생성, 원본 기본 상태 루틴 실행), `GetBackBuffer`, `GetDepthStencilSurface`, `SetRenderTarget`, `Reset`, `SetViewport`, `Clear`(Xbox `D3DCLEAR` 비트), `Swap`(vblank 페이싱, blit, frame dump), 디바이스 refcount, `GetRasterStatus`, `BlockUntilVerticalBlank`, 타일·감마·필터 등 |
+| `d3d8_device.cpp` | `Direct3D_CreateDevice`(표시 생성, 백버퍼 2개·깊이 서피스 생성, 원본 기본 상태 루틴 실행), `GetBackBuffer`, `GetDepthStencilSurface`, `SetRenderTarget`, `Reset`, `SetViewport`, `Clear`(Xbox `D3DCLEAR` 비트), `Swap`(vblank 페이싱, 감마 램프를 거친 표시, frame dump), `SetGammaRamp`/`GetGammaRamp`, 디바이스 refcount, `GetRasterStatus`, `BlockUntilVerticalBlank`, 타일·감마·필터 등 |
 | `d3d8_resource.h/.cpp` | Xbox `D3DResource` 헤더 레이아웃과 `Common`/`Format`/`Size` 비트, `ResourceTable`(헤더 주소 → 호스트 상태), `AddRef`/`Release`/`GetType`/`D3DSurface_GetDesc`, 디바이스 서피스 생성 |
 | `d3d8_create.cpp` | `CreateTexture`/`CreateVolumeTexture`/`CreateImageSurface`/`CreateVertexBuffer`/`CreateIndexBuffer`, `D3DResource_Register`, `GetSurfaceLevel`, `Lock*`, 연속 메모리 |
 | `d3d8_globals.h/.cpp` | 라이브러리 전역(`D3D__RenderState`, `D3D__TextureState`, `D3D_g_Stream`, `D3D__IndexData`, `D3D_g_pDevice`)의 위치와 읽기·쓰기 |
@@ -93,8 +93,9 @@ flowchart BT
 | `d3d8_ff_shader.h/.cpp` | 고정 기능 키와 GLSL 생성(XYZRHW·XYZ 정점, 텍스처 스테이지, 알파 테스트)(순수) |
 | `d3d8_trace.h/.cpp` | `REXBOX_D3D8_TRACE`와 미구현 경로의 한 번 보고 |
 | `d3d8_vblank.h/.cpp` | 가상 vblank 시계(디스플레이 refresh, 기본 60 Hz) |
+| `d3d8_gamma.h/.cpp` | 감마 램프(Xbox `D3DGAMMARAMP` 768바이트), CPU 적용, present용 GLSL(순수) |
 | `d3d8_gl.h/.cpp` | 쓰는 GL 함수만 담은 함수 표, `platform::GetGlProcAddress`로 채움 |
-| `d3d8_gl_targets.h/.cpp` | 렌더 타깃: 색 서피스 = GL 텍스처, 깊이 = 렌더버퍼, 쌍마다 FBO; present blit, BMP 덤프 |
+| `d3d8_gl_targets.h/.cpp` | 렌더 타깃: 색 서피스 = GL 텍스처, 깊이 = 렌더버퍼, 쌍마다 FBO; present(단위 램프는 blit, 아니면 감마 셰이더), BMP 덤프 |
 | `d3d8_gl_textures.h/.cpp` | 텍스처 캐시(헤더 → GL 텍스처, Lock·해시로 재업로드), 스테이지 샘플러 |
 | `d3d8_gl_programs.h/.cpp` | 고정 기능 프로그램 캐시, 스트리밍 VBO/IBO와 VAO |
 

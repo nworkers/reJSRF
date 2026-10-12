@@ -7,6 +7,8 @@
 #ifndef REXBOX_HLE_D3D8_D3D8_INTERNAL_H
 #define REXBOX_HLE_D3D8_D3D8_INTERNAL_H
 
+#include "d3d8_gamma.h"
+
 #include "rexbox/runtime/environment.h"
 #include "rexbox/runtime/guest_cpu.h"
 #include "rexbox/runtime/guest_heap.h"
@@ -163,6 +165,7 @@ struct D3dState
     uint32_t device_ref_count = 1;
     uint32_t fence_counter = 0;
     std::array<std::array<uint32_t, 6>, 8> tiles = {};  // D3DTILE per tile register
+    GammaRamp gamma_ramp;  // SetGammaRamp's table, applied when a frame is presented
 };
 
 D3dState& State();

@@ -80,6 +80,7 @@ add_library(rexbox_hle_d3d8 STATIC
     hle/d3d8/d3d8_device.cpp
     hle/d3d8/d3d8_ff_shader.cpp
     hle/d3d8/d3d8_fvf.cpp
+    hle/d3d8/d3d8_gamma.cpp
     hle/d3d8/d3d8_gl.cpp
     hle/d3d8/d3d8_gl_programs.cpp
     hle/d3d8/d3d8_gl_targets.cpp

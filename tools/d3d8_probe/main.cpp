@@ -7,6 +7,7 @@
 
 #include "d3d8_ff_shader.h"
 #include "d3d8_fvf.h"
+#include "d3d8_gamma.h"
 #include "d3d8_texture_format.h"
 
 #include <cstdint>
@@ -257,10 +258,38 @@ void CheckFixedFunctionShader()
            "TEMP result and complemented argument");
 }
 
+void CheckGammaRamp()
+{
+    GammaRamp ramp;
+    Expect(ramp.IsIdentity(), "a new ramp is identity");
+    uint8_t pixel[8] = {10, 20, 30, 40, 200, 100, 0, 255};
+    ApplyGammaRamp(ramp, pixel, 2);
+    Expect(pixel[0] == 10 && pixel[1] == 20 && pixel[2] == 30 && pixel[3] == 40, "identity keeps the pixel");
+
+    // A half-brightness fade on red and blue, green inverted.
+    for (size_t i = 0; i < GammaRamp::kEntries; ++i)
+    {
+        ramp.bytes[i] = static_cast<uint8_t>(i / 2);
+        ramp.bytes[GammaRamp::kEntries + i] = static_cast<uint8_t>(255 - i);
+        ramp.bytes[2 * GammaRamp::kEntries + i] = static_cast<uint8_t>(i / 2);
+    }
+    Expect(!ramp.IsIdentity(), "a changed ramp is not identity");
+    ApplyGammaRamp(ramp, pixel, 2);
+    ExpectTexel(pixel, 5, 235, 15, 40, "ramp applied to pixel 0, alpha kept");
+    ExpectTexel(pixel + 4, 100, 155, 0, 255, "ramp applied to pixel 1, alpha kept");
+
+    const auto texels = GammaRampTexels(ramp);
+    ExpectTexel(texels.data() + 255 * 4, 127, 0, 127, 255, "ramp texel 255 = red, green, blue tables");
+    Expect(GammaPresentFragmentShader(false).find("texelFetch(u_ramp") != std::string::npos,
+           "present shader looks the ramp up");
+    Expect(GammaPresentVertexShader(true).rfind("#version 300 es", 0) == 0, "GLES present shader");
+}
+
 }  // namespace
 
 int main()
 {
+    CheckGammaRamp();
     CheckSwizzle();
     CheckPixelFormats();
     CheckDxt();
