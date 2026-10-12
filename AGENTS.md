@@ -270,6 +270,7 @@ If the requirement is a simple question or confirmation request, answer it direc
 * 전염성 라이선스 프로젝트(xemu, Cxbx-Reloaded 등)는 동작을 이해하는 지식 출처로만 참고하고, 코드를 옮기지 않는다.
 * 라이선스가 명시되지 않았거나 LLM 기여를 금지한 프로젝트(예: Codeberg `KeybadeBlox/JSRF-Decompilation`)의 코드는 가져오지 않는다. 공개 문서의 사실은 출처를 달아 참고할 수 있다.
 * 서드파티 코드를 가져오면 같은 작업에서 `THIRD_PARTY_NOTICES.md`를 갱신한다. 예외가 필요하면 먼저 문서화하고 사용자 확인을 받는다.
+* 가져온 서드파티 코드에서 문제(버그, 이식성)를 찾으면 우리 사본만 고치지 않고 업스트림에 기여한다. 특히 같은 호스트 계층을 쓰는 [reexec/re2DJ](https://github.com/reexec/re2DJ)(BSD-3-Clause)는 필요할 때 참고하고, 얻어온 코드의 수정은 re2DJ에 되돌려 보낸다.
 
 ## License Rules
 
@@ -279,6 +280,7 @@ If the requirement is a simple question or confirmation request, answer it direc
 * Copyleft projects (xemu, Cxbx-Reloaded, ...) are consulted only as sources of knowledge about behavior; their code is not carried over.
 * Do not take code from projects with no stated license or that forbid LLM contributions (for example Codeberg `KeybadeBlox/JSRF-Decompilation`). Facts from their public documents may be used with attribution.
 * When bringing in third-party code, update `THIRD_PARTY_NOTICES.md` in the same task. If an exception is needed, document it and confirm with the user first.
+* When a problem (a bug, a portability issue) is found in third-party code we took, contribute the fix upstream instead of fixing only our copy. In particular, consult [reexec/re2DJ](https://github.com/reexec/re2DJ) (BSD-3-Clause), which shares our host layer, when useful, and send fixes to code taken from it back to re2DJ.
 
 ---
 
