@@ -96,7 +96,7 @@ bool CreateDisplay(const DisplayConfig& config, std::string* error)
     SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
 
     g_display.window = SDL_CreateWindow(config.title, static_cast<int>(config.width), static_cast<int>(config.height),
-                                        SDL_WINDOW_OPENGL);
+                                        SDL_WINDOW_OPENGL | (config.hidden ? SDL_WINDOW_HIDDEN : 0));
     if (g_display.window == nullptr)
     {
         SetError(error, "SDL_CreateWindow failed");
@@ -116,7 +116,10 @@ bool CreateDisplay(const DisplayConfig& config, std::string* error)
         ReleaseLocked();
         return false;
     }
-    SDL_GL_SetSwapInterval(1);
+    // No vsync: the title paces itself by the emulated vertical blank (the
+    // HLE's virtual clock), whatever the monitor's refresh; waiting for a
+    // hidden window's blank can also block indefinitely on some drivers.
+    SDL_GL_SetSwapInterval(0);
 
     int value = 0;
     SDL_GL_GetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, &value);

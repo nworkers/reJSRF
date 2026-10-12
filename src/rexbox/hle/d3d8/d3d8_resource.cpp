@@ -1,5 +1,6 @@
 #include "d3d8_resource.h"
 
+#include "d3d8_gl_textures.h"
 #include "d3d8_internal.h"
 
 #include <algorithm>
@@ -60,6 +61,7 @@ void DestroyResource(GuestAddress resource)
     {
         Heap().Free(resource);
     }
+    ForgetTexture(resource);
     g_resources.erase(it);
 }
 

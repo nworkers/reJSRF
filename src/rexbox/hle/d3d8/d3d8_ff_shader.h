@@ -89,6 +89,9 @@ struct FixedFunctionKey
         uint32_t result_arg = ta::kCurrent;
         uint8_t tex_coord_index = 0;  // which vertex texture-coordinate set
         SamplerKind sampler = SamplerKind::kNone;
+        // Linear (unswizzled) textures are sampled with texel coordinates on
+        // the NV2A (inferred); the shader scales them by u_tex_scale<stage>.
+        bool unnormalized = false;
     };
     Stage stages[kFixedFunctionStages];
 
@@ -111,7 +114,8 @@ constexpr uint32_t kTexCoord0 = 3;  // .. kTexCoord0 + 3
 // GLSL sources for `key`. `gles` selects "#version 300 es" over "330 core".
 // Uniforms: u_transform (mat4, World*View*Projection, row-vector convention),
 // u_target (vec4: render-target width, height, screen-space offset x, y),
-// u_tex0..3, u_tfactor (vec4), u_alpha_ref (float, 0..255).
+// u_tex0..3, u_tex_scale0..3 (vec2, 1/size for unnormalized stages),
+// u_tfactor (vec4), u_alpha_ref (float, 0..255).
 std::string GenerateFixedFunctionVertexShader(const FixedFunctionKey& key, bool gles);
 std::string GenerateFixedFunctionFragmentShader(const FixedFunctionKey& key, bool gles);
 

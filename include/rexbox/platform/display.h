@@ -35,6 +35,7 @@ struct DisplayConfig
     uint32_t height = 480;
     const char* title = "";
     GlApi api = GlApi::kDesktopGl;
+    bool hidden = false;  // create the window invisible (diagnostics that still need a GL context)
 };
 
 struct DisplayInfo

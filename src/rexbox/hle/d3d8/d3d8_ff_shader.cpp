@@ -147,10 +147,10 @@ std::string FixedFunctionKey::Serialize() const
     text = buffer;
     for (const Stage& stage : stages)
     {
-        std::snprintf(buffer, sizeof(buffer), "|%X,%X,%X,%X/%X,%X,%X,%X/%X/%u/%u", stage.color_op, stage.color_arg[0],
-                      stage.color_arg[1], stage.color_arg[2], stage.alpha_op, stage.alpha_arg[0], stage.alpha_arg[1],
-                      stage.alpha_arg[2], stage.result_arg, stage.tex_coord_index,
-                      static_cast<unsigned>(stage.sampler));
+        std::snprintf(buffer, sizeof(buffer), "|%X,%X,%X,%X/%X,%X,%X,%X/%X/%u/%u%c", stage.color_op,
+                      stage.color_arg[0], stage.color_arg[1], stage.color_arg[2], stage.alpha_op, stage.alpha_arg[0],
+                      stage.alpha_arg[1], stage.alpha_arg[2], stage.result_arg, stage.tex_coord_index,
+                      static_cast<unsigned>(stage.sampler), stage.unnormalized ? 'u' : 'n');
         text += buffer;
         if (stage.color_op == top::kDisable)
         {
@@ -229,6 +229,10 @@ std::string GenerateFixedFunctionFragmentShader(const FixedFunctionKey& key, boo
         if (key.stages[s].sampler != SamplerKind::kNone)
         {
             text += std::string("uniform ") + SamplerType(key.stages[s].sampler) + " u_tex" + Number(s) + ";\n";
+            if (key.stages[s].unnormalized)
+            {
+                text += "uniform vec2 u_tex_scale" + Number(s) + ";\n";
+            }
         }
     }
     text += "uniform vec4 u_tfactor;\n"
@@ -250,8 +254,12 @@ std::string GenerateFixedFunctionFragmentShader(const FixedFunctionKey& key, boo
             const std::string coords = stage.tex_coord_index < key.tex_coords
                                            ? "v_tex" + Number(stage.tex_coord_index)
                                            : std::string("vec4(0.0, 0.0, 0.0, 1.0)");
-            const char* components = stage.sampler == SamplerKind::k2D ? ".xy" : ".xyz";
-            text += "    vec4 " + t + " = texture(u_tex" + Number(s) + ", " + coords + components + ");\n";
+            std::string lookup = coords + (stage.sampler == SamplerKind::k2D ? ".xy" : ".xyz");
+            if (stage.unnormalized && stage.sampler == SamplerKind::k2D)
+            {
+                lookup = "(" + lookup + " * u_tex_scale" + Number(s) + ")";
+            }
+            text += "    vec4 " + t + " = texture(u_tex" + Number(s) + ", " + lookup + ");\n";
         }
         const std::string color = Operation(stage.color_op, stage.color_arg, s, ".rgb");
         const std::string alpha = stage.alpha_op == top::kDisable

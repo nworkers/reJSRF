@@ -3,6 +3,7 @@
 // guest pixel/vertex memory from the heap (d3d8_resource.h); the drawing
 // batch uploads the memory to GL when it is used.
 
+#include "d3d8_gl_textures.h"
 #include "d3d8_internal.h"
 #include "d3d8_resource.h"
 
@@ -384,6 +385,9 @@ void D3DSurface_LockRect()
     }
     memory.Write32(locked + 0, layout.pitch);
     memory.Write32(locked + 4, memory.Read32(surface + header::kData) + offset);
+    // The title writes through the pointer: the parent texture's GL copy is stale.
+    const GuestAddress parent = memory.Read32(surface + header::kParent);
+    MarkTextureWritten(parent != 0 ? parent : surface);
     call.Return(kD3dOk, 4);
 }
 
@@ -411,6 +415,7 @@ void D3DTexture_LockRect()
     }
     memory.Write32(locked + 0, layout.pitch);
     memory.Write32(locked + 4, memory.Read32(texture + header::kData) + offset);
+    MarkTextureWritten(texture);
     call.Return(kD3dOk, 5);
 }
 
@@ -431,6 +436,7 @@ void D3DVolumeTexture_LockBox()
     memory.Write32(locked + 0, layout.pitch);
     memory.Write32(locked + 4, layout.pitch * layout.height);
     memory.Write32(locked + 8, memory.Read32(texture + header::kData) + TextureLevelOffset(texture, level));
+    MarkTextureWritten(texture);
     call.Return(kD3dOk, 5);
 }
 
