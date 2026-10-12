@@ -1,6 +1,6 @@
 # 설계: 실행 인자를 게임 디렉터리로 (issue #33)
 
-선행: [i003 §4 파일](20261012-i003-kernel-hle.md), [jsrf-xbe-overview](../analysis/jsrf-xbe-overview.md)
+선행: [i003 §4 파일](20261012-i003-kernel-hle.md), [jsrf-xbe-overview](../analysis/jsrf-xbe-overview.md). §1의 XBE 고르기는 [i035](20261013-i035-default-xbe.md)가 대체한다(`default.xbe`, `--xbe`).
 
 ## 1. 결정
 
@@ -22,7 +22,7 @@
 
 # Design: the game directory as the argument (issue #33)
 
-Prerequisites: [i003 §4 files](20261012-i003-kernel-hle.md), [jsrf-xbe-overview](../analysis/jsrf-xbe-overview.md)
+Prerequisites: [i003 §4 files](20261012-i003-kernel-hle.md), [jsrf-xbe-overview](../analysis/jsrf-xbe-overview.md). How §1 picks the XBE is replaced by [i035](20261013-i035-default-xbe.md) (`default.xbe`, `--xbe`).
 
 ## 1. Decisions
 
