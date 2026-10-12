@@ -31,8 +31,10 @@ flowchart TD
 git clone --recurse-submodules https://github.com/nworkers/reJSRF.git
 cd reJSRF
 .\scripts\build_win32_x86.ps1
-.\build\win32_x86\src\app\Debug\rejsrf.exe "roms\Jet Set Radio Future\default_eng.xbe"
+.\build\win32_x86\src\app\Debug\rejsrf.exe "roms\Jet Set Radio Future"
 ```
+
+인자는 디스크에서 추출한 **게임 디렉터리**입니다(`default_eng.xbe`와 `Media\`가 있는 폴더). 앱이 그 안의 XBE를 내용으로 식별해 US판(`default_eng.xbe`)을 실행하고, 그 폴더를 게임의 `D:`로 씁니다.
 
 자세한 절차: [Win32 개발 환경 준비와 빌드](docs/guides/win32-setup-and-build.md)
 
@@ -82,7 +84,7 @@ See the diagram above.
 
 ## Build (Win32)
 
-See the commands above, and [Win32 development setup and build](docs/guides/win32-setup-and-build.md) for the full procedure.
+See the commands above, and [Win32 development setup and build](docs/guides/win32-setup-and-build.md) for the full procedure. The argument is the **game directory** extracted from the disc (the folder holding `default_eng.xbe` and `Media\`). The app identifies the XBEs in it by content, runs the US build (`default_eng.xbe`), and serves the folder as the game's `D:`.
 
 ## Platform status
 

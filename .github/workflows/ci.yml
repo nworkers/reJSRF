@@ -54,9 +54,11 @@ jobs:
         shell: powershell
         run: .\build\win32_x86\tools\${{ matrix.configuration }}\rexbox_d3d8_probe.exe
 
-      - name: Smoke - app rejects a non-XBE file
+      - name: Smoke - app rejects a file and a directory without an XBE
         shell: powershell
         run: |
           & .\build\win32_x86\src\app\${{ matrix.configuration }}\rejsrf.exe LICENSE
-          if ($LASTEXITCODE -ne 1) { throw "expected exit code 1, got $LASTEXITCODE" }
+          if ($LASTEXITCODE -ne 1) { throw "file: expected exit code 1, got $LASTEXITCODE" }
+          & .\build\win32_x86\src\app\${{ matrix.configuration }}\rejsrf.exe docs
+          if ($LASTEXITCODE -ne 1) { throw "directory: expected exit code 1, got $LASTEXITCODE" }
           exit 0
