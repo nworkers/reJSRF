@@ -16,3 +16,7 @@
 Design: [20261012-i012](../design/20261012-i012-d3d8-surfaces-first-frame.md)
 
 (1) Resource model `d3d8_resource.h/.cpp`: Xbox `D3DResource` header layout constants, header creation (GuestHeap), refcount rules (`AddRef`/`Release`/`GetType`), `ResourceTable` (header address → host state), reading and writing the XGRAPHC `Format`/`Size` encoding. (2) Device: create the two back-buffer and one depth headers with pixel memory in `Direct3D_CreateDevice`; `GetBackBuffer`, `GetDepthStencilSurface`, `SetRenderTarget`, `Reset`, `SetViewport`. (3) Frame: `D3DDevice_Clear` (with scissored rectangles), `D3DDevice_Swap` (present, events, frame counter); vblank, gamma and filter setters store state. (4) `D3DSurface_GetDesc`, then, as boot reaches them, `D3D_AllocContiguousMemory`/`Free`, `D3DResource_Register`, `GetTile`/`SetTile` and the `CreateTexture` family (header + memory + table entry). (5) Header-based cases in `rejsrf_d3d8_check` (AddRef/Release/GetType/GetDesc against the originals). (6) Build, regression and boot verification, frontier record, `docs/kb/xbox-d3d8-api.md` (resource header, XGRAPHC bits), `ARCHITECTURE.md`, work log.
+
+## 후속 / Follow-up (v0.0.4 이후 / after v0.0.4)
+
+7. XPP의 `0x001BD274`(간접 호출이 건너뛰어짐)를 조사하고, 같은 XPP 드라이버 표에서만 참조되는 누락 함수를 함께 seed로 추가, 재생성, 부팅 확인. / Investigate `0x001BD274` in XPP (its indirect call was skipped), seed it together with the other missed functions referenced only from the same XPP driver tables, regenerate, check the boot.
