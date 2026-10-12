@@ -9,6 +9,8 @@
 #ifndef REXBOX_HLE_D3D8_D3D8_GL_TARGETS_H
 #define REXBOX_HLE_D3D8_D3D8_GL_TARGETS_H
 
+#include "d3d8_gamma.h"
+
 #include "rexbox/runtime/guest_memory.h"
 
 #include <cstdint>
@@ -28,12 +30,13 @@ bool BindRenderTarget(GuestAddress color, GuestAddress depth);
 uint32_t RenderTargetWidth();
 uint32_t RenderTargetHeight();
 
-// Shows `color` (a back buffer) in the window, scaled to fit with its aspect
-// ratio kept, and rebinds the current render target.
-void PresentRenderTarget(GuestAddress color);
+// Shows `color` (a back buffer) in the window through the display gamma ramp,
+// scaled to fit with its aspect ratio kept, and rebinds the current render target.
+void PresentRenderTarget(GuestAddress color, const GammaRamp& ramp);
 
-// Writes `color`'s pixels to a 24-bit BMP file. Returns false on failure.
-bool DumpRenderTarget(GuestAddress color, const std::string& path);
+// Writes `color`'s pixels, through the gamma ramp as on screen, to a 24-bit
+// BMP file. Returns false on failure.
+bool DumpRenderTarget(GuestAddress color, const std::string& path, const GammaRamp& ramp);
 
 // The GL texture behind a color surface used as a render target, or 0.
 uint32_t RenderTargetTexture(GuestAddress color);

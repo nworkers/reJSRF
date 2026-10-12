@@ -313,9 +313,9 @@ void NtResumeThread()
 
 // NTSTATUS NtSuspendThread(HANDLE ThreadHandle, PULONG PreviousSuspendCount)
 //
-// Only a thread that has not started running guest code can actually be held;
-// suspending a running thread would need a safe point the lifted code does not
-// offer. The count is kept and reported either way.
+// A thread that has not started yet is held in its start hook, and a thread
+// suspending itself waits here; suspending another running thread would need
+// a safe point the lifted code does not offer, so only its count is kept.
 void NtSuspendThread()
 {
     HleCall call;
@@ -327,10 +327,21 @@ void NtSuspendThread()
     }
     int previous = 0;
     {
-        std::lock_guard<std::mutex> lock(thread->gate);
+        std::unique_lock<std::mutex> lock(thread->gate);
         previous = thread->suspend_count++;
+        if (thread.get() == CurrentThread())
+        {
+            // A thread suspending itself is at a safe point: it stops here
+            // until NtResumeThread brings the count back to 0. The title's
+            // frame thread does this once per frame, resumed from its
+            // vertical-blank thread.
+            thread->resumed.wait(lock, [&thread] { return thread->suspend_count == 0; });
+        }
+        else
+        {
+            TraceOnce("NtSuspendThread", "other running threads are not stopped");
+        }
     }
-    TraceOnce("NtSuspendThread", "running threads are not stopped");
     if (call.Arg(1) != 0)
     {
         Memory().Write32(call.Arg(1), static_cast<uint32_t>(previous));

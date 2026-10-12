@@ -149,3 +149,8 @@ After device creation the boot goes through `GetBackBuffer`, `GetDepthStencilSur
 * **Confirmed**: the loading-screen draw uses FVF `0x1C4` (XYZRHW|DIFFUSE|SPECULAR|TEX1, stride 32) with `DrawIndexedVertices(5, 6, …)` (indices `0 1 2 1 3 2`), one 512×512 swizzled DXT1 texture, alpha test `GREATER 0` and blending `SRCALPHA`/`INVSRCALPHA`. It shows the "Presented by SEGA" logo.
 * **Confirmed**: the game's timer thread (`sub_0013B1C0`) increments the counter `0x0025EFAC` and signals an event after every `BlockUntilVerticalBlank`; without pacing it looped millions of times per second.
 * **Unresolved**: even at 60 Hz the game keeps showing the logo for over two minutes after reading the stage (`Stg10_*`) and "PRESS" assets (`Mark\PRESS\JSRF_TEXS_0.JTX`). It stopped at the same point before pacing too (boot-frontier, issue #21). Whether this relates to the sound `Play` that is never called still needs checking.
+
+## 9. 감마 램프 / Gamma ramp (issue #26)
+
+* **확인됨**: 로고 동안 게임은 매 프레임 `SetGammaRamp(1, ramp)`를 부르고, 램프는 단위(0..255)다(`REXBOX_D3D8_TRACE`가 20초 동안 단위가 아닌 램프를 보고하지 않음). HLE는 이제 램프를 저장하고 `GetGammaRamp`로 돌려주며, present와 frame dump에 적용한다. 강제로 절반 램프를 넣은 시험에서 창 프레임버퍼와 덤프의 로고 중앙이 모두 (8, 28, 123)에서 (4, 14, 61)이 되었다.
+* **Confirmed**: during the logo the game calls `SetGammaRamp(1, ramp)` every frame with an identity ramp (0..255); `REXBOX_D3D8_TRACE` reported no other ramp over 20 s. The HLE now stores the ramp, returns it from `GetGammaRamp` and applies it to the present and to frame dumps. A test with a forced half ramp turned the logo center from (8, 28, 123) into (4, 14, 61) in both the window framebuffer and the dump.

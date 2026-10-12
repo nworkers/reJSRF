@@ -52,7 +52,7 @@ flowchart BT
 | `rexbox_kernel_probe` | `tools/kernel_probe/` | 게임 없이 커널 export 검사(사용자 APC 포함 42개, CI) | 구현 |
 | `rexbox_dsound_probe` | `tools/dsound_probe/` | 게임 없이 DSOUND export 검사(수동 출력으로 믹서를 직접 돌림; Lock, 커서, 반복 구간, 형식 디코드, 믹스 빈, 효과 서술자, pop 수; 48개, CI) | 구현 |
 | `rejsrf_decomp_check` | `tools/decomp_check/` | 디컴파일 함수와 lift 본문 비교 | 구현 |
-| `rexbox_d3d8_probe` | `tools/d3d8_probe/` | 게임·GPU 없이 D3D8 HLE의 순수 부분 검사(스위즐 해제, 16·32비트 포맷, DXT1/3/5, FVF 배치, 고정 기능 GLSL 생성; 73개, CI) | 구현 |
+| `rexbox_d3d8_probe` | `tools/d3d8_probe/` | 게임·GPU 없이 D3D8 HLE의 순수 부분 검사(스위즐 해제, 16·32비트 포맷, DXT1/3/5, FVF 배치, 고정 기능 GLSL 생성, 감마 램프; 81개, CI) | 구현 |
 | `rejsrf_d3d8_check` | `tools/d3d8_check/` | D3D8 HLE export와 lift된 XDK 원본(`sub_X_gen`) 비교(eax, esp, 스크래치 메모리), `--dump`로 원본의 답 출력; 리소스 헤더 케이스, 디바이스 서피스 인코딩, 상태 setter가 남긴 라이브러리 전역 비교 포함 | 구현(14,018 케이스) |
 
 ### 커널 HLE 파일
@@ -80,7 +80,7 @@ flowchart BT
 | `d3d8_internal.h` | Xbox D3D 상수, 구조체 오프셋(`D3DDISPLAYMODE`, `D3DPRESENT_PARAMETERS`, `D3DCAPS8`), `D3dState` |
 | `d3d8_adapter.cpp` | `Direct3D_GetAdapterCount`, `D3D_GetAdapterModeCount`, `D3D_EnumAdapterModes`, `D3D_CheckDeviceFormat`, `Direct3D_CheckDeviceMultiSampleType`; 모드 표 24개와 포맷 능력 바이트 표(측정값) |
 | `d3d8_caps.cpp` | `D3D_GetDeviceCaps`, `D3DDevice_GetDeviceCaps`; `D3DCAPS8` 53 DWORD 표(측정값) |
-| `d3d8_device.cpp` | `Direct3D_CreateDevice`(표시 생성, 백버퍼 2개·깊이 서피스 생성, 원본 기본 상태 루틴 실행), `GetBackBuffer`, `GetDepthStencilSurface`, `SetRenderTarget`, `Reset`, `SetViewport`, `Clear`(Xbox `D3DCLEAR` 비트), `Swap`(vblank 페이싱, blit, frame dump), 디바이스 refcount, `GetRasterStatus`, `BlockUntilVerticalBlank`, 타일·감마·필터 등 |
+| `d3d8_device.cpp` | `Direct3D_CreateDevice`(표시 생성, 백버퍼 2개·깊이 서피스 생성, 원본 기본 상태 루틴 실행), `GetBackBuffer`, `GetDepthStencilSurface`, `SetRenderTarget`, `Reset`, `SetViewport`, `Clear`(Xbox `D3DCLEAR` 비트), `Swap`(vblank 페이싱, 감마 램프를 거친 표시, frame dump), `SetGammaRamp`/`GetGammaRamp`, 디바이스 refcount, `GetRasterStatus`, `BlockUntilVerticalBlank`, 타일·감마·필터 등 |
 | `d3d8_resource.h/.cpp` | Xbox `D3DResource` 헤더 레이아웃과 `Common`/`Format`/`Size` 비트, `ResourceTable`(헤더 주소 → 호스트 상태), `AddRef`/`Release`/`GetType`/`D3DSurface_GetDesc`, 디바이스 서피스 생성 |
 | `d3d8_create.cpp` | `CreateTexture`/`CreateVolumeTexture`/`CreateImageSurface`/`CreateVertexBuffer`/`CreateIndexBuffer`, `D3DResource_Register`, `GetSurfaceLevel`, `Lock*`, 연속 메모리 |
 | `d3d8_globals.h/.cpp` | 라이브러리 전역(`D3D__RenderState`, `D3D__TextureState`, `D3D_g_Stream`, `D3D__IndexData`, `D3D_g_pDevice`)의 위치와 읽기·쓰기 |
@@ -93,8 +93,9 @@ flowchart BT
 | `d3d8_ff_shader.h/.cpp` | 고정 기능 키와 GLSL 생성(XYZRHW·XYZ 정점, 텍스처 스테이지, 알파 테스트)(순수) |
 | `d3d8_trace.h/.cpp` | `REXBOX_D3D8_TRACE`와 미구현 경로의 한 번 보고 |
 | `d3d8_vblank.h/.cpp` | 가상 vblank 시계(디스플레이 refresh, 기본 60 Hz) |
+| `d3d8_gamma.h/.cpp` | 감마 램프(Xbox `D3DGAMMARAMP` 768바이트), CPU 적용, present용 GLSL(순수) |
 | `d3d8_gl.h/.cpp` | 쓰는 GL 함수만 담은 함수 표, `platform::GetGlProcAddress`로 채움 |
-| `d3d8_gl_targets.h/.cpp` | 렌더 타깃: 색 서피스 = GL 텍스처, 깊이 = 렌더버퍼, 쌍마다 FBO; present blit, BMP 덤프 |
+| `d3d8_gl_targets.h/.cpp` | 렌더 타깃: 색 서피스 = GL 텍스처, 깊이 = 렌더버퍼, 쌍마다 FBO; present(단위 램프는 blit, 아니면 감마 셰이더), BMP 덤프 |
 | `d3d8_gl_textures.h/.cpp` | 텍스처 캐시(헤더 → GL 텍스처, Lock·해시로 재업로드), 스테이지 샘플러 |
 | `d3d8_gl_programs.h/.cpp` | 고정 기능 프로그램 캐시, 스트리밍 VBO/IBO와 VAO |
 
@@ -148,7 +149,7 @@ sequenceDiagram
 
 ## 5. 빌드 구성
 
-* MSVC: 전역 `/utf-8 /permissive- /EHa`, `NOMINMAX WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS`; 우리 타깃 `/W4`; 생성 코드 `/w /bigobj /MP`. 게스트 스레드의 호스트 스택은 64 MiB.
+* MSVC: 전역 `/utf-8 /permissive- /EHa`, `NOMINMAX WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS`; 우리 타깃 `/W4`; 생성 코드 `/w /bigobj /MP`. 게스트 스레드의 호스트 스택은 64 MiB이고 `CreateHostThread`가 명시한다. `rejsrf`는 `/LARGEADDRESSAWARE`로 링크하고 이미지 기본 스택은 1 MiB로 둔다. 기본값이 크면 크기를 지정하지 않은 모든 스레드(오디오, SDL, GL 드라이버)가 그만큼 예약해 32비트 주소 공간이 바닥난다(issue #25). 원본을 메인 스레드에서 실행하는 `rejsrf_d3d8_check`만 `/STACK:64MB`를 쓴다.
 * `REJSRF_RECOMP_GEN_DIR`(기본 `gen/jsrf_us/gen`)이 없으면 `rejsrf_recomp`와 `rejsrf_decomp_check`를 만들지 않는다(CI). `rexbox_kernel_probe`는 항상 빌드되고 CI에서 실행된다.
 * 라이선스 가드 `REJSRF_COPYLEFT_PATHS`는 모든 우리 타깃과 `rejsrf_recomp`에 적용된다.
 * 실행 시 환경 변수: `REJSRF_HDD_ROOT`(HDD 루트, 기본 `./hdd`), `REXBOX_TRACE_FILES`(모든 파일 열기 기록), `REXBOX_HLE_FALLBACK=lifted`(미구현 XDK 함수의 원본 실행, 진단용), `REXBOX_DISPLAY=none`(창 없이 실행; 헤드리스 진단), `REXBOX_AUDIO=none`(오디오 장치를 열지 않음; 커서는 실시간으로 움직임), `REXBOX_DSOUND_TRACE=1`(버퍼 생성 형식·믹스 빈과 `Play` 기록), `REXBOX_FRAME_LOG=<n>`(n번째 present마다 프레임 수와 경과 시간 한 줄), `REXBOX_DISPLAY=hidden`(보이지 않는 창 + GL 컨텍스트; 그리기는 하고 화면에 내지 않음), `REXBOX_FRAME_DUMP=<n>[,<n>…]`(n번째 present의 백버퍼를 `frame_<n>.bmp`로 저장, 폴더는 `REXBOX_FRAME_DUMP_DIR`), `REXBOX_D3D8_TRACE=1`(처음 보는 텍스처 포맷·FVF·프로그램 키 기록).
@@ -156,7 +157,7 @@ sequenceDiagram
 * `scripts/recomp/check_hle_pops.py`는 D3D8·XInput·DSOUND HLE export의 `Return(value, n)`(템플릿 `AcceptSetting<n>`은 인자 n)과 lift 원본의 `ret n`을 대조한다(스택 불균형 예방). `scripts/recomp/find_pointer_targets.py`는 데이터·즉시값으로만 참조되어 lift되지 않은 함수 시작을 찾아 seed 파일을 쓴다.
 * `third_party/SDL`(submodule, release-3.4.18, zlib)은 정적 라이브러리만 빌드되어 `rexbox_platform`에 PRIVATE로 링크된다. 카메라·GPU·렌더러·햅틱·센서·대화상자·트레이는 끄고, 오디오(DSOUND)·조이스틱·게임패드(XInput)는 켜 둔다.
 * `third_party/XbSymbolDatabase`(submodule)는 `rexbox_xdk_symbols`용으로 라이브러리만 빌드된다. 생성 코드를 처음 만들 때는 도구를 먼저 빌드해야 한다.
-* `third_party/xboxrecomp`는 업스트림 PR [#198](https://github.com/sp00nznet/xboxrecomp/pull/198)(`lock xadd` 플래그)과 [#199](https://github.com/sp00nznet/xboxrecomp/pull/199)(별칭 본문의 분기 고아 블록), [#200](https://github.com/sp00nznet/xboxrecomp/pull/200)(다른 함수 본문 중간으로 가는 분기)가 머지되기 전까지 세 수정을 합친 포크 `nworkers/xboxrecomp`의 `rejsrf` 브랜치를 가리킨다(`THIRD_PARTY_NOTICES.md`).
+* `third_party/xboxrecomp`는 업스트림 PR [#198](https://github.com/sp00nznet/xboxrecomp/pull/198)(`lock xadd` 플래그, `FCMOVcc`)과 [#199](https://github.com/sp00nznet/xboxrecomp/pull/199)(별칭 본문의 분기 고아 블록), [#200](https://github.com/sp00nznet/xboxrecomp/pull/200)(다른 함수 본문 중간으로 가는 분기)가 머지되기 전까지 세 수정을 합친 포크 `nworkers/xboxrecomp`의 `rejsrf` 브랜치를 가리킨다(`THIRD_PARTY_NOTICES.md`).
 * HLE 대상은 `src/game/jsrf/recomp/hle_libraries.json`의 `libraries`(라이브러리 전체)와 `functions`(개별 함수)로 고른다. `regenerate.py`는 식별된 XDK 변수 표 `rexbox_xdk_variables[]`도 생성한다.
 * 진단(추가): `REXBOX_WATCH32=<주소,…>`(HLE 진입마다 DWORD 변화 기록), `REXBOX_PROFILE_ON_SKIP`(첫 건너뛴 간접 호출에서 호출 프로파일 덤프; 기록에 esp와 호출 지점 포함), `REXBOX_SKIP_DUMP=<파일>`/`REXBOX_STOP_DUMP=<파일>`(건너뛴 호출·비정상 정지 때 게스트 RAM 저장), CMake `REJSRF_RECOMP_ABI_CHECK`(직접 호출마다 callee의 `ebx/esi/edi` 보존과 반환 주소 pop 확인; `REXBOX_ABI_IGNORE`, `REXBOX_ABI_ESP_ONLY`로 걸러냄). 건너뛴 간접 호출 경고는 호출 지점을 함께 찍는다.
 
@@ -194,7 +195,7 @@ The app builds guest memory, places the XBE, creates the heap and installs the E
 
 ## 5. Build configuration
 
-* MSVC: `/utf-8 /permissive- /EHa` and `NOMINMAX WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS` globally; `/W4` on our targets; `/w /bigobj /MP` for generated code. Guest threads get 64 MiB host stacks.
+* MSVC: `/utf-8 /permissive- /EHa` and `NOMINMAX WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS` globally; `/W4` on our targets; `/w /bigobj /MP` for generated code. Guest threads get 64 MiB host stacks, given explicitly by `CreateHostThread`. `rejsrf` links with `/LARGEADDRESSAWARE` and keeps the image default stack at 1 MiB: a large default is reserved by every thread created without a size (audio, SDL, the GL driver) and exhausts the 32-bit address space (issue #25). Only `rejsrf_d3d8_check`, which runs originals on its main thread, uses `/STACK:64MB`.
 * Without `REJSRF_RECOMP_GEN_DIR` (default `gen/jsrf_us/gen`), `rejsrf_recomp` and `rejsrf_decomp_check` are not created (CI). `rexbox_kernel_probe` is always built and runs in CI.
 * The license guard `REJSRF_COPYLEFT_PATHS` applies to all our targets and to `rejsrf_recomp`.
 * Run-time environment variables: `REJSRF_HDD_ROOT` (HDD root, default `./hdd`), `REXBOX_TRACE_FILES` (log every file open), `REXBOX_HLE_FALLBACK=lifted` (run the original of an unimplemented XDK function; diagnostic), `REXBOX_DISPLAY=none` (run without a window; headless diagnostics), `REXBOX_AUDIO=none` (open no audio device; cursors still move in real time), `REXBOX_DSOUND_TRACE=1` (log buffer formats, mix bins and `Play`) and `REXBOX_FRAME_LOG=<n>` (one line with the frame count and elapsed time every n presents), `REXBOX_DISPLAY=hidden` (an invisible window with a GL context: everything is drawn, nothing is shown), `REXBOX_FRAME_DUMP=<n>[,<n>...]` (the back buffer of the n-th present as `frame_<n>.bmp`, in `REXBOX_FRAME_DUMP_DIR`) and `REXBOX_D3D8_TRACE=1` (each texture format, FVF and program key the first time it appears). Diagnostics for hangs and corruption: `REXBOX_HLE_TRACE=<n>` (the first n XDK HLE calls with arguments, ecx and eax, and kernel imports by ordinal), `REXBOX_TRACE_MEMORY` (virtual-memory allocations and commits), `REXBOX_WATCHDOG=<seconds>` (dump the guest threads' direct-call profile and exit; with `REXBOX_WATCHDOG_DUMP=<file>` also write the 64 MiB guest RAM), `REXBOX_HEAP_CHECK=<address>` (validate an NT heap's variable-size free list at every HLE entry and report the first corruption). The direct-call profile is filled only when the generated code is built with CMake `REJSRF_RECOMP_CALL_PROFILE=ON`. `scripts/recomp/check_hle_pops.py` compares each D3D8, XInput and DSOUND export's `Return(value, n)` (for the `AcceptSetting<n>` template, its argument) with the lifted original's `ret n`; `scripts/recomp/find_pointer_targets.py` finds unlifted function starts referenced only from data or immediates and writes a seed file. More diagnostics: `REXBOX_WATCH32=<addresses>` (log DWORD changes at every HLE entry), `REXBOX_PROFILE_ON_SKIP` (dump the call profile, with esp and call site per record, at the first skipped indirect call), `REXBOX_SKIP_DUMP=<file>`/`REXBOX_STOP_DUMP=<file>` (guest RAM at a skipped call or an abnormal stop), and the CMake option `REJSRF_RECOMP_ABI_CHECK` (every direct call checks the callee kept `ebx/esi/edi` and popped its return address; filtered with `REXBOX_ABI_IGNORE` and `REXBOX_ABI_ESP_ONLY`); skipped-call warnings name the call site. HLE targets are chosen in `hle_libraries.json` by `libraries` and single `functions`, and `regenerate.py` also emits the `rexbox_xdk_variables[]` table. `third_party/xboxrecomp` points at the fork's `rejsrf` branch, which carries upstream PRs #198, #199 and #200 until they are merged.

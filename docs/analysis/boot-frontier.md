@@ -4,19 +4,17 @@
 
 This records how far the recompiled US build gets when run from its entry point. It is updated by each task; earlier frontiers stay in the history below.
 
-## 현재 / Current (issue #23, 2026-10-13)
+## 현재 / Current (issue #27, 2026-10-13)
 
 | 항목 / Item | 값 / Value |
 |---|---|
-| 생성 코드 / Generated code | issue #21과 같음(함수 9,193개) / as in issue #21 (9,193 functions) |
-| 실행 결과 / Outcome | **첫 화면이 나온다: "Presented by SEGA" 로고(FVF `0x1C4` 텍스처 사각형, DXT1 512×512). 프레임 루프는 가상 vblank 시계로 60 Hz에 맞춰 돈다. 게임은 로고를 그리는 동안 스테이지와 "PRESS" 자원을 읽고, 그 뒤 2분 이상 로고에 머문다 / the first screen shows: the "Presented by SEGA" logo (an FVF `0x1C4` textured quad, DXT1 512×512). The frame loop runs at 60 Hz on the virtual vblank clock. While showing the logo the game reads the stage and "PRESS" assets, then stays on the logo for over two minutes** |
+| 생성 코드 / Generated code | xboxrecomp `rejsrf` `500de2b1`(+`FCMOVcc`): `FPU: fcmov` 주석 0건 / no `FPU: fcmov` comments left |
+| 실행 결과 / Outcome | **로고 시퀀스가 끝까지 진행한다: SEGA → Smilebit → ADX → Dolby Digital → 낙서 경고문, 각각 감마 램프 페이드. 약 2,400프레임(40초) 뒤 스테이지 자원과 사운드 버퍼를 대량으로 만들다가 `NtAllocateVirtualMemory out of guest memory`로 멈추고(간접 호출 0 건너뜀), 프로세스가 끝난다(종료 코드 3). 정점 셰이더 프로그램 그리기가 처음 나온다 / the logo sequence runs to the end: SEGA → Smilebit → ADX → Dolby Digital → the anti-graffiti notice, each with gamma-ramp fades. After about 2,400 frames (40 s), while creating stage assets and many sound buffers, it hits `NtAllocateVirtualMemory out of guest memory` (an indirect call to 0 is skipped) and the process ends (exit code 3). The first draws with a vertex-shader program appear** |
 
-* **확인됨**: 그리기를 막던 두 가지를 고쳤다. HLE `SetIndices`가 `D3D__IndexData`를 쓰지 않아 인덱스 포인터가 0이었다. 또 `D3DCLEAR` 비트를 PC 값으로 읽어, 그리기 뒤의 `Clear(3)`(깊이·스텐실)가 색까지 지웠다([analysis: d3d8-adapter §8](d3d8-adapter.md)).
-* **확인됨**: 프레임 덤프(`REXBOX_DISPLAY=hidden`, `REXBOX_FRAME_DUMP`)의 600·1,800·8,700번째 프레임이 같은 로고다.
-* **미확정**: 로고에서 넘어가지 않는 이유는 아직 모른다. 페이싱 전(issue #21)에도 4번 중 3번은 같은 자원을 읽고 같은 루프에 머물렀다. 다음 후보는 (1) 로고 뒤 진행 조건(사운드 `Play`가 한 번도 불리지 않음, 커널 타이머 `KeSetTimer`가 발화하지 않음), (2) 프로그래머블 정점 셰이더와 픽셀 셰이더 그리기(i023 설계 §9)다.
-* **Confirmed**: two things that blocked drawing are fixed. The HLE `SetIndices` did not write `D3D__IndexData`, so the index pointer was 0. And the `D3DCLEAR` bits were read with PC values, so the `Clear(3)` (depth and stencil) after drawing also wiped the color ([analysis: d3d8-adapter §8](d3d8-adapter.md)).
-* **Confirmed**: frame dumps (`REXBOX_DISPLAY=hidden`, `REXBOX_FRAME_DUMP`) of frames 600, 1,800 and 8,700 show the same logo.
-* **Unresolved**: why the game does not move past the logo. Before pacing (issue #21), three runs of four also read the same assets and stayed in the same loop. Next candidates: (1) what lets the boot move past the logo (the sound `Play` is never called, and the kernel timer `KeSetTimer` never fires), and (2) drawing with programmable vertex shaders and pixel shaders (i023 design §9).
+* **확인됨**: 로고에 머물던 원인은 lift되지 않은 `FCMOVcc`였다. 페이드 색을 자르는 min/max가 항상 1과 0을 돌려 페이드가 끝나지 않았다([설계 i027](../design/20261013-i027-fcmov-logo-fade.md)).
+* **미확정**: 게스트 메모리 부족의 원인(64 MiB 안의 할당 방식, 해제 누락, 실제 요구량). 다음 task.
+* **Confirmed**: the unlifted `FCMOVcc` kept the boot on the logo. The min/max that clamp the fade color always returned 1 and 0, so the fade never completed ([design i027](../design/20261013-i027-fcmov-logo-fade.md)).
+* **Unresolved**: why guest memory runs out (allocation within 64 MiB, missing frees, or the real demand). Next task.
 
 ## 이력 / History
 
@@ -32,6 +30,23 @@ This records how far the recompiled US build gets when run from its entry point.
 | #19 | 사용자 APC 전달, 효과 이미지·버퍼 생성·첫 `D3DDevice_Swap`·폰트·효과음 버퍼 통과, `D3DVertexBuffer_Lock` 뒤 `0x0FE80026` fault / user APCs delivered; past the effects image, buffer creation, the first `D3DDevice_Swap`, fonts and sound-effect buffers, fault at `0x0FE80026` after `D3DVertexBuffer_Lock` |
 | #21 | 노드 순회 fault 해결(xboxrecomp #200), 프레임 루프가 계속 돎, 그리기·`Play` 없음 / node-walk fault fixed (xboxrecomp #200); the frame loop keeps running, no drawing or `Play` yet |
 | #23 | 고정 기능 그리기(GL), 60 Hz 페이싱, "Presented by SEGA" 로고 표시 뒤 로고에 머묾 / fixed-function drawing on GL, 60 Hz pacing; shows the "Presented by SEGA" logo and stays on it |
+| #27 | `FCMOVcc` lift; 로고 시퀀스 완료, 스테이지 로드 중 게스트 메모리 부족 / `FCMOVcc` lifted; the logo sequence completes, guest memory runs out while loading the stage |
+
+### issue #23 frontier 상세 / issue #23 frontier details
+
+| 항목 / Item | 값 / Value |
+|---|---|
+| 생성 코드 / Generated code | issue #21과 같음(함수 9,193개) / as in issue #21 (9,193 functions) |
+| 실행 결과 / Outcome | **첫 화면이 나온다: "Presented by SEGA" 로고(FVF `0x1C4` 텍스처 사각형, DXT1 512×512). 프레임 루프는 가상 vblank 시계로 60 Hz에 맞춰 돈다. 게임은 로고를 그리는 동안 스테이지와 "PRESS" 자원을 읽고, 그 뒤 2분 이상 로고에 머문다 / the first screen shows: the "Presented by SEGA" logo (an FVF `0x1C4` textured quad, DXT1 512×512). The frame loop runs at 60 Hz on the virtual vblank clock. While showing the logo the game reads the stage and "PRESS" assets, then stays on the logo for over two minutes** |
+
+* **확인됨**: 그리기를 막던 두 가지를 고쳤다. HLE `SetIndices`가 `D3D__IndexData`를 쓰지 않아 인덱스 포인터가 0이었다. 또 `D3DCLEAR` 비트를 PC 값으로 읽어, 그리기 뒤의 `Clear(3)`(깊이·스텐실)가 색까지 지웠다([analysis: d3d8-adapter §8](d3d8-adapter.md)).
+* **확인됨**: 프레임 덤프(`REXBOX_DISPLAY=hidden`, `REXBOX_FRAME_DUMP`)의 600·1,800·8,700번째 프레임이 같은 로고다.
+* **미확정**: 로고에서 넘어가지 않는 이유는 아직 모른다. 페이싱 전(issue #21)에도 4번 중 3번은 같은 자원을 읽고 같은 루프에 머물렀다. 다음 후보는 (1) 로고 뒤 진행 조건(사운드 `Play`가 한 번도 불리지 않음, 커널 타이머 `KeSetTimer`가 발화하지 않음), (2) 프로그래머블 정점 셰이더와 픽셀 셰이더 그리기(i023 설계 §9)다.
+* **확인됨**(issue #25): 로고 동안 주 스레드는 막혀 있지 않다. 매 프레임 감마 램프(0..255)를 계산해 `SetGammaRamp`를 부르고 로고를 그린다. 프레임 스레드(`sub_0013B2A0`)는 자기 일시정지 뒤 vblank 스레드의 재개를 기다린다(이제 커널 HLE가 자기 일시정지를 지킨다). 오디오 출력 스레드가 주소 공간 부족으로 만들어지지 않던 문제는 고쳤고, `Play`는 여전히 없다([dsound §6](dsound.md)).
+* **Confirmed** (issue #25): the main thread is not blocked during the logo. Each frame it computes a gamma ramp (0..255), calls `SetGammaRamp` and draws the logo. The frame thread (`sub_0013B2A0`) suspends itself and waits for the vblank thread to resume it (the kernel HLE now honors self-suspension). The audio output thread that failed for lack of address space is fixed; there is still no `Play` ([dsound §6](dsound.md)).
+* **Confirmed**: two things that blocked drawing are fixed. The HLE `SetIndices` did not write `D3D__IndexData`, so the index pointer was 0. And the `D3DCLEAR` bits were read with PC values, so the `Clear(3)` (depth and stencil) after drawing also wiped the color ([analysis: d3d8-adapter §8](d3d8-adapter.md)).
+* **Confirmed**: frame dumps (`REXBOX_DISPLAY=hidden`, `REXBOX_FRAME_DUMP`) of frames 600, 1,800 and 8,700 show the same logo.
+* **Unresolved**: why the game does not move past the logo. Before pacing (issue #21), three runs of four also read the same assets and stayed in the same loop. Next candidates: (1) what lets the boot move past the logo (the sound `Play` is never called, and the kernel timer `KeSetTimer` never fires), and (2) drawing with programmable vertex shaders and pixel shaders (i023 design §9).
 
 ### issue #21 frontier 상세 / issue #21 frontier details
 

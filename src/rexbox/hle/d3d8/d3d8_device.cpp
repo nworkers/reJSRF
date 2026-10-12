@@ -9,6 +9,7 @@
 #include "d3d8_internal.h"
 #include "d3d8_resource.h"
 #include "d3d8_state.h"
+#include "d3d8_trace.h"
 #include "d3d8_vblank.h"
 #include "rexbox/platform/display.h"
 
@@ -461,7 +462,7 @@ void DumpFrameIfRequested(GuestAddress shown, uint32_t frame)
     const char* directory = std::getenv("REXBOX_FRAME_DUMP_DIR");
     std::string path = directory != nullptr ? std::string(directory) + "/" : std::string();
     path += "frame_" + std::to_string(frame) + ".bmp";
-    if (DumpRenderTarget(shown, path))
+    if (DumpRenderTarget(shown, path, State().gamma_ramp))
     {
         std::fprintf(stderr, "[d3d8] frame %u written to %s\n", frame, path.c_str());
     }
@@ -488,7 +489,7 @@ void D3DDevice_Swap()
                                        : state.back_buffers[0];
         DumpFrameIfRequested(shown, state.frame_count);
         WaitForPresentInterval(state.present.presentation_interval);
-        PresentRenderTarget(shown);
+        PresentRenderTarget(shown, state.gamma_ramp);
         presented = true;
         bool close = false;
         platform::PumpDisplayEvents(&close);
@@ -585,17 +586,36 @@ void D3DDevice_GetGammaRamp()
 {
     HleCall call;
     const GuestAddress out = call.Arg(0);
-    if (out != 0)
+    if (out != 0 && Memory().IsValid(out, GammaRamp::kBytes))
     {
-        for (uint32_t channel = 0; channel < 3; ++channel)
-        {
-            for (uint32_t i = 0; i < 256; ++i)
-            {
-                Memory().Write8(out + channel * 256 + i, static_cast<uint8_t>(i));
-            }
-        }
+        const GammaRamp& ramp = State().gamma_ramp;
+        std::memcpy(Memory().Translate(out), ramp.bytes.data(), GammaRamp::kBytes);
     }
     call.Return(kD3dOk, 1);
+}
+
+// void D3DDevice_SetGammaRamp(DWORD Flags, const D3DGAMMARAMP* pRamp)
+// The original copies the 768 bytes into the device and, with
+// D3DSGR_IMMEDIATE (bit 0), writes the RAMDAC palette at once, otherwise at
+// the next vertical blank. The screen changes only at Swap here, so both
+// take effect at the next present.
+void D3DDevice_SetGammaRamp()
+{
+    HleCall call;
+    const GuestAddress ramp = call.Arg(1);
+    if (ramp != 0 && Memory().IsValid(ramp, GammaRamp::kBytes))
+    {
+        GammaRamp& state_ramp = State().gamma_ramp;
+        std::memcpy(state_ramp.bytes.data(), Memory().Translate(ramp), GammaRamp::kBytes);
+        if (!state_ramp.IsIdentity())
+        {
+            TraceOnce(Format("gamma %02X%02X%02X", state_ramp.bytes[255], state_ramp.bytes[511], state_ramp.bytes[767]),
+                      Format("gamma ramp at frame %u: red/green/blue[255] = %u/%u/%u, [128] = %u/%u/%u",
+                             State().frame_count, state_ramp.bytes[255], state_ramp.bytes[511], state_ramp.bytes[767],
+                             state_ramp.bytes[128], state_ramp.bytes[384], state_ramp.bytes[640]));
+        }
+    }
+    call.Return(kD3dOk, 2);
 }
 
 // void D3DDevice_GetTexture2(DWORD Stage, D3DBaseTexture** ppTexture): the
@@ -706,7 +726,7 @@ void RegisterDeviceExports(runtime::HleRegistry& registry)
     registry.AddExport("d3d8", "D3DDevice_SetVerticalBlankCallback", &AcceptOneArgument);
     registry.AddExport("d3d8", "D3DDevice_SetFlickerFilter", &AcceptOneArgument);
     registry.AddExport("d3d8", "D3DDevice_SetSoftDisplayFilter", &AcceptOneArgument);
-    registry.AddExport("d3d8", "D3DDevice_SetGammaRamp", &AcceptTwoArguments);
+    registry.AddExport("d3d8", "D3DDevice_SetGammaRamp", &D3DDevice_SetGammaRamp);
     registry.AddExport("d3d8", "D3DDevice_GetGammaRamp", &D3DDevice_GetGammaRamp);
     registry.AddExport("d3d8", "D3DDevice_AddRef", &D3DDevice_AddRef);
     registry.AddExport("d3d8", "D3DDevice_Release", &D3DDevice_Release);
