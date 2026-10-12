@@ -40,3 +40,26 @@ flowchart LR
 
 * **Confirmed**: the "GPU initialization during device creation" inferred in i003 is `Direct3D_CreateDevice` → `CMiniport_InitHardware` touching the NV2A.
 * **Confirmed** (issue #7): these nine are implemented as the first D3D8 HLE batch, and the eight queries answer like the originals ([d3d8-adapter](d3d8-adapter.md)); the next call is `D3DDevice_GetBackBuffer`.
+
+## 3. XPP USB 클래스 드라이버 표와 누락 함수 / XPP USB class-driver tables and missed functions (issue #12)
+
+XPP 섹션(XAPI의 USB 장치 계층: 게임패드, 메모리 유닛, 키보드, IR 동글)은 코드와 드라이버 표가 섞여 있다. 표(`0x001BC7C0`–`0x001BC98C`)는 장치 종류 GUID, 콜백 포인터, 초기화 함수를 담고, 그 콜백들은 표를 통해서만 불린다. 디스어셈블러는 그중 프롤로그 없이 `ret`/`jmp` 직후에 시작하는 FPO 함수 9개를 찾지 못했다.
+
+The XPP section (XAPI's USB device layer: gamepads, memory units, keyboards, IR dongles) mixes code with driver tables. The tables (`0x001BC7C0`–`0x001BC98C`) hold device-type GUIDs, callback pointers and init functions, and the callbacks are reached only through them. The disassembler missed nine of them, FPO functions starting right after a `ret`/`jmp` with no prologue.
+
+| 함수 / Function | 표 위치 / Table slot | 비고 / Note |
+|---|---|---|
+| `0x001BCAA3` | `0x001BC894`, `0x001BC8AC` | 콜백 / callback |
+| `0x001BD274` | `0x001BC978` | 드라이버 초기화: `KeInitializeTimerEx(0x002649A8)` / driver init |
+| `0x001BD853` | `0x001BC7FC` | 콜백 / callback |
+| `0x001BDE21` | `0x001BC938` | thiscall 콜백 / thiscall callback |
+| `0x001BDE62` | `0x001BC968` | thiscall 콜백 / thiscall callback |
+| `0x001BDE86` | `0x001BC950` | thiscall 콜백 / thiscall callback |
+| `0x001BE0B4` | `0x001BC89C`, `0x001BC8B4` | 콜백 / callback |
+| `0x001BE689` | `0x001BC898`, `0x001BC8B0` | 콜백 / callback |
+| `0x001C213A` | `0x001BC97C` | `0x002649A8` 타이머 블록을 쓰는 콜백 / callback using the `0x002649A8` timer block |
+
+* **확인됨**: 9개 모두 `src/game/jsrf/recomp/seed_functions.json`에 seed로 넣어 재생성 뒤 디스패치 표에 들어갔고, 부팅 중 `[recomp] indirect call to 001BD274 has no target` 경고가 사라졌다. XPP 섹션 안의 다른 코드 포인터는 모두 탐지된 함수의 시작이다(표 안을 가리키는 데이터 포인터 제외).
+* **추정**: 각 콜백의 역할(장치 추가·제거, 상태 폴링)은 XAPI의 USB 클래스 드라이버 구조(`XPP_DEVICE_TYPE`)에서 온 이름이며 아직 확인하지 않았다.
+* **Confirmed**: all nine were seeded in `src/game/jsrf/recomp/seed_functions.json`; after regeneration they are in the dispatch table and the boot no longer logs `[recomp] indirect call to 001BD274 has no target`. Every other code pointer inside the XPP section is the start of a detected function (data pointers into the tables themselves excluded).
+* **Inferred**: the callbacks' roles (device add/remove, state polling) follow XAPI's USB class-driver structure (`XPP_DEVICE_TYPE`) and are not confirmed yet.

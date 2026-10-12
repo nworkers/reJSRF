@@ -65,3 +65,29 @@ The table in the Korean section applies: Debug and Release builds with zero warn
 * The kernel services XAPI's device initialization needs (`IoCreateDevice` and what follows; kernel HLE follow-up, separate issue), the `0x001BD274` seed, and reaching the first `D3DDevice_Swap`.
 * Return the submodule to upstream once xboxrecomp#198 is merged.
 * Drawing (vertex buffers, shaders, render state → GL) is the third batch.
+
+---
+
+## 후속: XPP 누락 함수 seed / Follow-up: XPP missed-function seeds (after v0.0.4)
+
+### 한국어
+
+* **조사**: 부팅 로그의 `[recomp] indirect call to 001BD274 has no target`. `0x001BD274`는 XPP 섹션(XAPI USB 장치 계층)의 `ret 0xc` 바로 뒤에 프롤로그 없이 시작하는 FPO 함수로, USB 클래스 드라이버 표 `0x001BC970`의 초기화 함수 슬롯(`0x001BC978`)에서만 참조된다. 본문은 `KeInitializeTimerEx(0x002649A8, NotificationTimer)`와 상태 워드 두 개 초기화다. 디스어셈블러의 `gap_prologue` 패스는 프롤로그나 상수 반환 스텁만 인정하므로 놓쳤다.
+* **범위 확인**: XPP 섹션 안의 모든 32비트 값 중 탐지되지 않은 코드 주소를 가리키는 것을 찾았다. 표 내부를 가리키는 데이터 포인터를 빼면 9개였고, 모두 `ret`/`jmp` 직후의 FPO 함수이며 디스패치 표에 없었다.
+* **조치**: 9개를 `seed_functions.json`에 추가하고 재생성(lift 179초). 9개 모두 디스패치 표에 들어갔다.
+* **결과**: 건너뛰던 간접 호출 경고가 사라지고 `KeInitializeTimerEx`가 `0x001BD292`에서 호출된다. frontier는 그대로 커널 import 65 `IoCreateDevice`이며, 호출자는 `MU_Init`(`0x001BCA34`)로 확인했다.
+
+| 검증 | 결과 |
+|---|---|
+| Win32 Debug / Release 빌드 | 성공, 우리 타깃 경고 0 |
+| `rexbox_kernel_probe` / `rejsrf_decomp_check` / `rejsrf_d3d8_check` | 27/27, 6/6, 13,557/0 |
+| 부팅 | `[recomp]` 경고 0건, `stopped at unimplemented kernel import 65 IoCreateDevice` |
+
+### English
+
+* **Investigation**: the boot log's `[recomp] indirect call to 001BD274 has no target`. `0x001BD274` is an FPO function in the XPP section (XAPI's USB device layer) starting right after a `ret 0xc` with no prologue, referenced only from the init slot (`0x001BC978`) of the USB class-driver table at `0x001BC970`. Its body is `KeInitializeTimerEx(0x002649A8, NotificationTimer)` plus two status words. The disassembler's `gap_prologue` pass accepts only a prologue or a constant-returning stub, so it was missed.
+* **Scope**: every 32-bit value in the XPP section pointing at undetected code was listed. Excluding data pointers into the tables themselves, nine remained, all FPO functions after a `ret`/`jmp`, none in the dispatch table.
+* **Action**: the nine were added to `seed_functions.json` and the code regenerated (lift 179 s); all nine are now in the dispatch table.
+* **Result**: the skipped-call warning is gone and `KeInitializeTimerEx` is called from `0x001BD292`. The frontier stays at kernel import 65 `IoCreateDevice`, whose caller is confirmed as `MU_Init` (`0x001BCA34`).
+
+Verification as in the Korean table: Debug and Release builds with zero warnings on our targets; kernel probe 27/27, decomp check 6/6, d3d8 check 13,557/0; boot with no `[recomp]` warnings, stopping at `IoCreateDevice`.
