@@ -24,8 +24,8 @@ US XBE를 xboxrecomp 파이프라인으로 C(함수 8,716개, 약 102만 줄)로
 | `regenerate.py` 처음부터 실행 | 약 2분(디스어셈블 32초, lift 61초), `1 wrapped as sub_X_gen`, submodule 깨끗함 |
 | Win32 x86 Debug 빌드(생성 코드 포함) | 성공, 우리 코드 경고 0 |
 | Win32 x86 Release 빌드(생성 코드 포함) | 성공 1.7분, 경고 0 |
-| `rejsrf default_eng.xbe` (Debug, Release) | `run: stopped at unimplemented kernel import 255 PsCreateSystemThreadEx`, 약 1.4초 |
-| `rejsrf default.xbe` | JP 빌드는 lift 대상이 아니라고 알리고 실행하지 않음 |
+| `rejsrf default.xbe` (Debug, Release) | `run: stopped at unimplemented kernel import 255 PsCreateSystemThreadEx`, 약 1.4초 |
+| `rejsrf default.xbe` (일본판) | JP 빌드는 lift 대상이 아니라고 알리고 실행하지 않음 |
 | `rejsrf_decomp_check` (Debug, Release) | 6 cases, 0 differences, 종료 코드 0 |
 | `dumpbin /symbols` | `rejsrf_game.lib`에 `_sub_000128C0` 정의, `rejsrf_recomp.lib`에는 `_sub_000128C0` 참조(UNDEF) 21개와 `_sub_000128C0_gen` 정의 1개 |
 | `gen/` 없이 configure·빌드 | 성공, 앱은 "no recompiled code"로 로드 후 정지(CI 경로) |

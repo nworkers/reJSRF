@@ -4,7 +4,7 @@
 
 ## 1. 요구사항
 
-* 사용자 US XBE(`default_eng.xbe`)를 xboxrecomp 파이프라인으로 C로 옮기고(`gen/`, 커밋 안 함) Win32 x86에서 링크한다.
+* 사용자 US XBE(`default.xbe`)를 xboxrecomp 파이프라인으로 C로 옮기고(`gen/`, 커밋 안 함) Win32 x86에서 링크한다.
 * 생성 코드와 `rexbox` 런타임 사이의 ABI 계약을 정한다.
 * 간접 호출과 직접 호출 모두에 HLE → 디컴파일 → lift 우선순위를 적용하는 방법을 정한다(i001에서 **미확정**).
 
@@ -89,7 +89,7 @@ flowchart LR
 
 * `regenerate.py`가 `gen/jsrf_us/`를 처음부터 다시 만들고 submodule을 더럽히지 않는다.
 * Win32 x86 Debug/Release에서 `rejsrf`가 생성 코드와 함께 링크된다(우리 코드 /W4 경고 0).
-* `rejsrf default_eng.xbe`가 진입점부터 실행해 첫 미구현 커널 호출 또는 첫 fault를 보고한다.
+* `rejsrf default.xbe`가 진입점부터 실행해 첫 미구현 커널 호출 또는 첫 fault를 보고한다.
 * 디컴파일 함수 비교 시험이 통과한다.
 * `gen/` 없이 configure해도 빌드된다(CI 경로).
 
@@ -101,7 +101,7 @@ Prerequisite: [i001 design §6, §11](20261012-i001-project-bootstrap.md)
 
 ## 1. Requirements
 
-* Lift the user's US XBE (`default_eng.xbe`) to C with the xboxrecomp pipeline (`gen/`, never committed) and link it on Win32 x86.
+* Lift the user's US XBE (`default.xbe`) to C with the xboxrecomp pipeline (`gen/`, never committed) and link it on Win32 x86.
 * Define the ABI contract between generated code and the `rexbox` runtime.
 * Decide how the HLE → decompiled → lifted priority applies to both indirect and direct calls (**unresolved** in i001).
 
@@ -137,6 +137,6 @@ To show the workflow works, one small leaf function is decompiled into `src/game
 
 * `regenerate.py` rebuilds `gen/jsrf_us/` from scratch without dirtying the submodule.
 * On Win32 x86 Debug/Release, `rejsrf` links with the generated code (0 /W4 warnings in our code).
-* `rejsrf default_eng.xbe` runs from the entry point and reports the first unimplemented kernel call or the first fault.
+* `rejsrf default.xbe` runs from the entry point and reports the first unimplemented kernel call or the first fault.
 * The decompiled-function comparison test passes.
 * Configuring without `gen/` still builds (the CI path).

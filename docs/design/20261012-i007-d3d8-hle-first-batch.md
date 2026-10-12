@@ -118,7 +118,7 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-    XBE["default_eng.xbe"] --> LOAD["guest memory + XBE + kernel HLE<br/>(AvSendTVEncoderOption 등 원본이 부름)"]
+    XBE["default.xbe"] --> LOAD["guest memory + XBE + kernel HLE<br/>(AvSendTVEncoderOption 등 원본이 부름)"]
     LOAD --> ORIG["sub_X_gen(args)"] --> O1["eax, esp, output bytes"]
     LOAD --> HLE["registry export(args)"] --> O2["eax, esp, output bytes"]
     O1 & O2 --> CMP["compare, print diff"]

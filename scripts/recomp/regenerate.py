@@ -29,6 +29,9 @@ direct calls and the generated dispatch table link to the hand-written
 version. A file that also declares `extern void sub_XXXXXXXX_gen(void);` keeps
 the lifted body under that name (docs/design/20261012-i002-recomp-pipeline.md).
 
+The XBE must be the exact build the variant is lifted from (its MD5 is in
+src/game/jsrf/recomp/variants.json); any other build stops the run.
+
 Usage:
     python scripts/recomp/regenerate.py
     python scripts/recomp/regenerate.py --xbe <path> --variant jsrf_us --symbols-tool <exe>
@@ -42,9 +45,11 @@ import subprocess
 import sys
 import time
 
+from xbe_variant import check_xbe
+
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 XBOXRECOMP = ROOT / "third_party" / "xboxrecomp"
-DEFAULT_XBE = ROOT / "roms" / "Jet Set Radio Future" / "default_eng.xbe"
+DEFAULT_XBE = ROOT / "roms" / "Jet Set Radio Future" / "default.xbe"
 OVERRIDE_DIRS = [ROOT / "src" / "game" / "jsrf" / "decomp"]
 TITLE_RECOMP_DIR = ROOT / "src" / "game" / "jsrf" / "recomp"
 HLE_LIBRARIES = TITLE_RECOMP_DIR / "hle_libraries.json"
@@ -198,6 +203,9 @@ def main():
     xbe = args.xbe.resolve()
     if not xbe.is_file():
         sys.exit(f"no XBE at {xbe} -- put your own dump under roms/ (docs/guides/)")
+    problem = check_xbe(xbe, args.variant)
+    if problem:
+        sys.exit(f"error: {problem}")
     if not (XBOXRECOMP / "tools").is_dir():
         sys.exit("third_party/xboxrecomp is empty -- run: git submodule update --init")
     tool = find_symbol_tool(args.symbols_tool)

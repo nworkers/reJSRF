@@ -4,7 +4,7 @@
 
 ## 요약
 
-`rejsrf`는 이제 게임 디렉터리만 받는다: `rejsrf.exe "roms\Jet Set Radio Future"`. 앱은 디렉터리의 `.xbe`를 내용으로 식별해 US판을 실행하고(`xbe: USA (region 1) (default_eng.xbe)`), 그 폴더를 `D:`로 쓴다. README, Win32 가이드, ARCHITECTURE, CI smoke를 함께 고쳤다.
+`rejsrf`는 이제 게임 디렉터리만 받는다: `rejsrf.exe "roms\Jet Set Radio Future"`. 앱은 디렉터리의 `.xbe`를 내용으로 식별해 US판을 실행하고(`xbe: USA (region 1) (default.xbe)`), 그 폴더를 `D:`로 쓴다. README, Win32 가이드, ARCHITECTURE, CI smoke를 함께 고쳤다.
 
 ## 검증
 
@@ -29,7 +29,7 @@ Work order: [20261013-i033](../work-orders/20261013-i033-game-directory-argument
 
 ## Summary
 
-`rejsrf` now takes only the game directory: `rejsrf.exe "roms\Jet Set Radio Future"`. The app identifies the `.xbe` files in it by content, runs the US build (`xbe: USA (region 1) (default_eng.xbe)`), and serves the folder as `D:`. The README, the Win32 guide, ARCHITECTURE and the CI smoke step changed with it.
+`rejsrf` now takes only the game directory: `rejsrf.exe "roms\Jet Set Radio Future"`. The app identifies the `.xbe` files in it by content, runs the US build (`xbe: USA (region 1) (default.xbe)`), and serves the folder as `D:`. The README, the Win32 guide, ARCHITECTURE and the CI smoke step changed with it.
 
 ## Verification
 

@@ -34,7 +34,13 @@ cd reJSRF
 .\build\win32_x86\src\app\Debug\rejsrf.exe "roms\Jet Set Radio Future"
 ```
 
-인자는 디스크에서 추출한 **게임 디렉터리**입니다(`default_eng.xbe`와 `Media\`가 있는 폴더). 앱이 그 안의 XBE를 내용으로 식별해 US판(`default_eng.xbe`)을 실행하고, 그 폴더를 게임의 `D:`로 씁니다.
+인자는 디스크에서 추출한 **게임 디렉터리**입니다. 앱은 그 폴더를 게임의 `D:`로 쓰고, Xbox 타이틀의 기본 실행 파일인 `default.xbe`를 읽습니다. 다른 XBE를 읽으려면 `--xbe <파일>`로 지정합니다. 예를 들어 Sega GT와 JSRF를 함께 담은 합본 디스크라면 다음과 같습니다.
+
+```powershell
+.\build\win32_x86\src\app\Debug\rejsrf.exe "roms\Jet Set Radio Future" --xbe SegaJSRF.xbe
+```
+
+앱은 읽은 XBE를 내용(인증서)으로 식별합니다. 재컴파일 코드를 만든 US판이면 실행하고, 지원하는 다른 판이면 읽기만 하고 멈춥니다.
 
 자세한 절차: [Win32 개발 환경 준비와 빌드](docs/guides/win32-setup-and-build.md)
 
@@ -84,7 +90,7 @@ See the diagram above.
 
 ## Build (Win32)
 
-See the commands above, and [Win32 development setup and build](docs/guides/win32-setup-and-build.md) for the full procedure. The argument is the **game directory** extracted from the disc (the folder holding `default_eng.xbe` and `Media\`). The app identifies the XBEs in it by content, runs the US build (`default_eng.xbe`), and serves the folder as the game's `D:`.
+See the commands above, and [Win32 development setup and build](docs/guides/win32-setup-and-build.md) for the full procedure. The argument is the **game directory** extracted from the disc. The app serves that folder as the game's `D:` and loads `default.xbe`, an Xbox title's default executable. `--xbe <file>` loads another XBE, for example `--xbe SegaJSRF.xbe` on a disc that carries Sega GT and JSRF together. The app identifies the loaded XBE by content (its certificate): the US build, which the recompiled code comes from, runs; another supported build is loaded and the app stops.
 
 ## Platform status
 

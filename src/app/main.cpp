@@ -1,10 +1,10 @@
-// rejsrf: application entry. Orchestration only -- find the user's XBE in the
-// game directory, place it in guest memory, install the runtime environment,
+// rejsrf: application entry. Orchestration only -- load the user's XBE from
+// the game directory, place it in guest memory, install the runtime environment,
 // register the HLE modules, apply the title profile and, when the build
 // carries recompiled code, boot the entry point as the first guest thread and
 // report how the guest threads ended.
 //
-// Usage: rejsrf <game directory>   (the folder extracted from the disc)
+// Usage: rejsrf <game directory> [--xbe <file>]   (default: default.xbe)
 
 #include "rejsrf/jsrf_profile.h"
 #include "rejsrf_build_stamp.h"
@@ -30,7 +30,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
-#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -69,12 +68,63 @@ std::string BuildIdentity()
     return identity;
 }
 
-struct GameXbe
+// An Xbox title starts from default.xbe; --xbe names another one in the game
+// directory.
+constexpr const char* kDefaultXbe = "default.xbe";
+
+struct Options
 {
-    std::filesystem::path path;
-    std::optional<rexbox::xbe::XbeImage> image;
-    const rejsrf::XbeVariant* variant = nullptr;
+    std::string game_directory;
+    std::string xbe = kDefaultXbe;
 };
+
+void PrintUsage(const char* program)
+{
+    std::fprintf(stderr,
+                 "usage: %s <game directory> [--xbe <file>]\n"
+                 "  <game directory>  the folder extracted from the disc (served as D:)\n"
+                 "  --xbe <file>      the XBE in that folder to load (default: %s)\n",
+                 program, kDefaultXbe);
+}
+
+// Returns false on a malformed command line.
+bool ParseArguments(int argc, char** argv, Options* options)
+{
+    bool have_directory = false;
+    for (int i = 1; i < argc; ++i)
+    {
+        const std::string argument = argv[i];
+        if (argument == "--xbe")
+        {
+            if (i + 1 >= argc)
+            {
+                std::fprintf(stderr, "error: --xbe needs a file name\n");
+                return false;
+            }
+            options->xbe = argv[++i];
+        }
+        else if (argument.rfind("--xbe=", 0) == 0)
+        {
+            options->xbe = argument.substr(6);
+        }
+        else if (argument.rfind("--", 0) == 0)
+        {
+            std::fprintf(stderr, "error: unknown option %s\n", argument.c_str());
+            return false;
+        }
+        else if (!have_directory)
+        {
+            options->game_directory = argument;
+            have_directory = true;
+        }
+        else
+        {
+            std::fprintf(stderr, "error: unexpected argument %s\n", argument.c_str());
+            return false;
+        }
+    }
+    return have_directory && !options->xbe.empty();
+}
 
 bool HasXbeExtension(const std::filesystem::path& path)
 {
@@ -84,58 +134,25 @@ bool HasXbeExtension(const std::filesystem::path& path)
     return extension == ".xbe";
 }
 
-// The XBE to run from the game directory, identified by content rather than
-// by name: the primary variant if the directory has it, otherwise another
-// supported build (which is loaded but not run). Reports every XBE it looked
-// at when none is supported.
-std::optional<GameXbe> FindGameXbe(const std::filesystem::path& directory)
+// The .xbe files in the game directory, for the error that names a missing one.
+std::string ListXbeFiles(const std::filesystem::path& directory)
 {
-    std::vector<std::filesystem::path> candidates;
+    std::vector<std::string> names;
     std::error_code ec;
     for (const auto& entry : std::filesystem::directory_iterator(directory, ec))
     {
         if (entry.is_regular_file(ec) && HasXbeExtension(entry.path()))
         {
-            candidates.push_back(entry.path());
+            names.push_back(entry.path().filename().string());
         }
     }
-    std::sort(candidates.begin(), candidates.end());
-    std::optional<GameXbe> fallback;
-    for (const auto& path : candidates)
+    std::sort(names.begin(), names.end());
+    std::string list;
+    for (const auto& name : names)
     {
-        std::string error;
-        GameXbe found;
-        found.path = path;
-        found.image = rexbox::xbe::XbeImage::Load(path, &error);
-        if (!found.image)
-        {
-            std::fprintf(stderr, "  %s: %s\n", path.filename().string().c_str(), error.c_str());
-            continue;
-        }
-        found.variant = rejsrf::IdentifyXbe(*found.image);
-        if (found.variant == nullptr)
-        {
-            std::fprintf(stderr,
-                         "  %s: not a supported Jet Set Radio Future build "
-                         "(title id %08X, certificate version %08X)\n",
-                         path.filename().string().c_str(), found.image->certificate().title_id,
-                         found.image->certificate().version);
-            continue;
-        }
-        if (found.variant == rejsrf::PrimaryVariant())
-        {
-            return found;
-        }
-        if (!fallback)
-        {
-            fallback = std::move(found);
-        }
+        list += (list.empty() ? "" : ", ") + name;
     }
-    if (!fallback && candidates.empty())
-    {
-        std::fprintf(stderr, "  no .xbe file\n");
-    }
-    return fallback;
+    return list.empty() ? "none" : list;
 }
 
 void PrintThreadReport(const rexbox::recomp::ThreadReport& report)
@@ -190,33 +207,45 @@ int main(int argc, char** argv)
     // The window adds the renderer and the FPS (rePIU's form).
     rexbox::platform::SetDisplayTitle(std::string("reJSRF v" REJSRF_VERSION " (") + BuildIdentity() +
                                       ") - Build " REJSRF_BUILD_TIME);
-    if (argc < 2)
+    Options options;
+    if (!ParseArguments(argc, argv, &options))
     {
-        std::fprintf(stderr, "usage: %s <game directory>\n"
-                             "  the folder extracted from the disc, holding default_eng.xbe and Media\\\n",
-                     argv[0]);
+        PrintUsage(argv[0]);
         return 2;
     }
 
-    // The game directory is the disc (D:); the XBE to run is found in it.
-    const std::filesystem::path game_directory = std::filesystem::absolute(argv[1]);
+    // The game directory is the disc (D:); the XBE comes from it.
+    const std::filesystem::path game_directory = std::filesystem::absolute(options.game_directory);
     std::error_code ec;
     if (!std::filesystem::is_directory(game_directory, ec))
     {
         std::fprintf(stderr, "error: %s is not a directory; pass the game directory (the folder holding the XBE)\n",
-                     argv[1]);
+                     options.game_directory.c_str());
         return 1;
     }
-    std::optional<GameXbe> game = FindGameXbe(game_directory);
-    if (!game)
+    const std::filesystem::path xbe_path = game_directory / options.xbe;
+    if (!std::filesystem::is_regular_file(xbe_path, ec))
     {
-        std::fprintf(stderr, "error: no supported Jet Set Radio Future XBE in %s\n", argv[1]);
+        std::fprintf(stderr, "error: %s has no %s (XBE files there: %s); choose one with --xbe <file>\n",
+                     options.game_directory.c_str(), options.xbe.c_str(), ListXbeFiles(game_directory).c_str());
         return 1;
     }
-    const rexbox::xbe::XbeImage* image = &*game->image;
-    const rejsrf::XbeVariant* variant = game->variant;
     std::string error;
-    std::printf("xbe: %s (%s)\n", variant->label, game->path.filename().string().c_str());
+    const auto image = rexbox::xbe::XbeImage::Load(xbe_path, &error);
+    if (!image)
+    {
+        std::fprintf(stderr, "error: %s: %s\n", options.xbe.c_str(), error.c_str());
+        return 1;
+    }
+    const rejsrf::XbeVariant* variant = rejsrf::IdentifyXbe(*image);
+    if (variant == nullptr)
+    {
+        std::fprintf(stderr, "error: %s is not a supported Jet Set Radio Future build "
+                             "(title id %08X, certificate version %08X)\n",
+                     options.xbe.c_str(), image->certificate().title_id, image->certificate().version);
+        return 1;
+    }
+    std::printf("xbe: %s (%s)\n", variant->label, options.xbe.c_str());
 
     rexbox::runtime::GuestMemory memory;
     if (!memory.Initialize(rexbox::runtime::GuestMemory::kAddressSpaceSize))
@@ -266,8 +295,9 @@ int main(int argc, char** argv)
     }
     if (variant != rejsrf::PrimaryVariant())
     {
-        std::printf("recompiled code was lifted from the %s build; not running %s\n",
-                    rejsrf::PrimaryVariant()->label, variant->label);
+        std::printf("recompiled code was lifted from the %s build; not running %s "
+                    "(load the %s XBE with --xbe <file>)\n",
+                    rejsrf::PrimaryVariant()->label, variant->label, rejsrf::PrimaryVariant()->label);
         return 0;
     }
 

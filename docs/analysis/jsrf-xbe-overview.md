@@ -6,7 +6,7 @@ This is what `rexbox_xbe_info` (issue #1) read from the two XBEs of the user's d
 
 ## 1. 빌드 변형 / Build variants
 
-| 항목 / Field | `default_eng.xbe` | `default.xbe` |
+| 항목 / Field | US판 / USA `default.xbe` | 일본판 / Japan `default.xbe` |
 |---|---|---|
 | 지역 / Region | 1 (North America) | 2 (Japan) |
 | MD5 | `f4e366bfdceee551a09f42219c90d84e` | `d8490cdb75bd47b36c62effdf1461ae0` |
@@ -20,12 +20,12 @@ This is what `rexbox_xbe_info` (issue #1) read from the two XBEs of the user's d
 
 * **확인됨**: 두 빌드는 title id `5345000A`, 인증서 버전 1, XDK 4134, 진입점 `00148023`, 섹션 배치, 커널 import 120개가 같다.
 * **확인됨**: 두 파일은 146,461바이트가 다르고 그 차이는 `.text` 영역(파일 오프셋 `0x1000`부터)에도 있다. 따라서 한 빌드에서 얻은 함수 주소를 다른 빌드에 그대로 쓸 수 없다.
-* **확인됨**: `default_eng.xbe`의 MD5는 [dplewis/jsrf](https://github.com/dplewis/jsrf)가 "JSRF (USA)"로 명시한 MD5와 같다. US판을 1차 타깃으로 정한 근거다. [jsrf-recomp](https://github.com/andeecollard/jsrf-recomp)도 US판과 같은 진입점 `0x00148023`을 쓴다.
+* **확인됨**: `default.xbe`의 MD5는 [dplewis/jsrf](https://github.com/dplewis/jsrf)가 "JSRF (USA)"로 명시한 MD5와 같다. US판을 1차 타깃으로 정한 근거다. [jsrf-recomp](https://github.com/andeecollard/jsrf-recomp)도 US판과 같은 진입점 `0x00148023`을 쓴다.
 * **미확정**: 이 디스크가 어느 발매판(일본판인지, 지역 변형을 함께 담은 판인지)인지, 그리고 런처가 어느 XBE를 고르는지.
 
 * **Confirmed**: both builds share title id `5345000A`, certificate version 1, XDK 4134, entry point `00148023`, the section layout and the 120 kernel imports.
 * **Confirmed**: the files differ in 146,461 bytes, including inside `.text` (from file offset `0x1000`), so function addresses from one build do not carry over to the other.
-* **Confirmed**: `default_eng.xbe`'s MD5 equals the one [dplewis/jsrf](https://github.com/dplewis/jsrf) names as "JSRF (USA)", which is why the US build is the primary target. [jsrf-recomp](https://github.com/andeecollard/jsrf-recomp) uses the same entry point `0x00148023` for the US build.
+* **Confirmed**: `default.xbe`'s MD5 equals the one [dplewis/jsrf](https://github.com/dplewis/jsrf) names as "JSRF (USA)", which is why the US build is the primary target. [jsrf-recomp](https://github.com/andeecollard/jsrf-recomp) uses the same entry point `0x00148023` for the US build.
 * **Unresolved**: which release this disc is (a Japanese one, or one carrying regional variants), and which XBE the dashboard launches.
 
 ## 2. 이미지 헤더 / Image header (US)

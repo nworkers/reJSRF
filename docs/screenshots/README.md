@@ -20,8 +20,8 @@
 
 ## 캡처 방법 / How they were taken
 
-- 커밋 `7fe2e90`(v0.0.12 + issue #31)의 Win32 x86 Release 빌드로 US판 `default_eng.xbe`를 입력 없이 실행했다.
+- 커밋 `7fe2e90`(v0.0.12 + issue #31)의 Win32 x86 Release 빌드로 US판 `default.xbe`를 입력 없이 실행했다.
 - `first-screen-01`~`10`: `REXBOX_DISPLAY=hidden`, `REXBOX_AUDIO=none`, `REXBOX_FRAME_DUMP=60,120,…,9000`(1초마다)으로 back buffer를 감마 램프까지 적용해 640x480 BMP로 저장했다. 대조표에서 장면마다 한 장을 골라 JPEG(품질 90)로 바꿨다.
 - `first-screen-window.jpg`: 기본 창(2배, 1280x960)을 88초 뒤 DPI 인식 프로세스에서 `PrintWindow(PW_RENDERFULLCONTENT)`로 제목줄까지 찍어 JPEG(품질 90)로 바꿨다.
 
-*Taken with the Win32 x86 Release build of commit `7fe2e90` (v0.0.12 + issue #31), running the US `default_eng.xbe` with no input. `first-screen-01` to `10` are back buffers, with the gamma ramp applied, saved as 640x480 BMPs with `REXBOX_DISPLAY=hidden`, `REXBOX_AUDIO=none` and `REXBOX_FRAME_DUMP=60,120,…,9000` (one per second). One frame per scene was chosen from contact sheets and saved as JPEG (quality 90). `first-screen-window.jpg` is the default window (2x, 1280x960) after 88 s, captured with its title bar by `PrintWindow(PW_RENDERFULLCONTENT)` in a DPI-aware process, saved as JPEG (quality 90).*
+*Taken with the Win32 x86 Release build of commit `7fe2e90` (v0.0.12 + issue #31), running the US `default.xbe` with no input. `first-screen-01` to `10` are back buffers, with the gamma ramp applied, saved as 640x480 BMPs with `REXBOX_DISPLAY=hidden`, `REXBOX_AUDIO=none` and `REXBOX_FRAME_DUMP=60,120,…,9000` (one per second). One frame per scene was chosen from contact sheets and saved as JPEG (quality 90). `first-screen-window.jpg` is the default window (2x, 1280x960) after 88 s, captured with its title bar by `PrintWindow(PW_RENDERFULLCONTENT)` in a DPI-aware process, saved as JPEG (quality 90).*

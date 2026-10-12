@@ -14,13 +14,13 @@ Game logic is carried by code mechanically lifted from the original x86, and dec
 
 ## 현재 1차 목표
 
-* 1차 타깃 실행 파일은 US판 `default_eng.xbe`(MD5 `f4e366bfdceee551a09f42219c90d84e`)다. 일본 지역판 `default.xbe`는 식별만 한다.
+* 1차 타깃 실행 파일은 US판 `default.xbe`(MD5 `f4e366bfdceee551a09f42219c90d84e`)다. 일본 지역판 `default.xbe`는 식별만 한다.
 * 1차 호스트는 Win32 x86이다. 어느 정도 진행된 뒤 Win64, Linux x86/x64, Web, Android로 넓힌다.
 * 여러 빌드 변형과 다른 타이틀을 염두에 두고, 타이틀 고유 사항은 타이틀 프로파일로 분리한다.
 
 ## Current First Target
 
-* The first target executable is the US build `default_eng.xbe` (MD5 `f4e366bfdceee551a09f42219c90d84e`). The Japan-region `default.xbe` is recognized only.
+* The first target executable is the US build `default.xbe` (MD5 `f4e366bfdceee551a09f42219c90d84e`). The Japan-region `default.xbe` is recognized only.
 * The first host is Win32 x86. Once the project is well along, it widens to Win64, Linux x86/x64, the web and Android.
 * With other build variants and other titles in mind, title specifics are separated into the title profile.
 
