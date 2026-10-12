@@ -8,6 +8,7 @@
 #include "d3d8_state.h"
 #include "rexbox/platform/display.h"
 
+#include <chrono>
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -400,6 +401,20 @@ void D3DDevice_Swap()
     if (state.frame_count == 1)
     {
         std::fprintf(stderr, "[d3d8] first frame presented (D3DDevice_Swap flags %08X)\n", call.Arg(0));
+    }
+    // REXBOX_FRAME_LOG=<n>: one line every n presents, to tell a running
+    // frame loop from a stall without a full trace (diagnostic).
+    static const uint32_t frame_log = [] {
+        const char* value = std::getenv("REXBOX_FRAME_LOG");
+        return value != nullptr ? static_cast<uint32_t>(std::strtoul(value, nullptr, 10)) : 0u;
+    }();
+    if (frame_log != 0 && state.frame_count % frame_log == 0)
+    {
+        static const auto start = std::chrono::steady_clock::now();
+        const auto elapsed =
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start);
+        std::fprintf(stderr, "[d3d8] frame %u (+%lld ms since the first logged)\n", state.frame_count,
+                     static_cast<long long>(elapsed.count()));
     }
     call.Return(kD3dOk, 1);
 }

@@ -4,19 +4,21 @@
 
 This records how far the recompiled US build gets when run from its entry point. It is updated by each task; earlier frontiers stay in the history below.
 
-## 현재 / Current (issue #19, 2026-10-12)
+## 현재 / Current (issue #21, 2026-10-12)
 
 | 항목 / Item | 값 / Value |
 |---|---|
-| 생성 코드 / Generated code | 함수 9,016개(실행에서 닿은 `0x0007BE30`을 `observed` seed로 +1), 미해결 스텁 105개, XDK override 258개, 커널 export 104개(+`NtUserIoApcDispatcher`) / 9,016 functions (+1: `0x0007BE30`, reached at run time, as an `observed` seed), 105 unresolved stubs, 258 XDK overrides, 104 kernel exports (+`NtUserIoApcDispatcher`) |
-| 실행 결과 / Outcome | **`dsstdfx.bin` 읽기의 완료 APC가 전달되어 `DownloadEffectsImage`(효과 20개), 스트리밍 PCM 버퍼 4개, 첫 `D3DDevice_Swap`, 폰트 읽기, 효과음 버퍼 10개(Xbox ADPCM 9 + PCM 1), 세이브 메타데이터 확인(`U:\…\SaveMeta.xbx` 없음)을 지나, thread 2가 `D3DVertexBuffer_Lock` 뒤 `0x0FE80026`을 읽다 fault(약 50초, 헤드리스) / the completion APC of the `dsstdfx.bin` read is delivered; past `DownloadEffectsImage` (20 effects), four streaming PCM buffers, the first `D3DDevice_Swap`, font loading, ten sound-effect buffers (9 Xbox ADPCM + 1 PCM) and the save-metadata check (`U:\…\SaveMeta.xbx` absent), thread 2 faults reading `0x0FE80026` after `D3DVertexBuffer_Lock` (about 50 s, headless)** |
+| 생성 코드 / Generated code | 함수 9,193개(다른 함수 본문 중간으로 가는 분기 대상 48개를 alias로 복구, xboxrecomp PR [#200](https://github.com/sp00nznet/xboxrecomp/pull/200)), 미해결 스텁 83개(105에서), XDK override 258개, 커널 export 104개 / 9,193 functions (48 branch targets inside other functions recovered as aliases, xboxrecomp PR [#200](https://github.com/sp00nznet/xboxrecomp/pull/200)), 83 unresolved stubs (from 105), 258 XDK overrides, 104 kernel exports |
+| 실행 결과 / Outcome | **fault 없이 프레임 루프가 계속 돈다(헤드리스 5분, 약 18만 5천 present, 수직 동기 대기가 없어 매우 빠름). 그리기는 아직 받기만 하고 그리지 않으며(`DrawIndexedVertices` 등), 게임은 사운드 버퍼 67개를 만들지만 `Play`는 아직 부르지 않는다 / the frame loop keeps running with no fault (5 minutes headless, about 185,000 presents, very fast because nothing waits for vertical blank). Drawing is still accepted but not drawn (`DrawIndexedVertices` and others), and the game creates 67 sound buffers but calls no `Play` yet** |
 
-* **확인됨**: XAPI `ReadFileEx`가 넘긴 `NtUserIoApcDispatcher` APC가 다음 경고 가능 대기에서 실행되고 대기는 `STATUS_USER_APC`로 끝난다. 게임은 이어서 효과 이미지를 내려받는다([dsound §5](dsound.md)).
-* **확인됨**: 첫 프레임 뒤 vtable 슬롯 `0x0007BE30`(`.data 0x0020D2B8`)이 `0x0007BDDB`에서 불려 건너뛰어졌다. 앞 함수 `sub_0007BDD0`의 switch 표를 선형 스윕이 코드로 읽어 seed가 "명령 중간"으로 거부되었으므로 `observed` seed로 넣었다. 같은 모양의 후보 `0x0001FD10`, `0x00020F10`은 아직 닿지 않았다.
-* **미확정**: fault 직전 마지막 간접 호출은 가상 getter `0x00038ED0`(`return this->[0x1770]`, 0을 돌려줌)이고, 호출자가 `esi = 0x0FE80022`에서 읽는다. 다음 task에서 호출자와 `esi`의 출처를 찾는다.
-* **Confirmed**: the `NtUserIoApcDispatcher` APC that XAPI's `ReadFileEx` passes runs at the next alertable wait, which ends with `STATUS_USER_APC`; the game then downloads the effects image ([dsound §5](dsound.md)).
-* **Confirmed**: after the first frame, the vtable slot `0x0007BE30` (`.data 0x0020D2B8`) was called from `0x0007BDDB` and skipped. The linear sweep had decoded the preceding `sub_0007BDD0`'s switch tables as code, so its seed was rejected as mid-instruction; it is now an `observed` seed. The two candidates of the same shape, `0x0001FD10` and `0x00020F10`, are not reached yet.
-* **Unresolved**: the last indirect call before the fault is the virtual getter `0x00038ED0` (`return this->[0x1770]`, which returns 0), and the caller then reads from `esi = 0x0FE80022`. The next task finds the caller and where `esi` comes from.
+* **확인됨**: `0x0FE80026` fault는 노드 순회 `0x00011070`의 `esi` 손상이었다. `0x0007E180`의 공유 꼬리 `pop esi; ret`(`0x0007E255`)로 가는 `jcc` 네 개가, 디스어셈블러가 그 앞 블록(`0x0007E242`)을 함수로 자르면서 `g_esp += 4` 스텁으로 lift되었다. `REJSRF_RECOMP_ABI_CHECK` 빌드가 첫 위반(`call 0x0007E180`, 반환 주소 미pop)을 찾았다([설계 i021](../design/20261012-i021-node-walk-fault.md)).
+* **확인됨**: 실행 4번 중 3번은 "PRESS" 화면 자원(`Mark\PRESS\JSRF_TEXS_0.JTX`)과 캐시 표를 읽은 뒤 같은 루프를 돈다. 1번은 그 전에 미션 `mssn0090`, 스테이지 `Stg10_*`, 캐릭터(Corn, Beat, Gum), 효과음(`se_stg01`, `p_cmn`, `pv_*`)을 읽었다. 데모 같은 경로가 실행마다 달라지는 것으로 보인다(**추정**).
+* **확인됨**: 그 1번 실행에서 `NtAllocateVirtualMemory`가 한 번 크기 0(반올림 뒤)으로 실패했다(`out of guest memory for 0 bytes`). 원인은 아직 보지 않았다.
+* **미확정**: 다음 task 후보는 둘이다. (1) D3D8 그리기(정점·인덱스 버퍼, 셰이더, 텍스처, `Draw*`), (2) 첫 `Play`가 나오는 조건(타이틀 음악·데모의 사운드 스트림) 확인.
+* **Confirmed**: the `0x0FE80026` fault was a corrupted `esi` in the node walk `0x00011070`. The four `jcc` to `0x0007E180`'s shared `pop esi; ret` tail (`0x0007E255`) became `g_esp += 4` stubs when the disassembler cut the block before it (`0x0007E242`) into a function; a `REJSRF_RECOMP_ABI_CHECK` build found the first violation (`call 0x0007E180`, return address not popped) ([design i021](../design/20261012-i021-node-walk-fault.md)).
+* **Confirmed**: three runs of four read the "PRESS" screen assets (`Mark\PRESS\JSRF_TEXS_0.JTX`) and the cache tables, then run the same loop; one first read mission `mssn0090`, stage `Stg10_*`, characters (Corn, Beat, Gum) and sound effects (`se_stg01`, `p_cmn`, `pv_*`). A demo-like path apparently differs from run to run (**inferred**).
+* **Confirmed**: in that run, one `NtAllocateVirtualMemory` failed with a size of 0 after rounding (`out of guest memory for 0 bytes`); not looked into yet.
+* **Unresolved**: two candidates for the next task: (1) D3D8 drawing (vertex and index buffers, shaders, textures, `Draw*`), (2) what makes the first `Play` happen (the sound streams of the title music and demo).
 
 ## 이력 / History
 
@@ -30,6 +32,21 @@ This records how far the recompiled US build gets when run from its entry point.
 | #15 | 입력·폰트·셰이더 생성 통과, `DirectSoundCreate`의 APU `0xFE801100` / past input, font and shader creation, APU `0xFE801100` in `DirectSoundCreate` |
 | #17 | `DirectSoundCreate`(HLE) 통과, `dsstdfx.bin` 읽기의 사용자 APC 대기 / past `DirectSoundCreate` (HLE), waiting for the user APC of the `dsstdfx.bin` read |
 | #19 | 사용자 APC 전달, 효과 이미지·버퍼 생성·첫 `D3DDevice_Swap`·폰트·효과음 버퍼 통과, `D3DVertexBuffer_Lock` 뒤 `0x0FE80026` fault / user APCs delivered; past the effects image, buffer creation, the first `D3DDevice_Swap`, fonts and sound-effect buffers, fault at `0x0FE80026` after `D3DVertexBuffer_Lock` |
+| #21 | 노드 순회 fault 해결(xboxrecomp #200), 프레임 루프가 계속 돎, 그리기·`Play` 없음 / node-walk fault fixed (xboxrecomp #200); the frame loop keeps running, no drawing or `Play` yet |
+
+### issue #19 frontier 상세 / issue #19 frontier details
+
+| 항목 / Item | 값 / Value |
+|---|---|
+| 생성 코드 / Generated code | 함수 9,016개(실행에서 닿은 `0x0007BE30`을 `observed` seed로 +1), 미해결 스텁 105개, XDK override 258개, 커널 export 104개(+`NtUserIoApcDispatcher`) / 9,016 functions (+1: `0x0007BE30`, reached at run time, as an `observed` seed), 105 unresolved stubs, 258 XDK overrides, 104 kernel exports (+`NtUserIoApcDispatcher`) |
+| 실행 결과 / Outcome | **`dsstdfx.bin` 읽기의 완료 APC가 전달되어 `DownloadEffectsImage`(효과 20개), 스트리밍 PCM 버퍼 4개, 첫 `D3DDevice_Swap`, 폰트 읽기, 효과음 버퍼 10개(Xbox ADPCM 9 + PCM 1), 세이브 메타데이터 확인(`U:\…\SaveMeta.xbx` 없음)을 지나, thread 2가 `D3DVertexBuffer_Lock` 뒤 `0x0FE80026`을 읽다 fault(약 50초, 헤드리스) / the completion APC of the `dsstdfx.bin` read is delivered; past `DownloadEffectsImage` (20 effects), four streaming PCM buffers, the first `D3DDevice_Swap`, font loading, ten sound-effect buffers (9 Xbox ADPCM + 1 PCM) and the save-metadata check (`U:\…\SaveMeta.xbx` absent), thread 2 faults reading `0x0FE80026` after `D3DVertexBuffer_Lock` (about 50 s, headless)** |
+
+* **확인됨**: XAPI `ReadFileEx`가 넘긴 `NtUserIoApcDispatcher` APC가 다음 경고 가능 대기에서 실행되고 대기는 `STATUS_USER_APC`로 끝난다. 게임은 이어서 효과 이미지를 내려받는다([dsound §5](dsound.md)).
+* **확인됨**: 첫 프레임 뒤 vtable 슬롯 `0x0007BE30`(`.data 0x0020D2B8`)이 `0x0007BDDB`에서 불려 건너뛰어졌다. 앞 함수 `sub_0007BDD0`의 switch 표를 선형 스윕이 코드로 읽어 seed가 "명령 중간"으로 거부되었으므로 `observed` seed로 넣었다. 같은 모양의 후보 `0x0001FD10`, `0x00020F10`은 아직 닿지 않았다.
+* **미확정**: fault 직전 마지막 간접 호출은 가상 getter `0x00038ED0`(`return this->[0x1770]`, 0을 돌려줌)이고, 호출자가 `esi = 0x0FE80022`에서 읽는다. 다음 task에서 호출자와 `esi`의 출처를 찾는다.
+* **Confirmed**: the `NtUserIoApcDispatcher` APC that XAPI's `ReadFileEx` passes runs at the next alertable wait, which ends with `STATUS_USER_APC`; the game then downloads the effects image ([dsound §5](dsound.md)).
+* **Confirmed**: after the first frame, the vtable slot `0x0007BE30` (`.data 0x0020D2B8`) was called from `0x0007BDDB` and skipped. The linear sweep had decoded the preceding `sub_0007BDD0`'s switch tables as code, so its seed was rejected as mid-instruction; it is now an `observed` seed. The two candidates of the same shape, `0x0001FD10` and `0x00020F10`, are not reached yet.
+* **Unresolved**: the last indirect call before the fault is the virtual getter `0x00038ED0` (`return this->[0x1770]`, which returns 0), and the caller then reads from `esi = 0x0FE80022`. The next task finds the caller and where `esi` comes from.
 
 ### issue #17 frontier 상세 / issue #17 frontier details
 
