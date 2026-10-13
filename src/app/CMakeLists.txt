@@ -17,4 +17,7 @@ if(MSVC)
     # to exhaust the 32-bit address space. Large-address-aware gives the
     # process 4 GiB on 64-bit Windows.
     target_link_options(rejsrf PRIVATE /LARGEADDRESSAWARE)
+    # rejsrf.map: function addresses for scripts/perf/resolve_samples.py
+    # (REXBOX_SAMPLE); the build has no PDB.
+    target_link_options(rejsrf PRIVATE /MAP)
 endif()

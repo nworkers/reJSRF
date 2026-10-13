@@ -52,7 +52,8 @@ public:
 
     const HleExport* FindExport(std::string_view symbol) const;
 
-    // The HLE implementation bound at `address`, or nullptr.
+    // The HLE implementation bound at `address`, or nullptr. Asked on every
+    // indirect call of the lifted code, so most answers are a bitmap test.
     HleThunk Lookup(GuestAddress address) const;
 
     // A title profile records where its copy of an XDK variable lives (found
@@ -71,6 +72,10 @@ private:
     std::vector<HleExport> exports_;
     std::unordered_map<std::string, size_t> export_index_;
     std::unordered_map<GuestAddress, size_t> bindings_;
+    // A bit per guest address below kFlatLimit that has a binding; addresses
+    // at or above it (kernel thunks) are looked up in bindings_ alone.
+    static constexpr GuestAddress kFlatLimit = 0x01000000;
+    std::vector<uint64_t> bound_bits_;
     std::unordered_map<std::string, GuestAddress> variables_;
 };
 

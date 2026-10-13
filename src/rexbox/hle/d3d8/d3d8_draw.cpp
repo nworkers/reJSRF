@@ -173,20 +173,23 @@ FixedFunctionKey BuildKey(const VertexLayout& layout, BoundTexture textures[kFix
         stage.tex_coord_index = static_cast<uint8_t>(tex_coord_index & 0xFFFF);
         if ((tex_coord_index & 0xFFFF0000u) != 0)
         {
-            ReportOnce(Format("texgen %X", tex_coord_index >> 16),
-                       Format("texture coordinate generation %08X is not implemented yet (stage %u)",
-                              tex_coord_index, s));
+            ReportOncePer("texgen", tex_coord_index >> 16, [&] {
+                return Format("texture coordinate generation %08X is not implemented yet (stage %u)",
+                              tex_coord_index, s);
+            });
         }
         if (TextureStateValue(s, tss::kTextureTransformFlags) != 0)
         {
-            ReportOnce("texture transform", Format("texture transforms (stage %u flags %08X) are not applied yet", s,
-                                                   TextureStateValue(s, tss::kTextureTransformFlags)));
+            ReportOncePer("texture transform", 0, [&] {
+                return Format("texture transforms (stage %u flags %08X) are not applied yet", s,
+                              TextureStateValue(s, tss::kTextureTransformFlags));
+            });
         }
         for (const uint32_t op : {stage.color_op, stage.alpha_op})
         {
             if (op == top::kPremodulate || op == top::kBumpEnvMap || op == top::kBumpEnvMapLuminance)
             {
-                ReportOnce(Format("op %u", op), Format("texture operation %u is drawn as SELECTARG1", op));
+                ReportOncePer("op", op, [op] { return Format("texture operation %u is drawn as SELECTARG1", op); });
             }
         }
         textures[s] = ResolveTexture(pipeline.textures[s]);
@@ -200,11 +203,13 @@ FixedFunctionKey BuildKey(const VertexLayout& layout, BoundTexture textures[kFix
     }
     if (RenderStateValue(rs::kFogEnable) != 0)
     {
-        ReportOnce("fog", "fog is not drawn yet");
+        ReportOncePer("fog", 0, [] { return std::string("fog is not drawn yet"); });
     }
     if (!program && !layout.pretransformed && RenderStateValue(rs::kLighting) != 0)
     {
-        ReportOnce("lighting", "fixed-function lighting is not implemented yet; lit draws use vertex colors");
+        ReportOncePer("lighting", 0, [] {
+            return std::string("fixed-function lighting is not implemented yet; lit draws use vertex colors");
+        });
     }
     return key;
 }
@@ -501,9 +506,10 @@ void Draw(const char* name, uint32_t primitive, uint32_t count, IndexSource indi
         pixel_shader = FindPixelShader(pipeline.pixel_shader);
         if (!is_program || pixel_shader == nullptr)
         {
-            ReportOnce("pixel shader", Format("%s with pixel shader %08X and %s is not drawn yet", name,
-                                              pipeline.pixel_shader,
-                                              is_program ? "an unknown handle" : "fixed-function vertex processing"));
+            ReportOncePer("pixel shader", 0, [&] {
+                return Format("%s with pixel shader %08X and %s is not drawn yet", name, pipeline.pixel_shader,
+                              is_program ? "an unknown handle" : "fixed-function vertex processing");
+            });
             return;
         }
     }
@@ -514,16 +520,18 @@ void Draw(const char* name, uint32_t primitive, uint32_t count, IndexSource indi
         shader = FindProgramShader(pipeline.vertex_shader);
         if (shader == nullptr || !shader->usable)
         {
-            ReportOnce(Format("vertex program %08X", pipeline.vertex_shader),
-                       Format("%s: vertex-shader program %08X is not drawn: %s", name, pipeline.vertex_shader,
-                              shader != nullptr ? shader->error.c_str() : "unknown handle"));
+            ReportOncePer("vertex program", pipeline.vertex_shader, [&] {
+                return Format("%s: vertex-shader program %08X is not drawn: %s", name, pipeline.vertex_shader,
+                              shader != nullptr ? shader->error.c_str() : "unknown handle");
+            });
             return;
         }
         if ((shader->declaration.streams & ~1u) != 0)
         {
-            ReportOnce(Format("vertex program streams %08X", pipeline.vertex_shader),
-                       Format("%s: vertex-shader program %08X reads streams other than 0, not drawn yet", name,
-                              pipeline.vertex_shader));
+            ReportOncePer("vertex program streams", pipeline.vertex_shader, [&] {
+                return Format("%s: vertex-shader program %08X reads streams other than 0, not drawn yet", name,
+                              pipeline.vertex_shader);
+            });
             return;
         }
         // The fragment stage reads every output the program may write.
@@ -538,14 +546,16 @@ void Draw(const char* name, uint32_t primitive, uint32_t count, IndexSource indi
     }
     else if (!DecodeFvf(pipeline.vertex_shader, &layout))
     {
-        ReportOnce(Format("fvf %08X", pipeline.vertex_shader),
-                   Format("%s: vertex format %08X is not understood", name, pipeline.vertex_shader));
+        ReportOncePer("fvf", pipeline.vertex_shader, [&] {
+            return Format("%s: vertex format %08X is not understood", name, pipeline.vertex_shader);
+        });
         return;
     }
     GLenum mode = kGlTriangles;
     if (!GlPrimitive(primitive, &mode))
     {
-        ReportOnce(Format("primitive %u", primitive), Format("%s: primitive type %u is not understood", name, primitive));
+        ReportOncePer("primitive", primitive,
+                      [&] { return Format("%s: primitive type %u is not understood", name, primitive); });
         return;
     }
     if (D3d8TraceEnabled())
@@ -838,8 +848,10 @@ void D3DDevice_SetVertexData4f()
 void D3DDevice_CopyRects()
 {
     HleCall call;
-    ReportOnce("copyrects", Format("D3DDevice_CopyRects(%08X, %08X, %u, %08X, %08X) is not implemented yet",
-                                   call.Arg(0), call.Arg(1), call.Arg(2), call.Arg(3), call.Arg(4)));
+    ReportOncePer("copyrects", 0, [&call] {
+        return Format("D3DDevice_CopyRects(%08X, %08X, %u, %08X, %08X) is not implemented yet", call.Arg(0),
+                      call.Arg(1), call.Arg(2), call.Arg(3), call.Arg(4));
+    });
     call.Return(kD3dOk, 5);
 }
 

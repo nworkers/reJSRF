@@ -6,6 +6,7 @@
 #ifndef REXBOX_HLE_D3D8_D3D8_TRACE_H
 #define REXBOX_HLE_D3D8_D3D8_TRACE_H
 
+#include <cstdint>
 #include <string>
 
 namespace rexbox::hle::d3d8
@@ -19,6 +20,22 @@ void TraceOnce(const std::string& key, const std::string& text);
 // Prints "[d3d8] <text>" once per distinct `key` regardless of tracing: for
 // paths this batch does not implement yet.
 void ReportOnce(const std::string& key, const std::string& text);
+
+// True the first time (`site`, `value`) is seen. `site` is a string literal
+// naming the call site; its address is the key.
+bool FirstReport(const char* site, uint64_t value);
+
+// ReportOnce for paths taken on every draw: the message is built by `text()`
+// only the first time `value` is seen at `site`, so a repeat costs one hash
+// lookup instead of formatting.
+template <typename Text>
+void ReportOncePer(const char* site, uint64_t value, Text&& text)
+{
+    if (FirstReport(site, value))
+    {
+        ReportOnce(std::string(site) + ":" + std::to_string(value), text());
+    }
+}
 
 // printf-style formatting into a std::string.
 std::string Format(const char* format, ...);

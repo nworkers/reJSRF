@@ -23,6 +23,10 @@ void JoinHostThread(HostThread thread);
 // Sleeps the calling thread.
 void SleepMilliseconds(uint32_t milliseconds);
 
+// The processor time the calling thread has used (user and kernel), in
+// nanoseconds; the granularity is the OS clock tick. 0 when unknown.
+uint64_t ThreadCpuTimeNanoseconds();
+
 }  // namespace rexbox::platform
 
 #endif  // REXBOX_PLATFORM_HOST_THREAD_H

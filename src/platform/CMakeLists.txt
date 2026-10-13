@@ -5,6 +5,7 @@
 set(REXBOX_PLATFORM_SOURCES_win32
     win32/guarded_call_win32.cpp
     win32/host_thread_win32.cpp
+    win32/sampler_win32.cpp
     win32/virtual_memory_win32.cpp
     sdl/audio_sdl.cpp
     sdl/display_sdl.cpp
@@ -16,3 +17,7 @@ target_include_directories(rexbox_platform PUBLIC "${PROJECT_SOURCE_DIR}/include
 # SDL is an implementation detail of the platform layer: its headers and
 # types never reach the targets above.
 target_link_libraries(rexbox_platform PRIVATE SDL3::SDL3-static)
+if(WIN32)
+    # timeBeginPeriod for the sampler's millisecond interval.
+    target_link_libraries(rexbox_platform PRIVATE winmm)
+endif()
