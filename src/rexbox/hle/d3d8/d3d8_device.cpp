@@ -498,7 +498,7 @@ void DumpFrameIfRequested(GuestAddress shown, uint32_t frame)
 // void D3DDevice_Swap(DWORD Flags)
 void D3DDevice_Swap()
 {
-    profile::Scope present_scope(profile::Phase::kPresent);
+    profile::Lap lap;
     HleCall call;
     D3dState& state = State();
     ++state.frame_count;
@@ -512,7 +512,9 @@ void D3DDevice_Swap()
                                        ? state.render_target
                                        : state.back_buffers[0];
         DumpFrameIfRequested(shown, state.frame_count);
+        lap.Mark(profile::Phase::kPresent);
         WaitForPresentInterval(state.present.presentation_interval);
+        lap.Mark(profile::Phase::kWait);
         PresentRenderTarget(shown, state.gamma_ramp);
         presented = true;
         PumpEvents();
@@ -521,6 +523,7 @@ void D3DDevice_Swap()
     {
         // Without a display the frame loop keeps the same pace.
         WaitForPresentInterval(state.present.presentation_interval);
+        lap.Mark(profile::Phase::kWait);
     }
     if (state.frame_count == 1)
     {
@@ -541,7 +544,8 @@ void D3DDevice_Swap()
                      static_cast<long long>(elapsed.count()));
     }
     EndVertexDataFrame();
-    profile::EndFrame();
+    lap.Mark(profile::Phase::kPresent);
+    profile::EndFrame(state.frame_count);
     call.Return(kD3dOk, 1);
 }
 
@@ -726,6 +730,7 @@ void AcceptTwoArguments()
 void D3DDevice_BlockUntilVerticalBlank()
 {
     HleCall call;
+    profile::Scope wait(profile::Phase::kWait);
     WaitForVerticalBlank();
     call.Return(kD3dOk, 0);
 }

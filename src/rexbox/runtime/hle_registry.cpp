@@ -25,6 +25,15 @@ bool HleRegistry::BindGuestAddress(GuestAddress address, std::string_view symbol
         return false;
     }
     bindings_[address] = it->second;
+    if (address < kFlatLimit)
+    {
+        const size_t word = address / 64;
+        if (bound_bits_.size() <= word)
+        {
+            bound_bits_.resize(word + 1, 0);
+        }
+        bound_bits_[word] |= uint64_t{1} << (address % 64);
+    }
     return true;
 }
 
@@ -47,6 +56,14 @@ GuestAddress HleRegistry::FindVariable(std::string_view name) const
 
 HleThunk HleRegistry::Lookup(GuestAddress address) const
 {
+    if (address < kFlatLimit)
+    {
+        const size_t word = address / 64;
+        if (word >= bound_bits_.size() || ((bound_bits_[word] >> (address % 64)) & 1) == 0)
+        {
+            return nullptr;
+        }
+    }
     const auto it = bindings_.find(address);
     return it == bindings_.end() ? nullptr : exports_[it->second].thunk;
 }

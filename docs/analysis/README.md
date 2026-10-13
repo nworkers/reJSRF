@@ -26,6 +26,7 @@ flowchart LR
 * [XDK 심볼 식별: 라이브러리별 함수, jsrf-recomp 대조, 부팅 중 D3D8 호출 순서](xdk-symbols.md)
 * [D3D8 어댑터·모드·Caps 질의: 원본 라이브러리의 답, 호출 규약, 게임이 요청한 디바이스](d3d8-adapter.md)
 * [DSOUND: 게임이 부르는 함수, 원본 의미, 효과 이미지, 부팅에서 본 호출](dsound.md)
+* [프레임 시간: 오프닝 3D 데모의 한 프레임 구성, CPU 작업의 내역, 측정 시 주의점](frame-time.md)
 
 ---
 
@@ -45,3 +46,5 @@ Labels:
 * [Boot frontier: how far the recompiled code runs](boot-frontier.md)
 * [XDK symbol identification: functions per library, comparison with jsrf-recomp, D3D8 call order during boot](xdk-symbols.md)
 * [D3D8 adapter, mode and caps queries: the original library's answers, calling conventions, the device the game asks for](d3d8-adapter.md)
+* [DSOUND: the functions the game calls, their original meaning, the effects image, calls seen during boot](dsound.md)
+* [Frame time: what a frame of the opening 3D demo is made of, the CPU work, what to watch when measuring](frame-time.md)

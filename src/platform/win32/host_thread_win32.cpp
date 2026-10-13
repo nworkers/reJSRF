@@ -51,4 +51,20 @@ void SleepMilliseconds(uint32_t milliseconds)
     Sleep(milliseconds);
 }
 
+uint64_t ThreadCpuTimeNanoseconds()
+{
+    FILETIME creation = {};
+    FILETIME exit = {};
+    FILETIME kernel = {};
+    FILETIME user = {};
+    if (GetThreadTimes(GetCurrentThread(), &creation, &exit, &kernel, &user) == 0)
+    {
+        return 0;
+    }
+    const auto ticks = [](const FILETIME& t) {
+        return (static_cast<uint64_t>(t.dwHighDateTime) << 32) | t.dwLowDateTime;
+    };
+    return (ticks(kernel) + ticks(user)) * 100;  // FILETIME counts 100 ns
+}
+
 }  // namespace rexbox::platform

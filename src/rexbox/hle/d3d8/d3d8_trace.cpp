@@ -4,7 +4,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <mutex>
+#include <set>
 #include <unordered_set>
+#include <utility>
 
 namespace rexbox::hle::d3d8
 {
@@ -41,6 +43,14 @@ void TraceOnce(const std::string& key, const std::string& text)
     {
         PrintOnce(key, text);
     }
+}
+
+bool FirstReport(const char* site, uint64_t value)
+{
+    static std::mutex mutex;
+    static std::set<std::pair<const char*, uint64_t>> seen;
+    std::lock_guard<std::mutex> lock(mutex);
+    return seen.emplace(site, value).second;
 }
 
 void ReportOnce(const std::string& key, const std::string& text)
