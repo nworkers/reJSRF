@@ -56,6 +56,7 @@ const ColorTarget& Color(GuestAddress surface)
     GlFunctions& gl = Gl();
     ColorTarget target;
     SurfaceSize(surface, &target.width, &target.height);
+    InvalidateGlStateCache();  // binds on the active texture unit
     gl.GenTextures(1, &target.texture);
     gl.BindTexture(kGlTexture2D, target.texture);
     gl.TexImage2D(kGlTexture2D, 0, static_cast<GLint>(kGlRgba8), static_cast<GLsizei>(target.width),
@@ -309,6 +310,7 @@ void PresentRenderTarget(GuestAddress color, const GammaRamp& ramp)
     }
     platform::PresentDisplay();
     gl.BindFramebuffer(kGlFramebuffer, Framebuffer(g_bound_color, g_bound_depth));
+    InvalidateGlStateCache();
 }
 
 bool DumpRenderTarget(GuestAddress color, const std::string& path, const GammaRamp& ramp)

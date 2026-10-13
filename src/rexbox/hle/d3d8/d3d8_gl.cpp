@@ -8,6 +8,7 @@ namespace
 
 GlFunctions g_gl;
 bool g_es = false;
+uint32_t g_state_epoch = 1;
 
 template <typename Function>
 bool Load(Function* slot, const char* name, std::string* missing)
@@ -85,8 +86,10 @@ bool LoadGlFunctions(GlFunctions* functions, std::string* missing)
     need(Load(&f.Uniform4fv, "glUniform4fv", &first_missing));
     need(Load(&f.UniformMatrix4fv, "glUniformMatrix4fv", &first_missing));
     need(Load(&f.GenBuffers, "glGenBuffers", &first_missing));
+    need(Load(&f.DeleteBuffers, "glDeleteBuffers", &first_missing));
     need(Load(&f.BindBuffer, "glBindBuffer", &first_missing));
     need(Load(&f.BufferData, "glBufferData", &first_missing));
+    need(Load(&f.BufferSubData, "glBufferSubData", &first_missing));
     need(Load(&f.GenVertexArrays, "glGenVertexArrays", &first_missing));
     need(Load(&f.BindVertexArray, "glBindVertexArray", &first_missing));
     need(Load(&f.EnableVertexAttribArray, "glEnableVertexAttribArray", &first_missing));
@@ -167,6 +170,16 @@ void GlClearDepth(float depth)
     {
         g_gl.ClearDepth(static_cast<GLdouble>(depth));
     }
+}
+
+void InvalidateGlStateCache()
+{
+    ++g_state_epoch;
+}
+
+uint32_t GlStateEpoch()
+{
+    return g_state_epoch;
 }
 
 void GlDepthRange(float near_value, float far_value)

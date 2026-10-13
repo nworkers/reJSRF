@@ -6,7 +6,9 @@
 #include "d3d8_gl_targets.h"
 #include "d3d8_globals.h"
 #include "d3d8_render_state.h"
+#include "d3d8_gl_buffers.h"
 #include "d3d8_internal.h"
+#include "d3d8_profile.h"
 #include "d3d8_shader.h"
 #include "d3d8_resource.h"
 #include "d3d8_state.h"
@@ -117,6 +119,7 @@ bool OpenDisplay(const PresentParameters& pp, std::string* error)
     gl.ClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     gl.Clear(kGlColorBufferBit | kGlDepthBufferBit | kGlStencilBufferBit);
     platform::PresentDisplay();
+    InvalidateGlStateCache();
     PumpEvents();
     return true;
 }
@@ -399,6 +402,7 @@ void D3DDevice_Clear()
         return;
     }
     GlFunctions& gl = Gl();
+    InvalidateGlStateCache();  // masks and scissor below
     GLbitfield mask = 0;
     if ((flags & kClearTarget) != 0)
     {
@@ -494,6 +498,7 @@ void DumpFrameIfRequested(GuestAddress shown, uint32_t frame)
 // void D3DDevice_Swap(DWORD Flags)
 void D3DDevice_Swap()
 {
+    profile::Scope present_scope(profile::Phase::kPresent);
     HleCall call;
     D3dState& state = State();
     ++state.frame_count;
@@ -535,6 +540,8 @@ void D3DDevice_Swap()
         std::fprintf(stderr, "[d3d8] frame %u (+%lld ms since the first logged)\n", state.frame_count,
                      static_cast<long long>(elapsed.count()));
     }
+    EndVertexDataFrame();
+    profile::EndFrame();
     call.Return(kD3dOk, 1);
 }
 

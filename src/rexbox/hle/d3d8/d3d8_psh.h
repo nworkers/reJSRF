@@ -65,6 +65,8 @@ struct Key
     uint32_t alpha_func = 0;  // 0: alpha test off; else 0x200 NEVER .. 0x207 ALWAYS
 
     std::string Serialize() const;
+    bool operator==(const Key&) const = default;
+    uint64_t Hash() const;
 };
 
 uint32_t TextureMode(const Definition& definition, uint32_t stage);

@@ -4,6 +4,7 @@
 #include "d3d8_trace.h"
 
 #include <cstdio>
+#include <cstring>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -14,10 +15,33 @@ namespace rexbox::hle::d3d8
 namespace
 {
 
-std::unordered_map<std::string, FixedFunctionProgram> g_programs;
-GLuint g_vertex_array = 0;
-GLuint g_vertex_buffer = 0;
-GLuint g_index_buffer = 0;
+struct FixedFunctionKeyHash
+{
+    size_t operator()(const FixedFunctionKey& key) const
+    {
+        return static_cast<size_t>(key.Hash());
+    }
+};
+
+// A vertex-shader program paired with a fragment stage.
+template <typename FragmentKey>
+struct PairKey
+{
+    uint64_t shader = 0;
+    FragmentKey fragment;
+    bool operator==(const PairKey&) const = default;
+};
+
+template <typename FragmentKey>
+struct PairKeyHash
+{
+    size_t operator()(const PairKey<FragmentKey>& key) const
+    {
+        return static_cast<size_t>(HashMix(key.fragment.Hash(), key.shader));
+    }
+};
+
+std::unordered_map<FixedFunctionKey, FixedFunctionProgram, FixedFunctionKeyHash> g_programs;
 
 std::string ShaderLog(GLuint shader)
 {
@@ -101,22 +125,133 @@ void BindSamplers(GLuint program, int tex_scale[kFixedFunctionStages])
         }
         tex_scale[stage] = gl.GetUniformLocation(program, ("u_tex_scale" + suffix).c_str());
     }
+    InvalidateGlStateCache();
 }
 
-std::unordered_map<std::string, VertexProgramGl> g_vertex_programs;
+// The location of each element of the vertex-shader constant array c[].
+std::vector<int> ConstantLocations(GLuint program)
+{
+    std::vector<int> locations(vsh::kConstants);
+    for (uint32_t i = 0; i < vsh::kConstants; ++i)
+    {
+        locations[i] = Gl().GetUniformLocation(program, ("c[" + std::to_string(i) + "]").c_str());
+    }
+    return locations;
+}
+
+GLuint g_current_program = 0;
+uint32_t g_program_epoch = 0;
+
+std::unordered_map<PairKey<FixedFunctionKey>, VertexProgramGl, PairKeyHash<FixedFunctionKey>> g_vertex_programs;
+std::unordered_map<PairKey<psh::Key>, VertexProgramGl, PairKeyHash<psh::Key>> g_vertex_pixel_programs;
 
 }  // namespace
 
+bool UniformCache::Changed(int location, const float* values, size_t count)
+{
+    if (location < 0)
+    {
+        return false;
+    }
+    for (Entry& entry : entries_)
+    {
+        if (entry.location == location)
+        {
+            // Bitwise, so a NaN that stays a NaN is unchanged.
+            if (entry.values.size() == count && std::memcmp(entry.values.data(), values, count * 4) == 0)
+            {
+                return false;
+            }
+            entry.values.assign(values, values + count);
+            return true;
+        }
+    }
+    entries_.push_back({location, std::vector<float>(values, values + count)});
+    return true;
+}
+
+void UniformCache::Set1f(int location, float x)
+{
+    if (Changed(location, &x, 1))
+    {
+        Gl().Uniform1f(location, x);
+    }
+}
+
+void UniformCache::Set2f(int location, float x, float y)
+{
+    const float values[2] = {x, y};
+    if (Changed(location, values, 2))
+    {
+        Gl().Uniform2f(location, x, y);
+    }
+}
+
+void UniformCache::Set4f(int location, float x, float y, float z, float w)
+{
+    const float values[4] = {x, y, z, w};
+    if (Changed(location, values, 4))
+    {
+        Gl().Uniform4f(location, x, y, z, w);
+    }
+}
+
+void UniformCache::Set4fv(int location, int count, const float* values)
+{
+    if (Changed(location, values, static_cast<size_t>(count) * 4))
+    {
+        Gl().Uniform4fv(location, count, values);
+    }
+}
+
+void UniformCache::SetMatrix4(int location, const float* values)
+{
+    if (Changed(location, values, 16))
+    {
+        Gl().UniformMatrix4fv(location, 1, 0, values);
+    }
+}
+
+void UniformCache::SetArray4(const std::vector<int>& locations, const float* values)
+{
+    const size_t count = locations.size();
+    const bool fresh = array_.size() != count * 4;
+    if (fresh)
+    {
+        array_.assign(values, values + count * 4);
+    }
+    GlFunctions& gl = Gl();
+    size_t i = 0;
+    while (i < count)
+    {
+        if (locations[i] < 0 || (!fresh && std::memcmp(&array_[i * 4], values + i * 4, 16) == 0))
+        {
+            ++i;
+            continue;
+        }
+        // A run of changed elements at consecutive locations goes in one call.
+        size_t end = i + 1;
+        while (end < count && locations[end] == locations[end - 1] + 1 &&
+               (fresh || std::memcmp(&array_[end * 4], values + end * 4, 16) != 0))
+        {
+            ++end;
+        }
+        std::memcpy(&array_[i * 4], values + i * 4, (end - i) * 16);
+        gl.Uniform4fv(locations[i], static_cast<GLsizei>(end - i), values + i * 4);
+        i = end;
+    }
+}
+
 const FixedFunctionProgram* GetFixedFunctionProgram(const FixedFunctionKey& key)
 {
-    const std::string id = key.Serialize();
-    const auto it = g_programs.find(id);
+    const auto it = g_programs.find(key);
     if (it != g_programs.end())
     {
         return it->second.program != 0 ? &it->second : nullptr;
     }
+    const std::string id = key.Serialize();
     GlFunctions& gl = Gl();
-    FixedFunctionProgram& entry = g_programs[id];
+    FixedFunctionProgram& entry = g_programs[key];
     const bool es = GlIsEs();
     const GLuint program =
         Link(GenerateFixedFunctionVertexShader(key, es), GenerateFixedFunctionFragmentShader(key, es), id);
@@ -136,16 +271,17 @@ const FixedFunctionProgram* GetFixedFunctionProgram(const FixedFunctionKey& key)
 
 const VertexProgramGl* GetVertexProgram(const ProgramShader& shader, const FixedFunctionKey& fragment_key)
 {
-    char hash[24];
-    std::snprintf(hash, sizeof(hash), "vsh%016llX|", static_cast<unsigned long long>(shader.hash));
-    const std::string id = hash + fragment_key.Serialize();
-    const auto it = g_vertex_programs.find(id);
+    const PairKey<FixedFunctionKey> key{shader.hash, fragment_key};
+    const auto it = g_vertex_programs.find(key);
     if (it != g_vertex_programs.end())
     {
         return it->second.program != 0 ? &it->second : nullptr;
     }
+    char hash[24];
+    std::snprintf(hash, sizeof(hash), "vsh%016llX|", static_cast<unsigned long long>(shader.hash));
+    const std::string id = hash + fragment_key.Serialize();
     GlFunctions& gl = Gl();
-    VertexProgramGl& entry = g_vertex_programs[id];
+    VertexProgramGl& entry = g_vertex_programs[key];
     const bool es = GlIsEs();
     uint32_t used_inputs = 0;
     const std::string vertex = vsh::TranslateToGlsl(shader.program, shader.declaration.bgra_inputs, es, &used_inputs);
@@ -156,7 +292,7 @@ const VertexProgramGl* GetVertexProgram(const ProgramShader& shader, const Fixed
     }
     entry.program = program;
     entry.used_inputs = used_inputs;
-    entry.constants = gl.GetUniformLocation(program, "c");
+    entry.constants = ConstantLocations(program);
     entry.tfactor = gl.GetUniformLocation(program, "u_tfactor");
     entry.alpha_ref = gl.GetUniformLocation(program, "u_alpha_ref");
     BindSamplers(program, entry.tex_scale);
@@ -166,16 +302,17 @@ const VertexProgramGl* GetVertexProgram(const ProgramShader& shader, const Fixed
 
 const VertexProgramGl* GetVertexPixelProgram(const ProgramShader& shader, const psh::Key& pixel_key)
 {
-    char hash[24];
-    std::snprintf(hash, sizeof(hash), "vsh%016llX|", static_cast<unsigned long long>(shader.hash));
-    const std::string id = hash + pixel_key.Serialize();
-    const auto it = g_vertex_programs.find(id);
-    if (it != g_vertex_programs.end())
+    const PairKey<psh::Key> key{shader.hash, pixel_key};
+    const auto it = g_vertex_pixel_programs.find(key);
+    if (it != g_vertex_pixel_programs.end())
     {
         return it->second.program != 0 ? &it->second : nullptr;
     }
+    char hash[24];
+    std::snprintf(hash, sizeof(hash), "vsh%016llX|", static_cast<unsigned long long>(shader.hash));
+    const std::string id = hash + pixel_key.Serialize();
     GlFunctions& gl = Gl();
-    VertexProgramGl& entry = g_vertex_programs[id];
+    VertexProgramGl& entry = g_vertex_pixel_programs[key];
     const bool es = GlIsEs();
     uint32_t used_inputs = 0;
     const std::string vertex = vsh::TranslateToGlsl(shader.program, shader.declaration.bgra_inputs, es, &used_inputs);
@@ -192,7 +329,7 @@ const VertexProgramGl* GetVertexPixelProgram(const ProgramShader& shader, const 
     }
     entry.program = program;
     entry.used_inputs = used_inputs;
-    entry.constants = gl.GetUniformLocation(program, "c");
+    entry.constants = ConstantLocations(program);
     entry.alpha_ref = gl.GetUniformLocation(program, "u_alpha_ref");
     entry.stage_c0 = gl.GetUniformLocation(program, "u_c0");
     entry.stage_c1 = gl.GetUniformLocation(program, "u_c1");
@@ -204,28 +341,15 @@ const VertexProgramGl* GetVertexPixelProgram(const ProgramShader& shader, const 
     return &entry;
 }
 
-void BindStreamingBuffers()
+void UseProgram(uint32_t program)
 {
-    GlFunctions& gl = Gl();
-    if (g_vertex_array == 0)
+    if (g_program_epoch == GlStateEpoch() && g_current_program == program)
     {
-        gl.GenVertexArrays(1, &g_vertex_array);
-        gl.GenBuffers(1, &g_vertex_buffer);
-        gl.GenBuffers(1, &g_index_buffer);
+        return;
     }
-    gl.BindVertexArray(g_vertex_array);
-    gl.BindBuffer(kGlArrayBuffer, g_vertex_buffer);
-    gl.BindBuffer(kGlElementArrayBuffer, g_index_buffer);
-}
-
-void UploadVertexData(const void* data, size_t bytes)
-{
-    Gl().BufferData(kGlArrayBuffer, static_cast<GLsizeiptr>(bytes), data, kGlStreamDraw);
-}
-
-void UploadIndexData(const void* data, size_t bytes)
-{
-    Gl().BufferData(kGlElementArrayBuffer, static_cast<GLsizeiptr>(bytes), data, kGlStreamDraw);
+    Gl().UseProgram(program);
+    g_current_program = program;
+    g_program_epoch = GlStateEpoch();
 }
 
 }  // namespace rexbox::hle::d3d8

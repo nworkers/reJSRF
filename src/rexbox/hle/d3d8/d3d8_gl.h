@@ -75,6 +75,7 @@ constexpr GLenum kGlUnsignedInt248 = 0x84FA;
 constexpr GLenum kGlArrayBuffer = 0x8892;
 constexpr GLenum kGlElementArrayBuffer = 0x8893;
 constexpr GLenum kGlStreamDraw = 0x88E0;
+constexpr GLenum kGlStaticDraw = 0x88E4;
 
 // Shaders.
 constexpr GLenum kGlFragmentShader = 0x8B30;
@@ -187,8 +188,11 @@ struct GlFunctions
 
     // Buffers and vertex arrays.
     void(REXBOX_GL_APIENTRY* GenBuffers)(GLsizei n, GLuint* buffers) = nullptr;
+    void(REXBOX_GL_APIENTRY* DeleteBuffers)(GLsizei n, const GLuint* buffers) = nullptr;
     void(REXBOX_GL_APIENTRY* BindBuffer)(GLenum target, GLuint buffer) = nullptr;
     void(REXBOX_GL_APIENTRY* BufferData)(GLenum target, GLsizeiptr size, const void* data, GLenum usage) = nullptr;
+    void(REXBOX_GL_APIENTRY* BufferSubData)(GLenum target, GLintptr offset, GLsizeiptr size,
+                                            const void* data) = nullptr;
     void(REXBOX_GL_APIENTRY* GenVertexArrays)(GLsizei n, GLuint* arrays) = nullptr;
     void(REXBOX_GL_APIENTRY* BindVertexArray)(GLuint array) = nullptr;
     void(REXBOX_GL_APIENTRY* EnableVertexAttribArray)(GLuint index) = nullptr;
@@ -246,6 +250,14 @@ void SetGlIsEs(bool es);
 // Helpers over the float/double pairs.
 void GlClearDepth(float depth);
 void GlDepthRange(float near_value, float far_value);
+
+// The draw path remembers the GL state it set and skips calls that would set
+// it again (program, vertex arrays, textures and samplers, fixed per-fragment
+// state). Code that changes that state behind its back (present, clears,
+// texture uploads, object creation) calls InvalidateGlStateCache, and each
+// cache compares the epoch it was filled in with GlStateEpoch.
+void InvalidateGlStateCache();
+uint32_t GlStateEpoch();
 
 }  // namespace rexbox::hle::d3d8
 
