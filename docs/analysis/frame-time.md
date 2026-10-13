@@ -45,6 +45,10 @@
   * `movss` 하나가 0으로 채운 임시 XMM을 거쳐 메모리로 돌아간다.
 * **확인됨**(측정): 생성 코드에서 `/GS`를 끄는 것만으로는 차이가 없었다(§4).
 * **추정**: 남은 비용의 큰 몫은 xboxrecomp의 코드 생성 방식이다(레지스터를 메모리에 두기, 메모리 기준 재로드).
+* **확인됨**(i044): 가장 뜨거운 명령은 XMM 도우미가 만든 스택 임시를 부분 저장 뒤 16바이트로 읽는 `movaps`/`movups`였다(store-to-load forwarding 실패).
+  * 도우미를 SSE2 intrinsic으로 바꾸자 present 스레드 CPU 시간이 약 12% 줄었다.
+  * 메모리 기준을 함수마다 한 번 읽는 것만으로는 차이가 없었다.
+  * 그 뒤 lift 코드 샘플: guest 메모리 35%, TLS 레지스터 칸 21~25%, SSE 메모리 14%([설계 i044](../design/20261013-i044-recomp-codegen.md) §4).
 
 ## 4. 시도한 작은 변경과 효과
 
@@ -71,7 +75,9 @@
 
 ## 6. 다음 후보
 
-1. **xboxrecomp 코드 생성**(upstream): 함수마다 `g_xbox_mem_offset`을 지역 변수로 한 번만 읽는다. 기본 블록 안에서는 게스트 레지스터를 지역 변수로 둔다. lift 코드 전체에 걸리는 가장 큰 후보다.
+1. **xboxrecomp 코드 생성**: XMM intrinsic과 메모리 기준 지역화는 i044에서 했다. 남은 후보는 두 가지다.
+   * 게스트 레지스터를 지역 변수로 두기: 상한은 leaf 함수만이면 전체 CPU 약 2%, 전부면 약 7%다.
+   * 간접 호출 지점별 캐시: 약 1%.
 2. **D3D8 변경 감지**: 정점 범위 `memcmp`(1.3 ms)와 텍스처 표본 해시를 게스트 메모리의 쓰기 감시로 바꾼다(Windows `MEM_WRITE_WATCH`/`GetWriteWatch`). 그러면 바뀐 페이지가 있는 범위만 비교하면 된다.
 3. **GL 호출 수**: 정점 상수를 uniform buffer 하나로 보내고, 상태 묶음을 줄여 드라이버 시간(2.6 ms)을 줄인다.
 
@@ -116,6 +122,10 @@ Environment: Win32 x86 Release, Intel Core i5-7200U (2 cores, 4 threads), Intel 
   * A scalar `movss` goes through a zeroed XMM temporary in memory.
 * **Confirmed** (measurement): turning `/GS` off for the generated code alone made no difference (§4).
 * **Inferred**: a large share of the remaining cost comes from how xboxrecomp generates code (registers kept in memory, reloads of the memory base).
+* **Confirmed** (i044): the hottest instructions were `movaps`/`movups` reading stack temporaries the XMM helpers had just written in parts, a failed store-to-load forward.
+  * SSE2 intrinsics for the helpers cut the presenting thread's CPU time by about 12%.
+  * Reading the memory base once per function alone made no difference.
+  * Afterwards lifted-code samples are 35% guest memory, 21–25% TLS register slots and 14% SSE memory ([design i044](../design/20261013-i044-recomp-codegen.md) §4).
 
 ## 4. Small changes tried, and their effect
 
@@ -142,6 +152,8 @@ Variant executables were run alternately, three times each, close together in ti
 
 ## 6. Next candidates
 
-1. **xboxrecomp code generation** (upstream): read `g_xbox_mem_offset` once per function into a local, and keep guest registers in locals within a basic block. This is the largest candidate because it touches all lifted code.
+1. **xboxrecomp code generation**: the XMM intrinsics and the local memory base were done in i044. Two candidates remain:
+   * guest registers in locals: at most about 2% of total CPU for leaf functions only, about 7% for everything
+   * per-site indirect-call caches: about 1%
 2. **D3D8 change detection**: replace the vertex-range `memcmp` (1.3 ms) and the texture sample hash with write watching on guest memory (Windows `MEM_WRITE_WATCH`/`GetWriteWatch`), so only ranges with written pages are compared.
 3. **Number of GL calls**: send vertex constants as one uniform buffer and reduce state groups, to cut driver time (2.6 ms).
