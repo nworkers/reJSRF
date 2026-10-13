@@ -141,6 +141,25 @@ NV2A 색 포맷이다(추정, xboxrecomp `d3d8_xbox.h`(MIT)의 원래 Xbox 항�
 
 * `D3DGAMMARAMP`(Xbox, **확인됨**: lift된 `SetGammaRamp` `0x0018CB60`)는 `BYTE red[256], green[256], blue[256]`, 768바이트다(PC는 WORD). `SetGammaRamp(Flags, pRamp)`는 이 표를 디바이스에 두고, `D3DSGR_IMMEDIATE`(bit 0)이면 RAMDAC 팔레트에 R, G, B 순서로 바로 쓰며, 아니면 다음 vblank에 반영한다. 게임은 로고 페이드를 이 표로 하며, 로고가 다 보이는 동안에는 단위 램프를 매 프레임 다시 설정한다.
 * The Xbox `D3DGAMMARAMP` (**confirmed** from the lifted `SetGammaRamp` at `0x0018CB60`) is `BYTE red[256], green[256], blue[256]`, 768 bytes (the PC's is WORD). `SetGammaRamp(Flags, pRamp)` keeps the table in the device and, with `D3DSGR_IMMEDIATE` (bit 0), writes it to the RAMDAC palette at once, R, G, B per entry; otherwise at the next vertical blank. The game fades its logos with it, and re-sets an identity ramp every frame while a logo is fully shown.
+## 12. 정점 셰이더 프로그램 / Vertex-shader programs
+
+* `CreateVertexShader(pDeclaration, pFunction, pHandle, Usage)`의 `pFunction`은 헤더 DWORD(하위 16비트 형식: `0x2078` 보통, `0x7778` 상수 쓰기, `0x7378` 상태 셰이더; 상위 16비트 명령 수) 뒤에 16바이트 명령이 이어진다. 마지막 명령은 final 비트를 가진다(**확인됨**).
+* 명령은 MAC(벡터: `nop mov mul add mad dp3 dph dp4 dst min max slt sge arl`)와 ILU(스칼라: `nop mov rcp rcc rsq exp log lit`)를 동시에 돌린다. 소스 A, B, C는 temp(R0..R11, R12 = oPos)·입력(v0..v15)·상수(c[0..191], a0.x 상대 가능) 중 하나다. `ADD`는 A+C, ILU는 C만 읽는다. MAC와 짝지은 ILU는 R1에만 쓴다. 출력은 temp 마스크 둘(MAC, ILU)과 o[]/c[] 하나다. 필드 배치는 `src/rexbox/hle/d3d8/d3d8_vsh.h`.
+* o[] 주소: 0 oPos, 3 oD0, 4 oD1, 5 oFog, 6 oPts, 7 oB0, 8 oB1, 9..12 oT0..oT3. D3D 레지스터 r은 c[r + 96]이다.
+* XDK가 끝에 붙이는 화면 공간 epilogue: `mul oPos.xyz, R12, c[58]` + `rcc R1.x, R12.w`, `mad oPos.xyz, R12, R1.x, c[59]`. c[58]/c[59](D3D −38/−37)는 뷰포트 배율과 오프셋이다.
+* 선언 토큰(`D3DVSD`, PC와 같은 꼴): `STREAM(n)` = `0x20000000 | n`, `REG(r, t)` = `0x40000000 | t << 16 | r`, `SKIP(n)` = `0x50000000 | n << 16`, `END` = `0xFFFFFFFF`. Xbox 레지스터 형식 `D3DVSDT`는 상위 nibble이 성분 수, 하위 nibble이 종류다: 2 float(`0x12`..`0x42`), 1 정규화 short, 5 short, 4 정규화 byte(`PBYTE`), D3DCOLOR `0x40`, NORMPACKED3 `0x16`, NONE `0x02`.
+
+* `CreateVertexShader`'s `pFunction` is a header DWORD (low 16 bits the type: `0x2078` ordinary, `0x7778` constant-writing, `0x7378` state shader; high 16 bits the instruction count) followed by 16-byte instructions, the last with the final bit (**confirmed**). An instruction runs the MAC (vector ops above) and the ILU (scalar ops above) together. Sources A, B, C are a temp (R0..R11; R12 reads oPos), an input (v0..v15) or a constant (c[0..191], optionally a0.x-relative); `ADD` is A+C and the ILU reads C only; an ILU paired with a MAC writes R1 only. Outputs are two temp masks (MAC, ILU) and one o[]/c[] write; the field layout is in `src/rexbox/hle/d3d8/d3d8_vsh.h`. o[] addresses: 0 oPos, 3 oD0, 4 oD1, 5 oFog, 6 oPts, 7 oB0, 8 oB1, 9..12 oT0..oT3; D3D register r is c[r + 96]. The XDK's screen-space epilogue and the declaration tokens are as above.
+
+## 13. 픽셀 셰이더(레지스터 컴바이너) / Pixel shaders (register combiners)
+
+* `D3DPIXELSHADERDEF`는 60 DWORD(0xF0)다(**확인됨**: 게임 정의 11개의 필드가 맞아떨어짐): `PSAlphaInputs[8]` 0, `PSFinalCombinerInputsABCD` 8, `EFG` 9, `PSConstant0[8]` 10, `PSConstant1[8]` 18, `PSAlphaOutputs[8]` 26, `PSRGBInputs[8]` 34, `PSCompareMode` 42, `PSFinalCombinerConstant0/1` 43/44, `PSRGBOutputs[8]` 45, `PSCombinerCount` 53, `PSTextureModes` 54, `PSDotMapping` 55, `PSInputTexture` 56, `PSC0Mapping` 57, `PSC1Mapping` 58, `PSFinalCombinerConstants` 59(DWORD 번호).
+* 입력 바이트: 하위 nibble 레지스터(0 zero, 1 c0, 2 c1, 3 fog, 4 v0, 5 v1, 8..11 t0..t3, 12 r0, 13 r1, 최종 전용 14 V1+R0, 15 E·F), 0x10 알파 채널, 상위 3비트 매핑(0x00 unsigned identity, 0x20 unsigned invert, 0x40 expand normal, 0x60 expand negate, 0x80 half-bias normal, 0xA0 half-bias negate, 0xC0 signed identity, 0xE0 signed negate). 입력 DWORD는 A·B·C·D가 상위 바이트부터.
+* 출력 DWORD: 비트 0-3 CD 목적지, 4-7 AB, 8-11 합, 12 이상 플래그(0x01 CD 내적, 0x02 AB 내적, 0x04 mux, 0x08 bias, 0x10 ×2, 0x18 bias×2, 0x20 ×4, 0x30 ÷2, 0x40 CD blue→alpha, 0x80 AB blue→alpha).
+* `PSCombinerCount`: 하위 바이트 스테이지 수, 0x100 mux MSB, 0x1000 스테이지별 c0, 0x10000 스테이지별 c1. `PSTextureModes`: 스테이지당 5비트(0 none, 1 2D, 2 3D, 3 cube, 4 pass-through, 5 clip plane, 6 bump env, 7 bump env lum, …). `PSC0/C1Mapping`: 스테이지당 nibble로 `SetPixelShaderConstant` 레지스터(0xF 없음). `EFG` 하위 바이트: 0x80 합 clamp, 0x40 V1 보수, 0x20 R0 보수.
+
+* The 60-DWORD (0xF0) `D3DPIXELSHADERDEF` layout, the input bytes, the output words, `PSCombinerCount`, `PSTextureModes` and the constant mappings are as listed above (**confirmed** for the layout: the 11 game definitions fit it). The combiner model is OpenGL's `NV_register_combiners`.
+
 ## 출처 / Sources
 
 * XbSymbolDatabase, `src/OOVPADatabase/D3D8_OOVPA.c` (MIT): 심볼 이름, 규약, 인자 / symbol names, conventions, parameters
@@ -148,3 +167,5 @@ NV2A 색 포맷이다(추정, xboxrecomp `d3d8_xbox.h`(MIT)의 원래 Xbox 항�
 * envytools rnndb (MIT): NV2A Kelvin(NV097) method 번호 / method numbers, https://github.com/envytools/envytools
 * Cxbx-Reloaded (GPL): XDK 4134 상태 번호 순서를 지식으로만 참고(코드 미사용) / XDK 4134 state ordering, consulted as knowledge only (no code)
 * 우리 바이너리 측정 / measurements on our binary: [analysis: d3d8-adapter](../analysis/d3d8-adapter.md)
+* OpenGL `NV_register_combiners` 명세 / specification: https://registry.khronos.org/OpenGL/extensions/NV/NV_register_combiners.txt
+* xboxrecomp `src/kernel/nv2a_vsh_interp.c` (MIT): 정점 명령 필드 배치 표를 지식으로 참고(코드 미사용) / the vertex instruction field table, consulted as knowledge (no code)

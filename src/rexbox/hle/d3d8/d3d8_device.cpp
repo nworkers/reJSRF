@@ -7,11 +7,13 @@
 #include "d3d8_globals.h"
 #include "d3d8_render_state.h"
 #include "d3d8_internal.h"
+#include "d3d8_shader.h"
 #include "d3d8_resource.h"
 #include "d3d8_state.h"
 #include "d3d8_trace.h"
 #include "d3d8_vblank.h"
 #include "rexbox/platform/display.h"
+#include "rexbox/runtime/environment.h"
 
 #include <algorithm>
 #include <chrono>
@@ -66,6 +68,22 @@ PresentParameters ReadPresentParameters(GuestAddress address)
     return pp;
 }
 
+// Processes window events. Closing the window (its X button, Alt+F4) asks the
+// app to end the process; events are only seen here, when the device is
+// created and at each present.
+void PumpEvents()
+{
+    bool close = false;
+    platform::PumpDisplayEvents(&close);
+    D3dState& state = State();
+    if (close && !state.close_requested)
+    {
+        state.close_requested = true;
+        std::fprintf(stderr, "[d3d8] window close requested\n");
+        runtime::RequestExit(0, "the window was closed");
+    }
+}
+
 bool OpenDisplay(const PresentParameters& pp, std::string* error)
 {
     platform::DisplayConfig config;
@@ -99,7 +117,7 @@ bool OpenDisplay(const PresentParameters& pp, std::string* error)
     gl.ClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     gl.Clear(kGlColorBufferBit | kGlDepthBufferBit | kGlStencilBufferBit);
     platform::PresentDisplay();
-    platform::PumpDisplayEvents(nullptr);
+    PumpEvents();
     return true;
 }
 
@@ -107,12 +125,13 @@ bool OpenDisplay(const PresentParameters& pp, std::string* error)
 // GL's the bottom-left.
 void ApplyViewport()
 {
+    D3dState& state = State();
+    const Viewport& vp = state.viewport;
+    WriteViewportConstants(vp.x, vp.y, vp.width, vp.height);
     if (!HaveGl())
     {
         return;
     }
-    D3dState& state = State();
-    const Viewport& vp = state.viewport;
     const uint32_t target_height = RenderTargetHeight();
     const GLint y = static_cast<GLint>(target_height) - static_cast<GLint>(vp.y + vp.height);
     Gl().Viewport(static_cast<GLint>(vp.x), y, static_cast<GLsizei>(vp.width), static_cast<GLsizei>(vp.height));
@@ -491,13 +510,7 @@ void D3DDevice_Swap()
         WaitForPresentInterval(state.present.presentation_interval);
         PresentRenderTarget(shown, state.gamma_ramp);
         presented = true;
-        bool close = false;
-        platform::PumpDisplayEvents(&close);
-        if (close && !state.close_requested)
-        {
-            state.close_requested = true;
-            std::fprintf(stderr, "[d3d8] window close requested\n");
-        }
+        PumpEvents();
     }
     if (!presented)
     {

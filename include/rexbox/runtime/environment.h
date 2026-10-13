@@ -23,6 +23,13 @@ struct Environment
 void SetEnvironment(const Environment& environment);
 const Environment& Env();
 
+// Ending the process on the user's request (the window was closed). HLE code
+// asks; the app, which owns the process, decides how to end it. Without a
+// handler (tools) the request is only logged.
+using ExitHandler = void (*)(int exit_code, const char* reason);
+void SetExitHandler(ExitHandler handler);
+void RequestExit(int exit_code, const char* reason);
+
 }  // namespace rexbox::runtime
 
 #endif  // REXBOX_RUNTIME_ENVIRONMENT_H

@@ -1,15 +1,20 @@
 // rexbox_d3d8_probe: checks the D3D8 HLE's pure parts without a game or a GPU:
-// texture unswizzling and format decoding, DXT blocks, FVF layouts and the
+// texture unswizzling and format decoding, DXT blocks, FVF layouts, the
 // fixed-function GLSL generator (docs/design/20261012-i023-d3d8-fixed-function-draw.md
-// section 7). The GL backend itself is verified by booting.
+// section 7), and the vertex-program and register-combiner translations
+// (docs/design/20261013-i037-vertex-shader-programs.md). The GL backend itself
+// is verified by booting.
 //
 // Usage: rexbox_d3d8_probe        (exit code 0 when every check passes)
 
 #include "d3d8_ff_shader.h"
 #include "d3d8_fvf.h"
 #include "d3d8_gamma.h"
+#include "d3d8_psh.h"
 #include "d3d8_texture_format.h"
+#include "d3d8_vsh.h"
 
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -285,6 +290,237 @@ void CheckGammaRamp()
     Expect(GammaPresentVertexShader(true).rfind("#version 300 es", 0) == 0, "GLES present shader");
 }
 
+
+// --- Vertex programs -----------------------------------------------------------
+
+// Packs one NV2A instruction from fields, following the layout in d3d8_vsh.h
+// independently of the decoder.
+struct Encoder
+{
+    uint32_t w[4] = {0, 0, 0, 0};
+    void Put(int dword, int low, int width, uint32_t value)
+    {
+        const uint32_t mask = ((1u << width) - 1u) << low;
+        w[dword] = (w[dword] & ~mask) | ((value << low) & mask);
+    }
+    // swizzle as "xyzw" letters
+    static uint32_t Swizzle(const char* s)
+    {
+        uint32_t v = 0;
+        for (int i = 0; i < 4; ++i)
+        {
+            const uint32_t c = s[i] == 'x' ? 0 : s[i] == 'y' ? 1 : s[i] == 'z' ? 2 : 3;
+            v = (v << 2) | c;
+        }
+        return v;
+    }
+    void A(uint32_t mux, uint32_t temp, const char* swz, bool neg = false)
+    {
+        Put(2, 26, 2, mux);
+        Put(2, 28, 4, temp);
+        Put(1, 0, 8, Swizzle(swz));
+        Put(1, 8, 1, neg ? 1 : 0);
+    }
+    void B(uint32_t mux, uint32_t temp, const char* swz, bool neg = false)
+    {
+        Put(2, 11, 2, mux);
+        Put(2, 13, 4, temp);
+        Put(2, 17, 8, Swizzle(swz));
+        Put(2, 25, 1, neg ? 1 : 0);
+    }
+    void C(uint32_t mux, uint32_t temp, const char* swz, bool neg = false)
+    {
+        Put(3, 28, 2, mux);
+        Put(2, 0, 2, temp >> 2);
+        Put(3, 30, 2, temp & 3);
+        Put(2, 2, 8, Swizzle(swz));
+        Put(2, 10, 1, neg ? 1 : 0);
+    }
+};
+
+void CheckVertexPrograms()
+{
+    // dp4 R0.x, v0, c[107]
+    Encoder dp4;
+    dp4.Put(1, 21, 4, vsh::mac::kDp4);
+    dp4.Put(1, 9, 4, 0);
+    dp4.Put(1, 13, 8, 107);
+    dp4.A(vsh::mux::kInput, 0, "xyzw");
+    dp4.B(vsh::mux::kConstant, 0, "xyzw");
+    dp4.Put(3, 24, 4, 8);   // MAC mask x
+    dp4.Put(3, 20, 4, 0);   // R0
+    const vsh::Instruction d = vsh::Decode(dp4.w);
+    Expect(d.mac == vsh::mac::kDp4 && d.constant == 107 && d.a.mux == vsh::mux::kInput &&
+               d.b.mux == vsh::mux::kConstant && d.mac_mask == 8 && d.temp == 0 && !d.final,
+           "decode dp4 R0.x, v0, c[107]");
+    Expect(vsh::Disassemble(d) == "dp4 R0.x, v0, c[107]", "disassemble dp4: " + vsh::Disassemble(d));
+
+    // The runtime epilogue: mul oPos.xyz, R12, c[58] + rcc R1.x, R12.w; then
+    // mad oPos.xyz, R12, R1.x, c[59] (final).
+    Encoder mul;
+    mul.Put(1, 21, 4, vsh::mac::kMul);
+    mul.Put(1, 25, 3, vsh::ilu::kRcc);
+    mul.Put(1, 13, 8, 58);
+    mul.A(vsh::mux::kTemp, 12, "xyzw");
+    mul.B(vsh::mux::kConstant, 0, "xyzw");
+    mul.C(vsh::mux::kTemp, 12, "wwww");
+    mul.Put(3, 16, 4, 8);   // ILU mask x
+    mul.Put(3, 20, 4, 7);   // temp field: ignored by the paired ILU, which writes R1
+    mul.Put(3, 12, 4, 0xE); // out mask xyz
+    mul.Put(3, 11, 1, 1);   // to o[]
+    mul.Put(3, 3, 8, vsh::out::kPosition);
+    const vsh::Instruction m = vsh::Decode(mul.w);
+    Expect(m.c.temp == 12 && m.c.mux == vsh::mux::kTemp, "C temp splits across dwords 2 and 3");
+    Expect(vsh::Disassemble(m) == "mul oPos.xyz, R12, c[58] + rcc R1.x, R12.wwww",
+           "disassemble the paired epilogue: " + vsh::Disassemble(m));
+
+    Encoder mad;
+    mad.Put(1, 21, 4, vsh::mac::kMad);
+    mad.Put(1, 13, 8, 59);
+    mad.A(vsh::mux::kTemp, 12, "xyzw");
+    mad.B(vsh::mux::kTemp, 1, "xxxx");
+    mad.C(vsh::mux::kConstant, 0, "xyzw");
+    mad.Put(3, 12, 4, 0xE);
+    mad.Put(3, 11, 1, 1);
+    mad.Put(3, 3, 8, vsh::out::kPosition);
+    mad.Put(3, 0, 1, 1);
+
+    // Relative addressing and an output colour.
+    Encoder rel;
+    rel.Put(1, 21, 4, vsh::mac::kMov);
+    rel.Put(1, 13, 8, 10);
+    rel.A(vsh::mux::kConstant, 0, "xyzw", true);
+    rel.Put(3, 1, 1, 1);
+    rel.Put(3, 12, 4, 0xF);
+    rel.Put(3, 11, 1, 1);
+    rel.Put(3, 3, 8, vsh::out::kDiffuse);
+
+    std::vector<uint8_t> bytes(4 + 4 * 16);
+    const uint32_t header = (4u << 16) | vsh::kTypeVertex;
+    std::memcpy(bytes.data(), &header, 4);
+    std::memcpy(bytes.data() + 4, dp4.w, 16);
+    std::memcpy(bytes.data() + 20, rel.w, 16);
+    std::memcpy(bytes.data() + 36, mul.w, 16);
+    std::memcpy(bytes.data() + 52, mad.w, 16);
+    vsh::Program program;
+    std::string error;
+    Expect(vsh::ReadProgram(bytes.data(), bytes.size(), &program, &error) && program.words.size() == 4 &&
+               program.type == vsh::kTypeVertex,
+           "read a four-instruction program");
+    Expect(!vsh::ReadProgram(bytes.data(), 40, &program, &error), "a truncated program is refused");
+    vsh::ReadProgram(bytes.data(), bytes.size(), &program, &error);
+
+    uint32_t used = 0;
+    const std::string glsl = vsh::TranslateToGlsl(program, 1u << 3, false, &used);
+    Expect(used == 1u, "the program reads v0 only");
+    Expect(Contains(glsl, "layout(location = 0) in vec4 v0;"), "v0 is attribute 0");
+    Expect(Contains(glsl, "vec4 m = vec4(dot(A, B));") && Contains(glsl, "R0.x = m.x;"), "dp4 writes R0.x");
+    Expect(Contains(glsl, "c[clamp(a0 + 10, 0, 191)]") && Contains(glsl, "oD0.xyzw = m.xyzw;"),
+           "relative constant read and oD0 write");
+    Expect(Contains(glsl, "R1.x = i.x;") && !Contains(glsl, "R7.x = i.x;"), "a paired ILU writes R1");
+    Expect(Contains(glsl, "vec4(rcc(C.x))"), "rcc");
+    Expect(Contains(glsl, "(oPos.xyz - offset) / scale * oPos.w"), "the epilogue is undone");
+    Expect(vsh::TranslateToGlsl(program, 0, true, &used).rfind("#version 300 es", 0) == 0, "GLES variant");
+
+    // The epilogue and its undoing round-trip through the viewport constants.
+    float scale[4];
+    float offset[4];
+    vsh::ViewportConstants(16, 8, 640, 480, scale, offset);
+    const float clip[4] = {0.25f, -0.5f, 0.75f, 2.0f};
+    bool round_trip = true;
+    for (int i = 0; i < 3; ++i)
+    {
+        const float screen = clip[i] * scale[i] * (1.0f / clip[3]) + offset[i];
+        const float back = (screen - offset[i]) / scale[i] * clip[3];
+        round_trip = round_trip && std::fabs(back - clip[i]) < 1e-4f;
+    }
+    Expect(round_trip, "screen-space epilogue round-trips to clip space");
+    Expect(scale[1] < 0.0f && offset[0] == 336.0f && offset[1] == 248.0f, "viewport constants: y flipped, centred");
+
+    // A declaration: stream 0 with FLOAT3, FLOAT1, PBYTE4, FLOAT3, FLOAT2, FLOAT2.
+    const std::vector<uint32_t> tokens = {0x20000000, 0x40320000, 0x40120001, 0x40440002, 0x40320003,
+                                          0x40220004, 0x40220005, 0xFFFFFFFF};
+    vsh::Declaration declaration;
+    Expect(vsh::ParseDeclaration(tokens, &declaration, &error) && declaration.elements.size() == 6,
+           "parse a six-register declaration");
+    Expect(declaration.elements[2].kind == vsh::ElementKind::kNormByte && declaration.elements[2].offset == 16 &&
+               declaration.elements[3].offset == 20 && declaration.elements[5].offset == 40 &&
+               declaration.stream_bytes[0] == 48 && declaration.streams == 1,
+           "declaration offsets and vertex size");
+    const std::vector<uint32_t> color = {0x20000001, 0x40400003, 0x50020000, 0x40120004, 0xFFFFFFFF};
+    Expect(vsh::ParseDeclaration(color, &declaration, &error) && declaration.bgra_inputs == (1u << 3) &&
+               declaration.elements[1].offset == 12 && declaration.streams == 2,
+           "D3DCOLOR register, skip of two DWORDs, stream 1");
+    Expect(!vsh::ParseDeclaration({0x20000000, 0x40160000, 0xFFFFFFFF}, &declaration, &error),
+           "NORMPACKED3 is refused for now");
+    Expect(!vsh::ParseDeclaration({0x20000000, 0x40320000}, &declaration, &error), "a declaration needs an end");
+}
+
+// --- Register combiners --------------------------------------------------------
+
+void CheckPixelShaders()
+{
+    // Two stages: r0 = v0 * t0 (signed identity), r1 = c0 * t2; then
+    // r0.rgb = lerp by r1.a (r1.a * t2 + (1 - r1.a) * r0), no final combiner.
+    psh::Definition def = {};
+    def[psh::word::kRgbInputs + 0] = 0xC4C80000;
+    def[psh::word::kRgbOutputs + 0] = 0x000000C0;
+    def[psh::word::kAlphaInputs + 0] = 0xD4D81010;
+    def[psh::word::kAlphaOutputs + 0] = 0x000000C0;
+    def[psh::word::kRgbInputs + 1] = 0x1DCACC3D;
+    def[psh::word::kRgbOutputs + 1] = 0x00000C00;
+    def[psh::word::kCombinerCount] = 0x00011102;
+    def[psh::word::kTextureModes] = 0x00008421;
+    def[psh::word::kC0Mapping] = 0xFFFFFF0F;  // stage 1's c0 is register 0
+    def[psh::word::kC1Mapping] = 0xFFFFFFFF;
+    def[psh::word::kFinalConstants] = 0x000001FF;
+    def[psh::word::kConstant0 + 0] = 0x80FF0000;  // stage 0's own c0
+    psh::Key key;
+    key.definition = def;
+    key.samplers[0] = SamplerKind::k2D;
+    key.samplers[2] = SamplerKind::k2D;
+    std::string unsupported;
+    const std::string fs = psh::GenerateFragmentShader(key, false, &unsupported);
+    Expect(unsupported.empty(), "a 2D-only shader is fully supported");
+    Expect(Contains(fs, "vec4 r0 = vec4(0.0, 0.0, 0.0, t0.a);"), "r0.a starts as t0.a");
+    Expect(Contains(fs, "cab = (v0.rgb) * (t0.rgb);") && Contains(fs, "r0.rgb = cab;"), "stage 0 r0 = v0 * t0");
+    Expect(Contains(fs, "(vec3(1.0) - clamp(vec3(r1.a), 0.0, 1.0))"), "unsigned invert of r1.a");
+    Expect(Contains(fs, "r0.rgb = csum;"), "stage 1 writes the sum to r0");
+    Expect(Contains(fs, "vec4 current = clamp(r0, 0.0, 1.0);"), "no final combiner: r0 is the output");
+    Expect(Contains(fs, "texture(u_tex0,") && !Contains(fs, "u_tex1;") && Contains(fs, "vec4 t1 = vec4(1.0);"),
+           "stage 1 has no bound texture: white");
+
+    float pixel_constants[psh::kPixelConstants][4] = {};
+    pixel_constants[0][0] = 0.5f;
+    pixel_constants[0][3] = 1.0f;
+    float c0[psh::kStages][4];
+    float c1[psh::kStages][4];
+    float f0[4];
+    float f1[4];
+    psh::StageConstants(def, pixel_constants, c0, c1, f0, f1);
+    Expect(c0[1][0] == 0.5f && c0[1][3] == 1.0f, "stage 1 c0 comes from SetPixelShaderConstant(0)");
+    Expect(c0[0][0] == 1.0f && std::fabs(c0[0][3] - 128.0f / 255.0f) < 1e-6f, "stage 0 c0 is its own D3DCOLOR");
+    Expect(c1[3][0] == 0.0f && f0[0] == 0.0f, "unmapped c1 and final constants come from the definition");
+
+    // A final combiner: A = fog.a, B = r0, C = fog.rgb, D = 0; G = r0.a.
+    psh::Definition fin = def;
+    fin[psh::word::kFinalInputsAbcd] = 0x130C0300;
+    fin[psh::word::kFinalInputsEfg] = 0x00001C00;
+    key.definition = fin;
+    const std::string ff = psh::GenerateFragmentShader(key, false, &unsupported);
+    Expect(Contains(ff, "vec3 fa = clamp(vec3(fog.a), 0.0, 1.0);") && Contains(ff, "(vec3(1.0) - fa) *"),
+           "final combiner lerp");
+    Expect(Contains(ff, "clamp(r0.a, 0.0, 1.0));"), "final alpha G = r0.a");
+
+    psh::Definition bump = def;
+    bump[psh::word::kTextureModes] = 0x000000C1;  // stage 1: BUMPENVMAP
+    key.definition = bump;
+    key.samplers[1] = SamplerKind::k2D;
+    psh::GenerateFragmentShader(key, false, &unsupported);
+    Expect(Contains(unsupported, "texture mode 6"), "bump environment mapping is reported");
+    Expect(psh::TextureMode(bump, 1) == psh::texmode::kBumpEnvMap, "texture mode of stage 1");
+}
+
 }  // namespace
 
 int main()
@@ -295,6 +531,8 @@ int main()
     CheckDxt();
     CheckFvf();
     CheckFixedFunctionShader();
+    CheckVertexPrograms();
+    CheckPixelShaders();
     std::printf("%d check(s), %d failure(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }
