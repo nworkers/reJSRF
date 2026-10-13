@@ -7,6 +7,7 @@
 #include "d3d8_globals.h"
 #include "d3d8_render_state.h"
 #include "d3d8_internal.h"
+#include "d3d8_shader.h"
 #include "d3d8_resource.h"
 #include "d3d8_state.h"
 #include "d3d8_trace.h"
@@ -107,12 +108,13 @@ bool OpenDisplay(const PresentParameters& pp, std::string* error)
 // GL's the bottom-left.
 void ApplyViewport()
 {
+    D3dState& state = State();
+    const Viewport& vp = state.viewport;
+    WriteViewportConstants(vp.x, vp.y, vp.width, vp.height);
     if (!HaveGl())
     {
         return;
     }
-    D3dState& state = State();
-    const Viewport& vp = state.viewport;
     const uint32_t target_height = RenderTargetHeight();
     const GLint y = static_cast<GLint>(target_height) - static_cast<GLint>(vp.y + vp.height);
     Gl().Viewport(static_cast<GLint>(vp.x), y, static_cast<GLsizei>(vp.width), static_cast<GLsizei>(vp.height));

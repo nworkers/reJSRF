@@ -154,3 +154,35 @@ After device creation the boot goes through `GetBackBuffer`, `GetDepthStencilSur
 
 * **확인됨**: 로고 동안 게임은 매 프레임 `SetGammaRamp(1, ramp)`를 부르고, 램프는 단위(0..255)다(`REXBOX_D3D8_TRACE`가 20초 동안 단위가 아닌 램프를 보고하지 않음). HLE는 이제 램프를 저장하고 `GetGammaRamp`로 돌려주며, present와 frame dump에 적용한다. 강제로 절반 램프를 넣은 시험에서 창 프레임버퍼와 덤프의 로고 중앙이 모두 (8, 28, 123)에서 (4, 14, 61)이 되었다.
 * **Confirmed**: during the logo the game calls `SetGammaRamp(1, ramp)` every frame with an identity ramp (0..255); `REXBOX_D3D8_TRACE` reported no other ramp over 20 s. The HLE now stores the ramp, returns it from `GetGammaRamp` and applies it to the present and to frame dumps. A test with a forced half ramp turned the logo center from (8, 28, 123) into (4, 14, 61) in both the window framebuffer and the dump.
+
+## 10. 정점 셰이더 프로그램과 픽셀 셰이더 / Vertex-shader programs and pixel shaders (issue #37)
+
+* **확인됨**(`REXBOX_SHADER_DUMP`): 정점 셰이더는 154개다.
+  * 모두 형식 `0x2078`이고, 길이는 10~69 명령이다.
+  * 선언은 스트림 0 하나이고 형식은 FLOAT1(78), FLOAT2(292), FLOAT3(307), PBYTE4(143)뿐이다(괄호는 레지스터 수).
+  * 쓰는 연산은 `dp4 dp3 mul mad mov add arl min max sge slt` + `rcc rsq`, 출력은 oPos, oD0, oD1, oFog, oT0..3이다.
+  * 모두 화면 공간 epilogue로 끝난다. HLE가 뷰포트에서 쓰는 `c[58]`/`c[59]`로 화면이 맞게 나온다. 게임이 이 상수를 직접 쓰는지는 확인하지 않았다.
+* **확인됨**: 오프닝 데모에서 쓰는 정점 셰이더는 18종이다. 17종이 스키닝(`arl`, FLOAT1 가중치, PBYTE4 인덱스)이다. 스키닝이 없는 `03FD63C1`(12명령)은 그리기가 가장 많다(300프레임에 약 1만 5천 번).
+* **확인됨**: 픽셀 셰이더는 11개다.
+  * 1~8번은 2~6스테이지의 텍스처 레이어 합성이다(`r1.a`로 lerp).
+  * 9번은 `AB_DOT_PRODUCT`와 `BLUE_TO_ALPHA`를 쓴다.
+  * 10·11번은 스테이지 1이 `BUMPENVMAP`이다.
+  * 모두 최종 컴바이너 입력이 0이다.
+  * 데모에서는 1번과 4번이 캐릭터 셰이더(`03FD9141`, `03FD9381`, `03FD9501`)와 함께 쓰인다.
+* **확인됨**: 오프닝 프레임 2,800~3,400에서 캐릭터(앞쪽 스케이터, 행인)와 차량이 그려진다. 데모 구간 속도는 Release에서 초당 8~10프레임이다.
+* **미확정**: 3,400프레임의 가까운 캐릭터 몇이 청록 단색에 가깝다. 원본 화면과의 비교가 필요하다(안개 미계산이나 조명 상수일 수 있음).
+
+* **Confirmed** (`REXBOX_SHADER_DUMP`): there are 154 vertex shaders.
+  * All have type `0x2078` and are 10–69 instructions long.
+  * Declarations use stream 0 only, with FLOAT1 (78), FLOAT2 (292), FLOAT3 (307) and PBYTE4 (143) registers only (counts in parentheses).
+  * The ops are `dp4 dp3 mul mad mov add arl min max sge slt` plus `rcc rsq`, and the outputs are oPos, oD0, oD1, oFog and oT0..3.
+  * All end in the screen-space epilogue. The `c[58]`/`c[59]` the HLE writes from the viewport give right frames; whether the game writes these constants itself was not checked.
+* **Confirmed**: the opening demo uses 18 vertex shaders, 17 of them skinned (`arl`, FLOAT1 weights, PBYTE4 indices). The unskinned `03FD63C1` (12 instructions) draws the most (about 15,000 times per 300 frames).
+* **Confirmed**: there are 11 pixel shaders.
+  * 1–8 layer textures over 2–6 stages (a lerp by `r1.a`).
+  * 9 uses `AB_DOT_PRODUCT` and `BLUE_TO_ALPHA`.
+  * 10 and 11 have `BUMPENVMAP` on stage 1.
+  * All have zero final-combiner inputs.
+  * In the demo, 1 and 4 pair with the character shaders (`03FD9141`, `03FD9381`, `03FD9501`).
+* **Confirmed**: frames 2,800–3,400 of the opening draw the characters (the skater in front, pedestrians) and vehicles. The demo runs at 8–10 frames per second in Release.
+* **Unresolved**: a few close characters at frame 3,400 look nearly flat teal; they need comparing with the original (unimplemented fog or lighting constants are possible causes).

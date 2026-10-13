@@ -82,6 +82,7 @@ bool LoadGlFunctions(GlFunctions* functions, std::string* missing)
     need(Load(&f.Uniform1f, "glUniform1f", &first_missing));
     need(Load(&f.Uniform2f, "glUniform2f", &first_missing));
     need(Load(&f.Uniform4f, "glUniform4f", &first_missing));
+    need(Load(&f.Uniform4fv, "glUniform4fv", &first_missing));
     need(Load(&f.UniformMatrix4fv, "glUniformMatrix4fv", &first_missing));
     need(Load(&f.GenBuffers, "glGenBuffers", &first_missing));
     need(Load(&f.BindBuffer, "glBindBuffer", &first_missing));

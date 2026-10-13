@@ -4,17 +4,17 @@
 
 This records how far the recompiled US build gets when run from its entry point. It is updated by each task; earlier frontiers stay in the history below.
 
-## 현재 / Current (issue #29, 2026-10-13)
+## 현재 / Current (issue #37, 2026-10-13)
 
 | 항목 / Item | 값 / Value |
 |---|---|
-| 게스트 메모리 / Guest memory | 주소 공간 128 MiB: 아래 64 MiB 물리 RAM, 위 64 MiB 가상 메모리 전용, 작은 객체 slab / a 128 MiB address space: the low 64 MiB physical RAM, the upper 64 MiB virtual memory only, slabs for small objects |
-| 실행 결과 / Outcome | **로고 시퀀스 뒤 스테이지를 읽고 3D 어트랙트 데모(도시 비행과 거리)가 이어진다. 150초 실행에서 메모리 부족 없이 watchdog으로 끝난다. 가상 메모리는 `0x04000000`~`0x05830000`에 놓인다. 3,600번째 present는 검은 화면이다(원인 미확인). 아직 그리지 않는 경로: 정점 셰이더 프로그램(`DrawIndexedVertices ... 03FD63C1`), `Begin`/`End` 즉시 모드, 고정 기능 조명, 텍스처 변환·좌표 생성 / after the logo sequence the stage loads and the 3D attract demo (a flight over the city, then the streets) follows. A 150 s run ends by watchdog with no memory exhaustion. Virtual memory sits at `0x04000000`–`0x05830000`. The 3,600th present is black (cause not known). Paths not drawn yet: vertex-shader programs (`DrawIndexedVertices ... 03FD63C1`), `Begin`/`End` immediate mode, fixed-function lighting, texture transforms and coordinate generation** |
+| 그리기 / Drawing | 고정 기능, 정점 셰이더 프로그램(NV2A 마이크로코드 → GLSL), 레지스터 컴바이너 픽셀 셰이더 / fixed function, vertex-shader programs (NV2A microcode to GLSL), register-combiner pixel shaders |
+| 실행 결과 / Outcome | **로고 시퀀스 뒤 3D 어트랙트 데모에 도시, 차량, 캐릭터(스케이터, 행인)가 그려진다. 데모 구간은 Release에서 초당 8~10프레임이다. 아직 그리지 않거나 근사하는 것: 안개, `BUMPENVMAP` 등 dot/bump 텍스처 모드, `Begin`/`End` 즉시 모드, 고정 기능 조명, 텍스처 변환·좌표 생성 / after the logo sequence, the 3D attract demo draws the city, vehicles and characters (skaters, pedestrians); the demo runs at 8–10 frames per second in Release. Not drawn or approximated yet: fog, dot and bump texture modes such as `BUMPENVMAP`, `Begin`/`End` immediate mode, fixed-function lighting, texture transforms and coordinate generation** |
 
-* **확인됨**: 메모리 부족은 평면 64 MiB가 예약한 페이지를 모두 차지한 탓이었다. 작은 예약의 64 KiB 올림(약 19 MiB), 커밋되지 않은 예약 3.8 MiB, 페이지 하나씩 쓰던 HLE 객체가 겹쳤다([설계 i029](../design/20261013-i029-guest-memory.md)).
-* **미확정**: 3,600번째 present의 검은 화면이 장면 전환인지, 그리지 않는 경로 탓인지.
-* **Confirmed**: memory ran out because the flat 64 MiB backed every reserved page. Three costs added up: small reservations rounded to 64 KiB (about 19 MiB), 3.8 MiB of uncommitted reservations, and HLE objects that took a page each ([design i029](../design/20261013-i029-guest-memory.md)).
-* **Unresolved**: whether the black 3,600th present is a scene transition or a path not drawn yet.
+* **확인됨**: 캐릭터가 없던 원인은 데모 그리기의 약 40%를 차지하는 정점 셰이더 프로그램 그리기를 HLE가 건너뛴 것이었다. 캐릭터 몸체는 픽셀 셰이더 1·4번과 함께 그려진다([설계 i037](../design/20261013-i037-vertex-shader-programs.md), [d3d8 §10](d3d8-adapter.md)).
+* **미확정**: 가까운 캐릭터 몇이 청록 단색에 가까운 프레임(3,400)이 원본과 같은지. 속도(다음 task 후보).
+* **Confirmed**: the characters were missing because the HLE skipped vertex-shader program draws, about 40% of the demo's draws; character bodies are drawn with pixel shaders 1 and 4 ([design i037](../design/20261013-i037-vertex-shader-programs.md), [d3d8 §10](d3d8-adapter.md)).
+* **Unresolved**: whether the frame (3,400) with a few close characters in nearly flat teal matches the original; speed (a next-task candidate).
 
 ## 이력 / History
 
@@ -32,6 +32,19 @@ This records how far the recompiled US build gets when run from its entry point.
 | #23 | 고정 기능 그리기(GL), 60 Hz 페이싱, "Presented by SEGA" 로고 표시 뒤 로고에 머묾 / fixed-function drawing on GL, 60 Hz pacing; shows the "Presented by SEGA" logo and stays on it |
 | #27 | `FCMOVcc` lift; 로고 시퀀스 완료, 스테이지 로드 중 게스트 메모리 부족 / `FCMOVcc` lifted; the logo sequence completes, guest memory runs out while loading the stage |
 | #29 | 게스트 주소 공간 128 MiB와 slab; 스테이지 로드 통과, 3D 어트랙트 데모 / a 128 MiB guest address space and slabs; past the stage load, the 3D attract demo |
+| #37 | 정점 셰이더 프로그램과 컴바이너 픽셀 셰이더; 오프닝에 캐릭터가 그려짐 / vertex-shader programs and combiner pixel shaders; the opening draws the characters |
+
+### issue #29 frontier 상세 / issue #29 frontier details
+
+| 항목 / Item | 값 / Value |
+|---|---|
+| 게스트 메모리 / Guest memory | 주소 공간 128 MiB: 아래 64 MiB 물리 RAM, 위 64 MiB 가상 메모리 전용, 작은 객체 slab / a 128 MiB address space: the low 64 MiB physical RAM, the upper 64 MiB virtual memory only, slabs for small objects |
+| 실행 결과 / Outcome | **로고 시퀀스 뒤 스테이지를 읽고 3D 어트랙트 데모(도시 비행과 거리)가 이어진다. 150초 실행에서 메모리 부족 없이 watchdog으로 끝난다. 가상 메모리는 `0x04000000`~`0x05830000`에 놓인다. 3,600번째 present는 검은 화면이다(원인 미확인). 아직 그리지 않는 경로: 정점 셰이더 프로그램(`DrawIndexedVertices ... 03FD63C1`), `Begin`/`End` 즉시 모드, 고정 기능 조명, 텍스처 변환·좌표 생성 / after the logo sequence the stage loads and the 3D attract demo (a flight over the city, then the streets) follows. A 150 s run ends by watchdog with no memory exhaustion. Virtual memory sits at `0x04000000`–`0x05830000`. The 3,600th present is black (cause not known). Paths not drawn yet: vertex-shader programs (`DrawIndexedVertices ... 03FD63C1`), `Begin`/`End` immediate mode, fixed-function lighting, texture transforms and coordinate generation** |
+
+* **확인됨**: 메모리 부족은 평면 64 MiB가 예약한 페이지를 모두 차지한 탓이었다. 작은 예약의 64 KiB 올림(약 19 MiB), 커밋되지 않은 예약 3.8 MiB, 페이지 하나씩 쓰던 HLE 객체가 겹쳤다([설계 i029](../design/20261013-i029-guest-memory.md)).
+* **미확정**: 3,600번째 present의 검은 화면이 장면 전환인지, 그리지 않는 경로 탓인지.
+* **Confirmed**: memory ran out because the flat 64 MiB backed every reserved page. Three costs added up: small reservations rounded to 64 KiB (about 19 MiB), 3.8 MiB of uncommitted reservations, and HLE objects that took a page each ([design i029](../design/20261013-i029-guest-memory.md)).
+* **Unresolved**: whether the black 3,600th present is a scene transition or a path not drawn yet.
 
 ### issue #27 frontier 상세 / issue #27 frontier details
 

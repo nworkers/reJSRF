@@ -2,7 +2,8 @@
 // memory on every draw, the fixed-function state comes from the library's
 // globals, and the result goes to the bound render target
 // (docs/design/20261012-i023-d3d8-fixed-function-draw.md section 3).
-// Programmable vertex shaders, register-combiner pixel shaders and the
+// Vertex-shader programs are translated to GLSL (d3d8_vsh.h) and paired with
+// the fixed-function fragment stage. Register-combiner pixel shaders and the
 // immediate-mode Begin/End path are reported once and not drawn yet.
 
 #include "d3d8_ff_shader.h"
@@ -15,6 +16,8 @@
 #include "d3d8_internal.h"
 #include "d3d8_render_state.h"
 #include "d3d8_resource.h"
+#include "d3d8_psh.h"
+#include "d3d8_shader.h"
 #include "d3d8_state.h"
 #include "d3d8_trace.h"
 
@@ -123,7 +126,7 @@ bool GlPrimitive(uint32_t primitive, GLenum* mode)
 
 // Builds the fixed-function key from the vertex layout and the stage state;
 // binds each active stage's texture. Reports what this batch leaves out.
-FixedFunctionKey BuildKey(const VertexLayout& layout, BoundTexture textures[kFixedFunctionStages])
+FixedFunctionKey BuildKey(const VertexLayout& layout, BoundTexture textures[kFixedFunctionStages], bool program)
 {
     const PipelineState& pipeline = Pipeline();
     FixedFunctionKey key;
@@ -185,7 +188,7 @@ FixedFunctionKey BuildKey(const VertexLayout& layout, BoundTexture textures[kFix
     {
         ReportOnce("fog", "fog is not drawn yet");
     }
-    if (!layout.pretransformed && RenderStateValue(rs::kLighting) != 0)
+    if (!program && !layout.pretransformed && RenderStateValue(rs::kLighting) != 0)
     {
         ReportOnce("lighting", "fixed-function lighting is not implemented yet; lit draws use vertex colors");
     }
@@ -297,6 +300,52 @@ void SetVertexAttributes(const VertexLayout& layout, uint32_t stride)
     }
 }
 
+// Vertex attributes v0..v15 of a vertex-shader program from its declaration
+// (stream 0, `stride` bytes per vertex). Registers the program reads but the
+// declaration leaves out keep GL's default (0, 0, 0, 1).
+void SetProgramAttributes(const vsh::Declaration& declaration, uint32_t stride, uint32_t used_inputs)
+{
+    GlFunctions& gl = Gl();
+    uint32_t enabled = 0;
+    for (const vsh::VertexElement& element : declaration.elements)
+    {
+        if ((used_inputs & (1u << element.reg)) == 0 || element.stream != 0)
+        {
+            continue;
+        }
+        GLenum type = kGlFloat;
+        bool normalized = false;
+        switch (element.kind)
+        {
+        case vsh::ElementKind::kFloat:
+            break;
+        case vsh::ElementKind::kNormShort:
+            type = kGlShort;
+            normalized = true;
+            break;
+        case vsh::ElementKind::kShort:
+            type = kGlShort;
+            break;
+        case vsh::ElementKind::kNormByte:
+        case vsh::ElementKind::kD3dColor:
+            type = kGlUnsignedByte;
+            normalized = true;
+            break;
+        }
+        gl.EnableVertexAttribArray(element.reg);
+        gl.VertexAttribPointer(element.reg, element.components, type, normalized ? 1 : 0, static_cast<GLsizei>(stride),
+                               reinterpret_cast<const void*>(static_cast<uintptr_t>(element.offset)));
+        enabled |= 1u << element.reg;
+    }
+    for (uint32_t reg = 0; reg < vsh::kInputs; ++reg)
+    {
+        if ((enabled & (1u << reg)) == 0)
+        {
+            gl.DisableVertexAttribArray(reg);
+        }
+    }
+}
+
 // One draw: `indices` are vertex numbers relative to `source.base` (implicit
 // 0..count-1 when empty).
 void Draw(const char* name, uint32_t primitive, uint32_t count, std::vector<uint32_t> indices, VertexSource source)
@@ -307,20 +356,49 @@ void Draw(const char* name, uint32_t primitive, uint32_t count, std::vector<uint
         return;
     }
     const PipelineState& pipeline = Pipeline();
-    if ((pipeline.vertex_shader & fvf::kProgramHandle) != 0)
-    {
-        ReportOnce("vertex program", Format("%s with a vertex-shader program (%08X) is not drawn yet", name,
-                                            pipeline.vertex_shader));
-        return;
-    }
+    const bool is_program = (pipeline.vertex_shader & fvf::kProgramHandle) != 0;
+    const psh::Definition* pixel_shader = nullptr;
     if (pipeline.pixel_shader != 0)
     {
-        ReportOnce("pixel shader", Format("%s with pixel shader %08X (register combiners) is not drawn yet", name,
-                                          pipeline.pixel_shader));
-        return;
+        pixel_shader = FindPixelShader(pipeline.pixel_shader);
+        if (!is_program || pixel_shader == nullptr)
+        {
+            ReportOnce("pixel shader", Format("%s with pixel shader %08X and %s is not drawn yet", name,
+                                              pipeline.pixel_shader,
+                                              is_program ? "an unknown handle" : "fixed-function vertex processing"));
+            return;
+        }
     }
+    const ProgramShader* shader = nullptr;
     VertexLayout layout;
-    if (!DecodeFvf(pipeline.vertex_shader, &layout))
+    if (is_program)
+    {
+        shader = FindProgramShader(pipeline.vertex_shader);
+        if (shader == nullptr || !shader->usable)
+        {
+            ReportOnce(Format("vertex program %08X", pipeline.vertex_shader),
+                       Format("%s: vertex-shader program %08X is not drawn: %s", name, pipeline.vertex_shader,
+                              shader != nullptr ? shader->error.c_str() : "unknown handle"));
+            return;
+        }
+        if ((shader->declaration.streams & ~1u) != 0)
+        {
+            ReportOnce(Format("vertex program streams %08X", pipeline.vertex_shader),
+                       Format("%s: vertex-shader program %08X reads streams other than 0, not drawn yet", name,
+                              pipeline.vertex_shader));
+            return;
+        }
+        // The fragment stage reads every output the program may write.
+        layout.diffuse = 0;
+        layout.specular = 0;
+        layout.tex_coords = kMaxTexCoords;
+        for (uint32_t i = 0; i < kMaxTexCoords; ++i)
+        {
+            layout.tex_components[i] = 4;
+        }
+        layout.stride = shader->declaration.stream_bytes[0];
+    }
+    else if (!DecodeFvf(pipeline.vertex_shader, &layout))
     {
         ReportOnce(Format("fvf %08X", pipeline.vertex_shader),
                    Format("%s: vertex format %08X is not understood", name, pipeline.vertex_shader));
@@ -374,17 +452,68 @@ void Draw(const char* name, uint32_t primitive, uint32_t count, std::vector<uint
 
     GlFunctions& gl = Gl();
     BoundTexture textures[kFixedFunctionStages];
-    const FixedFunctionKey key = BuildKey(layout, textures);
-    const FixedFunctionProgram* program = GetFixedFunctionProgram(key);
-    if (program == nullptr)
+    FixedFunctionKey key;
+    psh::Key pixel_key;
+    bool sampled[kFixedFunctionStages] = {};
+    if (pixel_shader != nullptr)
     {
-        return;
+        // With a pixel shader the texture-stage operations do not apply; the
+        // shader's texture modes say which stages sample.
+        pixel_key.definition = *pixel_shader;
+        for (uint32_t s = 0; s < kFixedFunctionStages; ++s)
+        {
+            if (psh::TextureMode(*pixel_shader, s) == psh::texmode::kNone)
+            {
+                continue;
+            }
+            textures[s] = ResolveTexture(pipeline.textures[s]);
+            pixel_key.samplers[s] = textures[s].kind;
+            pixel_key.unnormalized[s] = textures[s].unnormalized;
+            sampled[s] = textures[s].kind != SamplerKind::kNone;
+        }
+        if (RenderStateValue(rs::kAlphaTestEnable) != 0)
+        {
+            pixel_key.alpha_func = RenderStateValue(rs::kAlphaFunc);
+        }
+    }
+    else
+    {
+        key = BuildKey(layout, textures, is_program);
+        for (uint32_t s = 0; s < kFixedFunctionStages; ++s)
+        {
+            sampled[s] = key.stages[s].sampler != SamplerKind::kNone;
+        }
+    }
+    const FixedFunctionProgram* program = nullptr;
+    const VertexProgramGl* vertex_program = nullptr;
+    if (is_program)
+    {
+        vertex_program = pixel_shader != nullptr ? GetVertexPixelProgram(*shader, pixel_key) : GetVertexProgram(*shader, key);
+        if (vertex_program == nullptr)
+        {
+            return;
+        }
+    }
+    else
+    {
+        program = GetFixedFunctionProgram(key);
+        if (program == nullptr)
+        {
+            return;
+        }
     }
 
     BindRenderTarget(state.render_target, state.depth_target);
     BindStreamingBuffers();
     UploadVertexData(memory.Translate(begin), bytes);
-    SetVertexAttributes(layout, stride);
+    if (is_program)
+    {
+        SetProgramAttributes(shader->declaration, stride, vertex_program->used_inputs);
+    }
+    else
+    {
+        SetVertexAttributes(layout, stride);
+    }
     std::vector<uint16_t> short_indices;
     std::vector<uint32_t> long_indices;
     const bool use_short = vertex_count <= 0x10000;
@@ -406,29 +535,61 @@ void Draw(const char* name, uint32_t primitive, uint32_t count, std::vector<uint
         UploadIndexData(long_indices.data(), long_indices.size() * 4);
     }
 
-    gl.UseProgram(program->program);
     const uint32_t width = RenderTargetWidth();
     const uint32_t height = RenderTargetHeight();
-    gl.Uniform4f(program->target, static_cast<float>(width), static_cast<float>(height),
-                 pipeline.screen_space_offset_x, pipeline.screen_space_offset_y);
-    const std::array<float, 16> transform =
-        Multiply(Multiply(pipeline.transforms[ts::kWorld], pipeline.transforms[ts::kView]),
-                 pipeline.transforms[ts::kProjection]);
-    gl.UniformMatrix4fv(program->transform, 1, 0, transform.data());
+    const int* tex_scale = nullptr;
+    int tfactor_location = -1;
+    int alpha_ref_location = -1;
+    if (is_program)
+    {
+        gl.UseProgram(vertex_program->program);
+        gl.Uniform4fv(vertex_program->constants, static_cast<GLsizei>(vsh::kConstants), VertexShaderConstants());
+        if (pixel_shader != nullptr)
+        {
+            float c0[psh::kStages][4];
+            float c1[psh::kStages][4];
+            float final_c0[4];
+            float final_c1[4];
+            psh::StageConstants(*pixel_shader, PixelShaderConstants(), c0, c1, final_c0, final_c1);
+            gl.Uniform4fv(vertex_program->stage_c0, static_cast<GLsizei>(psh::kStages), &c0[0][0]);
+            gl.Uniform4fv(vertex_program->stage_c1, static_cast<GLsizei>(psh::kStages), &c1[0][0]);
+            gl.Uniform4fv(vertex_program->final_c0, 1, final_c0);
+            gl.Uniform4fv(vertex_program->final_c1, 1, final_c1);
+            float fog[4];
+            ColorToFloats(RenderStateValue(rs::kFogColor), fog);
+            gl.Uniform4fv(vertex_program->fog_color, 1, fog);
+        }
+        tex_scale = vertex_program->tex_scale;
+        tfactor_location = vertex_program->tfactor;
+        alpha_ref_location = vertex_program->alpha_ref;
+    }
+    else
+    {
+        gl.UseProgram(program->program);
+        gl.Uniform4f(program->target, static_cast<float>(width), static_cast<float>(height),
+                     pipeline.screen_space_offset_x, pipeline.screen_space_offset_y);
+        const std::array<float, 16> transform =
+            Multiply(Multiply(pipeline.transforms[ts::kWorld], pipeline.transforms[ts::kView]),
+                     pipeline.transforms[ts::kProjection]);
+        gl.UniformMatrix4fv(program->transform, 1, 0, transform.data());
+        tex_scale = program->tex_scale;
+        tfactor_location = program->tfactor;
+        alpha_ref_location = program->alpha_ref;
+    }
     float tfactor[4];
     ColorToFloats(RenderStateValue(rs::kTextureFactor), tfactor);
-    gl.Uniform4f(program->tfactor, tfactor[0], tfactor[1], tfactor[2], tfactor[3]);
-    gl.Uniform1f(program->alpha_ref, static_cast<float>(RenderStateValue(rs::kAlphaRef) & 0xFF));
+    gl.Uniform4f(tfactor_location, tfactor[0], tfactor[1], tfactor[2], tfactor[3]);
+    gl.Uniform1f(alpha_ref_location, static_cast<float>(RenderStateValue(rs::kAlphaRef) & 0xFF));
     for (uint32_t s = 0; s < kFixedFunctionStages; ++s)
     {
-        if (key.stages[s].sampler == SamplerKind::kNone)
+        if (!sampled[s])
         {
             continue;
         }
         BindStageTexture(s, textures[s]);
-        if (program->tex_scale[s] >= 0)
+        if (tex_scale[s] >= 0)
         {
-            gl.Uniform2f(program->tex_scale[s], 1.0f / static_cast<float>(std::max(textures[s].width, 1u)),
+            gl.Uniform2f(tex_scale[s], 1.0f / static_cast<float>(std::max(textures[s].width, 1u)),
                          1.0f / static_cast<float>(std::max(textures[s].height, 1u)));
         }
     }

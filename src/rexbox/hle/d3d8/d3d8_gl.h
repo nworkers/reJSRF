@@ -65,6 +65,7 @@ constexpr GLenum kGlTriangleFan = 0x0006;
 
 // Types.
 constexpr GLenum kGlUnsignedByte = 0x1401;
+constexpr GLenum kGlShort = 0x1402;
 constexpr GLenum kGlUnsignedShort = 0x1403;
 constexpr GLenum kGlUnsignedInt = 0x1405;
 constexpr GLenum kGlFloat = 0x1406;
@@ -180,6 +181,7 @@ struct GlFunctions
     void(REXBOX_GL_APIENTRY* Uniform1f)(GLint location, GLfloat v0) = nullptr;
     void(REXBOX_GL_APIENTRY* Uniform2f)(GLint location, GLfloat v0, GLfloat v1) = nullptr;
     void(REXBOX_GL_APIENTRY* Uniform4f)(GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3) = nullptr;
+    void(REXBOX_GL_APIENTRY* Uniform4fv)(GLint location, GLsizei count, const GLfloat* value) = nullptr;
     void(REXBOX_GL_APIENTRY* UniformMatrix4fv)(GLint location, GLsizei count, GLboolean transpose,
                                                const GLfloat* value) = nullptr;
 
