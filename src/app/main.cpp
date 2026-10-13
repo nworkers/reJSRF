@@ -203,6 +203,15 @@ int main(int argc, char** argv)
 {
     // Diagnostics interleave with the guest's output; keep stderr unbuffered even when redirected.
     std::setvbuf(stderr, nullptr, _IONBF, 0);
+    // Closing the window ends the process the way the watchdog does: the
+    // guest threads never return on their own, and ending the process ends them.
+    rexbox::runtime::SetExitHandler([](int exit_code, const char* reason) {
+        std::fprintf(stderr, "[app] %s; exiting\n", reason);
+        std::fflush(stdout);
+        std::fflush(stderr);
+        std::_Exit(exit_code);
+    });
+
     std::printf("reJSRF %s\n", REJSRF_VERSION);
     // The window adds the renderer and the FPS (rePIU's form).
     rexbox::platform::SetDisplayTitle(std::string("reJSRF v" REJSRF_VERSION " (") + BuildIdentity() +
