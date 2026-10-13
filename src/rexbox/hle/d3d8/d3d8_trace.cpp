@@ -47,6 +47,24 @@ void TraceOnce(const std::string& key, const std::string& text)
 
 bool FirstReport(const char* site, uint64_t value)
 {
+    // Pairs this thread already reported, direct mapped: a condition met on
+    // every draw returns without the lock and the set lookup.
+    struct Seen
+    {
+        const char* site = nullptr;
+        uint64_t value = 0;
+    };
+    constexpr size_t kSlots = 64;
+    thread_local Seen seen_here[kSlots];
+    const size_t index = (reinterpret_cast<uintptr_t>(site) ^ static_cast<size_t>(value) ^
+                          static_cast<size_t>(value >> 32)) % kSlots;
+    Seen& slot = seen_here[index];
+    if (slot.site == site && slot.value == value)
+    {
+        return false;
+    }
+    slot.site = site;
+    slot.value = value;
     static std::mutex mutex;
     static std::set<std::pair<const char*, uint64_t>> seen;
     std::lock_guard<std::mutex> lock(mutex);

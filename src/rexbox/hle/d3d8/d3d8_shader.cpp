@@ -141,6 +141,8 @@ void DumpVertexShader(uint32_t handle, const VertexShader& shader)
 std::unordered_map<uint32_t, PixelShader> g_pixel_shaders;
 uint32_t g_next_pixel_shader = 1;
 float g_vertex_constants[kVertexConstantCount][4] = {};
+// Raised by every write to g_vertex_constants.
+uint64_t g_vertex_constants_version = 1;
 float g_pixel_constants[kPixelConstantCount][4] = {};
 
 // HRESULT D3DDevice_CreateVertexShader(const DWORD* pDeclaration, const DWORD* pFunction, DWORD* pHandle, DWORD Usage)
@@ -272,6 +274,7 @@ void D3DDevice_SetVertexShaderConstant()
             std::memcpy(g_vertex_constants[index], Memory().Translate(data + i * 16), 16);
         }
     }
+    ++g_vertex_constants_version;
     call.Return(kD3dOk, 3);
 }
 
@@ -305,6 +308,11 @@ const float* VertexShaderConstants()
     return &g_vertex_constants[0][0];
 }
 
+uint64_t VertexShaderConstantsVersion()
+{
+    return g_vertex_constants_version;
+}
+
 const psh::Definition* FindPixelShader(uint32_t handle)
 {
     const auto it = g_pixel_shaders.find(handle);
@@ -319,6 +327,7 @@ const float (*PixelShaderConstants())[4]
 void WriteViewportConstants(uint32_t x, uint32_t y, uint32_t width, uint32_t height)
 {
     vsh::ViewportConstants(x, y, width, height, g_vertex_constants[58], g_vertex_constants[59]);
+    ++g_vertex_constants_version;
 }
 
 void RegisterShaderExports(runtime::HleRegistry& registry)

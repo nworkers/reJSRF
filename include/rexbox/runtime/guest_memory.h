@@ -12,6 +12,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <mutex>
+#include <vector>
 
 namespace rexbox::runtime
 {
@@ -66,9 +68,27 @@ public:
     uint8_t* base() const { return base_; }
     size_t size() const { return size_; }
 
+    // Write versions, for callers that keep a copy of guest data and want to
+    // know cheaply whether it may have changed
+    // (docs/design/20261014-i046-hle-performance.md section 3.1). The newest
+    // version of the pages covering [address, address + length): pages
+    // written (by anyone) since the last call that covered them first get a
+    // new version. An unchanged result means no write to the range since the
+    // call that returned it. Without OS write tracking every call returns a
+    // new version. The caller must have checked the range.
+    uint64_t WriteVersion(GuestAddress address, size_t length);
+    bool TracksWrites() const { return tracks_writes_; }
+
 private:
     uint8_t* base_ = nullptr;
     size_t size_ = 0;
+
+    bool tracks_writes_ = false;
+    size_t page_shift_ = 12;
+    std::mutex write_mutex_;
+    uint64_t write_version_ = 0;
+    std::vector<uint64_t> page_versions_;
+    std::vector<void*> written_pages_;  // scratch for TakeWrittenPages
 };
 
 }  // namespace rexbox::runtime

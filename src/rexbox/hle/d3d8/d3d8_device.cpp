@@ -631,7 +631,8 @@ void D3DDevice_SetGammaRamp()
     {
         GammaRamp& state_ramp = State().gamma_ramp;
         std::memcpy(state_ramp.bytes.data(), Memory().Translate(ramp), GammaRamp::kBytes);
-        if (!state_ramp.IsIdentity())
+        // Fades set a ramp every frame: build the trace text only when tracing.
+        if (D3d8TraceEnabled() && !state_ramp.IsIdentity())
         {
             TraceOnce(Format("gamma %02X%02X%02X", state_ramp.bytes[255], state_ramp.bytes[511], state_ramp.bytes[767]),
                       Format("gamma ramp at frame %u: red/green/blue[255] = %u/%u/%u, [128] = %u/%u/%u",

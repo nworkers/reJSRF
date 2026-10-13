@@ -39,6 +39,19 @@ GuestAddress g_bound_depth = 0;
 uint32_t g_width = 0;
 uint32_t g_height = 0;
 
+// The pair BindRenderTarget resolved last, so a run of draws to one target
+// skips the map lookups. The maps only grow, so a resolved entry stays valid.
+struct ResolvedTarget
+{
+    bool valid = false;
+    GuestAddress color = 0;
+    GuestAddress depth = 0;
+    GLuint framebuffer = 0;
+    uint32_t width = 0;
+    uint32_t height = 0;
+};
+ResolvedTarget g_resolved_target;
+
 void SurfaceSize(GuestAddress surface, uint32_t* width, uint32_t* height)
 {
     const LevelLayout layout = HeaderLevelLayout(surface, 0);
@@ -244,20 +257,33 @@ void WriteLittleEndian(std::vector<uint8_t>* out, uint32_t value, int bytes)
 
 bool BindRenderTarget(GuestAddress color, GuestAddress depth)
 {
-    GlFunctions& gl = Gl();
-    gl.BindFramebuffer(kGlFramebuffer, Framebuffer(color, depth));
+    ResolvedTarget& resolved = g_resolved_target;
+    if (!resolved.valid || resolved.color != color || resolved.depth != depth)
+    {
+        resolved.framebuffer = Framebuffer(color, depth);
+        resolved.color = color;
+        resolved.depth = depth;
+        // Neither surface: the size of the previous target stays.
+        resolved.width = g_width;
+        resolved.height = g_height;
+        if (color != 0)
+        {
+            resolved.width = Color(color).width;
+            resolved.height = Color(color).height;
+        }
+        else if (depth != 0)
+        {
+            resolved.width = Depth(depth).width;
+            resolved.height = Depth(depth).height;
+        }
+        resolved.valid = color != 0 || depth != 0;
+    }
+    // Always bound: other paths (present, gamma, copies) change the binding.
+    Gl().BindFramebuffer(kGlFramebuffer, resolved.framebuffer);
     g_bound_color = color;
     g_bound_depth = depth;
-    if (color != 0)
-    {
-        g_width = Color(color).width;
-        g_height = Color(color).height;
-    }
-    else if (depth != 0)
-    {
-        g_width = Depth(depth).width;
-        g_height = Depth(depth).height;
-    }
+    g_width = resolved.width;
+    g_height = resolved.height;
     return true;
 }
 

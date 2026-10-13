@@ -28,17 +28,24 @@ DWORD ToWin32Protection(PageAccess access)
 
 }  // namespace
 
-void* AllocateVirtualMemory(size_t size, void* preferred_address, bool require_preferred)
+void* AllocateVirtualMemory(size_t size, void* preferred_address, bool require_preferred, bool track_writes)
 {
+    const DWORD type = MEM_RESERVE | MEM_COMMIT | (track_writes ? MEM_WRITE_WATCH : 0);
     if (preferred_address != nullptr)
     {
-        void* placed = VirtualAlloc(preferred_address, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+        void* placed = VirtualAlloc(preferred_address, size, type, PAGE_READWRITE);
         if (placed != nullptr || require_preferred)
         {
             return placed;
         }
     }
-    return VirtualAlloc(nullptr, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+    void* block = VirtualAlloc(nullptr, size, type, PAGE_READWRITE);
+    if (block == nullptr && track_writes)
+    {
+        // Write watching is optional; TakeWrittenPages then reports failure.
+        block = VirtualAlloc(nullptr, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+    }
+    return block;
 }
 
 void FreeVirtualMemory(void* address, size_t /*size*/)
@@ -49,6 +56,24 @@ void FreeVirtualMemory(void* address, size_t /*size*/)
     }
 }
 
+bool TakeWrittenPages(void* address, size_t size, void** pages, size_t capacity, size_t* count)
+{
+    ULONG_PTR found = capacity;
+    DWORD granularity = 0;
+    if (GetWriteWatch(WRITE_WATCH_FLAG_RESET, address, size, pages, &found, &granularity) != 0)
+    {
+        return false;
+    }
+    // A full array may have left pages out (and unreset): report failure, so
+    // the caller assumes them all written.
+    if (found >= capacity && size / PageSize() > capacity)
+    {
+        return false;
+    }
+    *count = found;
+    return true;
+}
+
 bool ProtectVirtualMemory(void* address, size_t size, PageAccess access)
 {
     DWORD previous = 0;
@@ -57,9 +82,12 @@ bool ProtectVirtualMemory(void* address, size_t size, PageAccess access)
 
 size_t PageSize()
 {
-    SYSTEM_INFO info = {};
-    GetSystemInfo(&info);
-    return info.dwPageSize;
+    static const size_t page_size = [] {
+        SYSTEM_INFO info = {};
+        GetSystemInfo(&info);
+        return static_cast<size_t>(info.dwPageSize);
+    }();
+    return page_size;
 }
 
 }  // namespace rexbox::platform
