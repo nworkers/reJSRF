@@ -4,7 +4,7 @@ lifter가 번역하지 못한 명령은 `RECOMP_UNIMPL(text, va)`가 된다. 실
 
 ## 1. 남은 종류 (i048 이후)
 
-* **확인됨**(summary): 34종, 약 160곳이다.
+* **확인됨**(summary): 34종, 156곳이다.
   * 포트 I/O: `out` 25, `in` 17, `outsb` 8, `insd` 6, `outsd` 3, `insb` 2
   * BCD·세그먼트·보호 모드: `arpl` 9, `daa` 8, `iretd` 8, `bound` 7, `aaa`/`das`/`aas`/`aad`/`aam`, `lcall`/`ljmp`, `les`/`lds`, `ltr`/`str`/`sldt`/`lldt`, `salc`, `into`
   * 그 밖: `hlt` 7, `sti` 7, `enter` 6, `cli` 4, `popfd` 4, `int1`/`int`, `pushfd`, `wbinvd`
@@ -57,7 +57,7 @@ An instruction the lifter cannot translate becomes `RECOMP_UNIMPL(text, va)`, wh
 
 ## 1. Remaining kinds (after i048)
 
-* **Confirmed** (summary): 34 kinds at about 160 sites.
+* **Confirmed** (summary): 34 kinds at 156 sites.
   * port I/O: `out` 25, `in` 17, `outsb` 8, `insd` 6, `outsd` 3, `insb` 2
   * BCD, segment and protected-mode instructions: `arpl` 9, `daa` 8, `iretd` 8, `bound` 7, `aaa`/`das`/`aas`/`aad`/`aam`, `lcall`/`ljmp`, `les`/`lds`, `ltr`/`str`/`sldt`/`lldt`, `salc`, `into`
   * others: `hlt` 7, `sti` 7, `enter` 6, `cli` 4, `popfd` 4, `int1`/`int`, `pushfd`, `wbinvd`
