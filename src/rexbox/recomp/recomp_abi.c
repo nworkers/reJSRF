@@ -37,6 +37,7 @@ RECOMP_TLS int g_fp_top;
 RECOMP_TLS uint16_t g_fp_control_word;
 RECOMP_TLS int g_fp_cmp;
 RECOMP_TLS uint16_t g_fp_cc;
+RECOMP_TLS uint32_t g_mxcsr;
 RECOMP_TLS uint32_t g_fs_base;
 RECOMP_TLS uint32_t g_seh_ebp;
 RECOMP_TLS int g_df;
@@ -54,6 +55,9 @@ volatile uint64_t g_icall_count;
  * nearest. */
 #define REXBOX_X87_DEFAULT_CONTROL_WORD 0x037F
 
+/* MXCSR reset value: all SSE exceptions masked, round to nearest. */
+#define REXBOX_SSE_DEFAULT_MXCSR 0x1F80u
+
 void rexbox_recomp_set_memory(ptrdiff_t offset, uint32_t code_lo, uint32_t code_hi)
 {
     g_xbox_mem_offset = offset;
@@ -70,6 +74,7 @@ void rexbox_recomp_reset_thread(uint32_t esp, uint32_t fs_base)
     g_fp_control_word = REXBOX_X87_DEFAULT_CONTROL_WORD;
     g_fp_cmp = 0;
     g_fp_cc = 0;
+    g_mxcsr = REXBOX_SSE_DEFAULT_MXCSR;
     g_fs_base = fs_base;
     g_seh_ebp = 0;
     g_df = 0;
