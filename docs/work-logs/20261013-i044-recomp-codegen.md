@@ -51,7 +51,8 @@ xboxrecomp의 XMM 도우미를 SSE2 intrinsic으로 바꿨다. 데모 프레임�
 ## 남은 일
 
 * 레지스터 지역화(상한 전체 CPU 약 7%)와 간접 호출 지점별 캐시(약 1%)는 효과 대비 위험을 보고 결정한다.
-* fork의 `perf/mem-base-local`, `perf/xmm-intrinsics`는 사용자가 말할 때 다른 수정과 함께 upstream에 낸다.
+* `perf/mem-base-local`은 사용자가 말할 때 다른 수정과 함께 upstream에 낸다.
+* `perf/xmm-intrinsics`는 upstream 헤더의 설계(칸 단위 C)와 달라 우리 fork에만 둔다(사용자 결정). 어긋나던 upstream 주석은 우리 브랜치에서 두 경로를 설명하게 고쳤다(`2f513d4`, `rejsrf` `541b554`).
 
 ---
 
@@ -107,4 +108,5 @@ The table in the Korean section applies:
 ## Remaining
 
 * Register localization (at most about 7% of CPU) and per-site indirect-call caches (about 1%) wait for a decision weighing gain against risk.
-* The fork's `perf/mem-base-local` and `perf/xmm-intrinsics` go upstream together with the other fixes when the user says so.
+* `perf/mem-base-local` goes upstream together with the other fixes when the user says so.
+* `perf/xmm-intrinsics` stays on our fork only (user decision), since it departs from the upstream header's lane-wise C design; the upstream comment that no longer matched now describes both paths on our branch (`2f513d4`, `rejsrf` `541b554`).

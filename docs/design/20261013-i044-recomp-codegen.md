@@ -8,6 +8,7 @@
 * 그래서 함수 하나가 아니라 코드 생성 방식을 고친다.
 * xboxrecomp 수정은 fork에서 한다. 변경마다 upstream main 기반 브랜치를 만들고 `rejsrf`에 합친다.
 * **upstream PR은 모았다가 한 번에 낸다**(사용자 결정, 2026-10-13). 다시 말할 때까지 올리지 않는다.
+* **XMM intrinsic은 우리 fork에만 둔다**(사용자 결정, 2026-10-13). upstream 헤더는 "게스트 의미를 드러내고 이식 가능하게 두려고 intrinsic이 아닌 칸 단위 C로 쓴다"고 밝히고 있어, 그 설계와 다른 변경은 upstream에 내지 않는다. 우리 브랜치에서는 그 주석이 두 경로를 모두 설명하게 고쳤다.
 * 각 변경은 present 스레드 CPU 시간(빌드를 번갈아 실행)으로 재고, 생성 코드의 정확성(테스트, 회귀 도구, 화면)을 지킨다.
 
 ## 2. 찾은 비용 (기계어와 명령 단위 샘플)
@@ -38,6 +39,7 @@
   * EQ/LT/LE/NEQ 비교, sqrt, `movmskps`
   * `shufps`: 선택자가 상수여야 하므로 매크로로 둔다. lifter는 항상 상수를 낸다.
   * unpack, `movlhps`/`movhlps`
+* **guest 메모리 접근**: 예전의 volatile 32비트 4번 대신 일반 포인터로 16·8바이트 한 번 접근한다(게스트 명령과 같은 크기). 컴파일러가 다른 비volatile 접근과 합치거나 순서를 바꿀 수 있다.
 * **plain C로 남기는 것**:
   * RSQRT/RCP: 하드웨어 근사값의 비트가 CPU마다 다르다.
   * 가변 술어 비교
@@ -95,6 +97,7 @@ Prerequisites: [i042 frame-time analysis](20261013-i042-frame-time-analysis.md),
 * So the fix goes into how the code is generated, not into one function.
 * xboxrecomp changes are made on the fork, one upstream-based branch per change, merged into `rejsrf`.
 * **Upstream PRs are collected and submitted together later** (user decision, 2026-10-13). Nothing is sent upstream until the user says so.
+* **The XMM intrinsics stay on our fork only** (user decision, 2026-10-13). The upstream header says it writes the helpers as lane-wise C rather than intrinsics, to keep the guest semantics explicit and the header portable; a change against that design is not proposed upstream. On our branch, that comment now describes both paths.
 * Each change is measured by the presenting thread's CPU time (builds run alternately), and the generated code must stay correct (tests, regression tools, picture).
 
 ## 2. Costs found (machine code and per-instruction samples)
@@ -125,6 +128,7 @@ Prerequisites: [i042 frame-time analysis](20261013-i042-frame-time-analysis.md),
   * EQ/LT/LE/NEQ compares, sqrt, `movmskps`
   * `shufps`, as a macro because its selector must be a constant, which the lifter always emits
   * unpack, `movlhps`/`movhlps`
+* **Guest memory access**: one 16- or 8-byte access through a plain pointer (the guest instruction's size) instead of four volatile 32-bit accesses; the compiler may combine or reorder it with other non-volatile accesses.
 * **Kept in plain C**:
   * RSQRT/RCP: their hardware approximations differ in bits between CPUs.
   * the variable-predicate compare
