@@ -41,7 +41,29 @@ struct CachedTexture
 };
 
 std::unordered_map<GuestAddress, CachedTexture> g_textures;
-GLuint g_samplers[globals::kTextureStages] = {};
+
+// One sampler object per combination of address modes and filters, so a
+// draw binds one instead of changing a shared sampler's parameters.
+std::unordered_map<uint64_t, GLuint> g_samplers;
+
+// What each texture unit holds, valid while `epoch` is the GL state epoch.
+struct UnitBinding
+{
+    uint32_t epoch = 0;
+    GLenum target = 0;
+    GLuint texture = 0;
+    GLuint sampler = 0;
+};
+UnitBinding g_units[globals::kTextureStages];
+
+// After an upload binds on unit 0, or a delete unbinds a texture everywhere.
+void ForgetUnitBindings()
+{
+    for (UnitBinding& unit : g_units)
+    {
+        unit = {};
+    }
+}
 
 // A cheap fingerprint of level 0: evenly spaced DWORDs.
 uint32_t SampleHash(uint32_t data, uint32_t bytes)
@@ -94,6 +116,7 @@ bool Upload(GuestAddress header, CachedTexture* cached)
         gl.GenTextures(1, &cached->bound.texture);
     }
     cached->target = target;
+    ForgetUnitBindings();
     gl.ActiveTexture(kGlTexture0);
     gl.BindTexture(target, cached->bound.texture);
     gl.PixelStorei(kGlUnpackAlignment, 1);
@@ -226,25 +249,37 @@ BoundTexture ResolveTexture(GuestAddress header)
     return cached.bound.kind == SamplerKind::kNone ? BoundTexture{} : cached.bound;
 }
 
+// The sampler object for these parameters, created on first use.
+GLuint Sampler(GLint wrap_s, GLint wrap_t, GLint wrap_r, GLenum mag_filter, GLenum min_filter)
+{
+    // GL enum values fit in 16 bits.
+    const uint64_t key = (static_cast<uint64_t>(wrap_s & 0xFFFF) << 48) |
+                         (static_cast<uint64_t>(wrap_t & 0xFFFF) << 32) |
+                         (static_cast<uint64_t>(wrap_r & 0xFFFF) << 16) |
+                         (static_cast<uint64_t>(mag_filter == kGlNearest ? 1 : 0) << 15) | (min_filter & 0x7FFF);
+    const auto it = g_samplers.find(key);
+    if (it != g_samplers.end())
+    {
+        return it->second;
+    }
+    GlFunctions& gl = Gl();
+    GLuint sampler = 0;
+    gl.GenSamplers(1, &sampler);
+    gl.SamplerParameteri(sampler, kGlTextureWrapS, wrap_s);
+    gl.SamplerParameteri(sampler, kGlTextureWrapT, wrap_t);
+    gl.SamplerParameteri(sampler, kGlTextureWrapR, wrap_r);
+    gl.SamplerParameteri(sampler, kGlTextureMagFilter, static_cast<GLint>(mag_filter));
+    gl.SamplerParameteri(sampler, kGlTextureMinFilter, static_cast<GLint>(min_filter));
+    g_samplers.emplace(key, sampler);
+    return sampler;
+}
+
 void BindStageTexture(uint32_t stage, const BoundTexture& texture)
 {
     GlFunctions& gl = Gl();
-    if (g_samplers[0] == 0)
-    {
-        gl.GenSamplers(globals::kTextureStages, g_samplers);
-    }
-    gl.ActiveTexture(kGlTexture0 + stage);
-    const GLenum target = texture.kind == SamplerKind::k3D ? kGlTexture3D : kGlTexture2D;
-    gl.BindTexture(target, texture.texture);
-    const GLuint sampler = g_samplers[stage];
-    gl.BindSampler(stage, sampler);
-    gl.SamplerParameteri(sampler, kGlTextureWrapS, AddressMode(TextureStateValue(stage, tss::kAddressU)));
-    gl.SamplerParameteri(sampler, kGlTextureWrapT, AddressMode(TextureStateValue(stage, tss::kAddressV)));
-    gl.SamplerParameteri(sampler, kGlTextureWrapR, AddressMode(TextureStateValue(stage, tss::kAddressW)));
     const bool mag_point = TextureStateValue(stage, tss::kMagFilter) == kFilterPoint;
     const bool min_point = TextureStateValue(stage, tss::kMinFilter) == kFilterPoint;
     const uint32_t mip = texture.levels > 1 ? TextureStateValue(stage, tss::kMipFilter) : kFilterNone;
-    gl.SamplerParameteri(sampler, kGlTextureMagFilter, static_cast<GLint>(mag_point ? kGlNearest : kGlLinear));
     GLenum min_filter = min_point ? kGlNearest : kGlLinear;
     if (mip == kFilterPoint)
     {
@@ -254,7 +289,31 @@ void BindStageTexture(uint32_t stage, const BoundTexture& texture)
     {
         min_filter = min_point ? kGlNearestMipmapLinear : kGlLinearMipmapLinear;
     }
-    gl.SamplerParameteri(sampler, kGlTextureMinFilter, static_cast<GLint>(min_filter));
+    const GLuint sampler = Sampler(AddressMode(TextureStateValue(stage, tss::kAddressU)),
+                                   AddressMode(TextureStateValue(stage, tss::kAddressV)),
+                                   AddressMode(TextureStateValue(stage, tss::kAddressW)),
+                                   mag_point ? kGlNearest : kGlLinear, min_filter);
+    const GLenum target = texture.kind == SamplerKind::k3D ? kGlTexture3D : kGlTexture2D;
+
+    UnitBinding& unit = g_units[stage];
+    const uint32_t epoch = GlStateEpoch();
+    if (unit.epoch != epoch)
+    {
+        unit = {};
+        unit.epoch = epoch;
+    }
+    if (unit.target != target || unit.texture != texture.texture)
+    {
+        gl.ActiveTexture(kGlTexture0 + stage);
+        gl.BindTexture(target, texture.texture);
+        unit.target = target;
+        unit.texture = texture.texture;
+    }
+    if (unit.sampler != sampler)
+    {
+        gl.BindSampler(stage, sampler);
+        unit.sampler = sampler;
+    }
 }
 
 void MarkTextureWritten(GuestAddress header)
@@ -276,6 +335,7 @@ void ForgetTexture(GuestAddress header)
     if (it->second.bound.texture != 0)
     {
         Gl().DeleteTextures(1, &it->second.bound.texture);
+        ForgetUnitBindings();
     }
     g_textures.erase(it);
 }

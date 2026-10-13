@@ -169,7 +169,7 @@ After device creation the boot goes through `GetBackBuffer`, `GetDepthStencilSur
   * 10·11번은 스테이지 1이 `BUMPENVMAP`이다.
   * 모두 최종 컴바이너 입력이 0이다.
   * 데모에서는 1번과 4번이 캐릭터 셰이더(`03FD9141`, `03FD9381`, `03FD9501`)와 함께 쓰인다.
-* **확인됨**: 오프닝 프레임 2,800~3,400에서 캐릭터(앞쪽 스케이터, 행인)와 차량이 그려진다. 데모 구간 속도는 Release에서 초당 8~10프레임이다.
+* **확인됨**: 오프닝 프레임 2,800~3,400에서 캐릭터(앞쪽 스케이터, 행인)와 차량이 그려진다. 데모 구간 속도는 Release에서 초당 8~10프레임이었고, #40의 GL 상태·버퍼 캐시 뒤 21~39프레임이다([설계 i040](../design/20261013-i040-draw-performance.md)).
 * **미확정**: 3,400프레임의 가까운 캐릭터 몇이 청록 단색에 가깝다. 원본 화면과의 비교가 필요하다(안개 미계산이나 조명 상수일 수 있음).
 
 * **Confirmed** (`REXBOX_SHADER_DUMP`): there are 154 vertex shaders.
@@ -184,5 +184,5 @@ After device creation the boot goes through `GetBackBuffer`, `GetDepthStencilSur
   * 10 and 11 have `BUMPENVMAP` on stage 1.
   * All have zero final-combiner inputs.
   * In the demo, 1 and 4 pair with the character shaders (`03FD9141`, `03FD9381`, `03FD9501`).
-* **Confirmed**: frames 2,800–3,400 of the opening draw the characters (the skater in front, pedestrians) and vehicles. The demo runs at 8–10 frames per second in Release.
+* **Confirmed**: frames 2,800–3,400 of the opening draw the characters (the skater in front, pedestrians) and vehicles. The demo ran at 8–10 frames per second in Release, and at 21–39 after the GL state and buffer caches of #40 ([design i040](../design/20261013-i040-draw-performance.md)).
 * **Unresolved**: a few close characters at frame 3,400 look nearly flat teal; they need comparing with the original (unimplemented fog or lighting constants are possible causes).

@@ -298,6 +298,20 @@ std::string Key::Serialize() const
     return text + buffer;
 }
 
+uint64_t Key::Hash() const
+{
+    uint64_t hash = 1469598103934665603ull;
+    for (const uint32_t w : definition)
+    {
+        hash = HashMix(hash, w);
+    }
+    for (uint32_t s = 0; s < 4; ++s)
+    {
+        hash = HashMix(hash, static_cast<uint64_t>(samplers[s]) | (unnormalized[s] ? 0x100u : 0u));
+    }
+    return HashMix(hash, alpha_func);
+}
+
 uint32_t TextureMode(const Definition& definition, uint32_t stage)
 {
     return (definition[word::kTextureModes] >> (5 * stage)) & 0x1F;

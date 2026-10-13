@@ -4,17 +4,17 @@
 
 This records how far the recompiled US build gets when run from its entry point. It is updated by each task; earlier frontiers stay in the history below.
 
-## 현재 / Current (issue #37, 2026-10-13)
+## 현재 / Current (issue #40, 2026-10-13)
 
 | 항목 / Item | 값 / Value |
 |---|---|
 | 그리기 / Drawing | 고정 기능, 정점 셰이더 프로그램(NV2A 마이크로코드 → GLSL), 레지스터 컴바이너 픽셀 셰이더 / fixed function, vertex-shader programs (NV2A microcode to GLSL), register-combiner pixel shaders |
-| 실행 결과 / Outcome | **로고 시퀀스 뒤 3D 어트랙트 데모에 도시, 차량, 캐릭터(스케이터, 행인)가 그려진다. 데모 구간은 Release에서 초당 8~10프레임이다. 아직 그리지 않거나 근사하는 것: 안개, `BUMPENVMAP` 등 dot/bump 텍스처 모드, `Begin`/`End` 즉시 모드, 고정 기능 조명, 텍스처 변환·좌표 생성 / after the logo sequence, the 3D attract demo draws the city, vehicles and characters (skaters, pedestrians); the demo runs at 8–10 frames per second in Release. Not drawn or approximated yet: fog, dot and bump texture modes such as `BUMPENVMAP`, `Begin`/`End` immediate mode, fixed-function lighting, texture transforms and coordinate generation** |
+| 실행 결과 / Outcome | **로고 시퀀스 뒤 3D 어트랙트 데모에 도시, 차량, 캐릭터(스케이터, 행인)가 그려진다. 데모 구간은 Release에서 초당 21~39프레임이다(그리기 250~480개; Intel HD Graphics 620, [설계 i040](../design/20261013-i040-draw-performance.md)). 아직 그리지 않거나 근사하는 것: 안개, `BUMPENVMAP` 등 dot/bump 텍스처 모드, `Begin`/`End` 즉시 모드, 고정 기능 조명, 텍스처 변환·좌표 생성 / after the logo sequence, the 3D attract demo draws the city, vehicles and characters (skaters, pedestrians); the demo runs at 21–39 frames per second in Release (250–480 draws; Intel HD Graphics 620, [design i040](../design/20261013-i040-draw-performance.md)). Not drawn or approximated yet: fog, dot and bump texture modes such as `BUMPENVMAP`, `Begin`/`End` immediate mode, fixed-function lighting, texture transforms and coordinate generation** |
 
 * **확인됨**: 캐릭터가 없던 원인은 데모 그리기의 약 40%를 차지하는 정점 셰이더 프로그램 그리기를 HLE가 건너뛴 것이었다. 캐릭터 몸체는 픽셀 셰이더 1·4번과 함께 그려진다([설계 i037](../design/20261013-i037-vertex-shader-programs.md), [d3d8 §10](d3d8-adapter.md)).
-* **미확정**: 가까운 캐릭터 몇이 청록 단색에 가까운 프레임(3,400)이 원본과 같은지. 속도(다음 task 후보).
+* **미확정**: 가까운 캐릭터 몇이 청록 단색에 가까운 프레임(3,400)이 원본과 같은지. 60프레임까지 남은 시간의 대부분은 그리기 경로 밖(게임 코드와 다른 HLE 호출, 프레임당 약 12.7 ms)에 있다([작업 로그 i040](../work-logs/20261013-i040-draw-performance.md)).
 * **Confirmed**: the characters were missing because the HLE skipped vertex-shader program draws, about 40% of the demo's draws; character bodies are drawn with pixel shaders 1 and 4 ([design i037](../design/20261013-i037-vertex-shader-programs.md), [d3d8 §10](d3d8-adapter.md)).
-* **Unresolved**: whether the frame (3,400) with a few close characters in nearly flat teal matches the original; speed (a next-task candidate).
+* **Unresolved**: whether the frame (3,400) with a few close characters in nearly flat teal matches the original; most of the time still between the demo and 60 frames per second lies outside the draw path (the title's code and the other HLE calls, about 12.7 ms per frame; [work log i040](../work-logs/20261013-i040-draw-performance.md)).
 
 ## 이력 / History
 
@@ -33,6 +33,7 @@ This records how far the recompiled US build gets when run from its entry point.
 | #27 | `FCMOVcc` lift; 로고 시퀀스 완료, 스테이지 로드 중 게스트 메모리 부족 / `FCMOVcc` lifted; the logo sequence completes, guest memory runs out while loading the stage |
 | #29 | 게스트 주소 공간 128 MiB와 slab; 스테이지 로드 통과, 3D 어트랙트 데모 / a 128 MiB guest address space and slabs; past the stage load, the 3D attract demo |
 | #37 | 정점 셰이더 프로그램과 컴바이너 픽셀 셰이더; 오프닝에 캐릭터가 그려짐 / vertex-shader programs and combiner pixel shaders; the opening draws the characters |
+| #40 | 그리기 경로의 GL 상태·버퍼 캐시; 데모가 초당 8~10에서 21~39프레임으로 / GL state and buffer caches in the draw path; the demo goes from 8–10 to 21–39 frames per second |
 
 ### issue #29 frontier 상세 / issue #29 frontier details
 

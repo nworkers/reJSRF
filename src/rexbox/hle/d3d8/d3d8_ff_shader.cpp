@@ -160,6 +160,29 @@ std::string FixedFunctionKey::Serialize() const
     return text;
 }
 
+uint64_t FixedFunctionKey::Hash() const
+{
+    uint64_t hash = 1469598103934665603ull;
+    hash = HashMix(hash, (pretransformed ? 1u : 0u) | (has_diffuse ? 2u : 0u) | (has_specular ? 4u : 0u) |
+                             (specular_enable ? 8u : 0u) | (static_cast<uint64_t>(tex_coords) << 8));
+    for (const uint8_t components : tex_components)
+    {
+        hash = HashMix(hash, components);
+    }
+    hash = HashMix(hash, alpha_func);
+    for (const Stage& stage : stages)
+    {
+        hash = HashMix(hash, stage.color_op);
+        hash = HashMix(hash, (static_cast<uint64_t>(stage.color_arg[0]) << 32) | stage.color_arg[1]);
+        hash = HashMix(hash, (static_cast<uint64_t>(stage.color_arg[2]) << 32) | stage.alpha_op);
+        hash = HashMix(hash, (static_cast<uint64_t>(stage.alpha_arg[0]) << 32) | stage.alpha_arg[1]);
+        hash = HashMix(hash, (static_cast<uint64_t>(stage.alpha_arg[2]) << 32) | stage.result_arg);
+        hash = HashMix(hash, stage.tex_coord_index | (static_cast<uint64_t>(stage.sampler) << 8) |
+                                 (stage.unnormalized ? 1ull << 16 : 0));
+    }
+    return hash;
+}
+
 std::string GenerateFixedFunctionVertexShader(const FixedFunctionKey& key, bool gles)
 {
     std::string text = Header(gles);

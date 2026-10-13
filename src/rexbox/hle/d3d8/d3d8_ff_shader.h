@@ -92,15 +92,26 @@ struct FixedFunctionKey
         // Linear (unswizzled) textures are sampled with texel coordinates on
         // the NV2A (inferred); the shader scales them by u_tex_scale<stage>.
         bool unnormalized = false;
+
+        bool operator==(const Stage&) const = default;
     };
     Stage stages[kFixedFunctionStages];
 
     bool specular_enable = false;
     uint32_t alpha_func = 0;  // 0: alpha test off; else the comparison (0x200 NEVER .. 0x207 ALWAYS)
 
-    // A string that is equal for equal keys (the program cache key).
+    // A readable string that is equal for equal keys (logs and dumps).
     std::string Serialize() const;
+    // The program caches compare keys field by field and bucket by Hash.
+    bool operator==(const FixedFunctionKey&) const = default;
+    uint64_t Hash() const;
 };
+
+// One step of the 64-bit hash the program keys use.
+inline uint64_t HashMix(uint64_t hash, uint64_t value)
+{
+    return (hash ^ value) * 1099511628211ull;
+}
 
 // Attribute locations the programs use.
 namespace attr

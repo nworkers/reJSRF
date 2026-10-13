@@ -1,19 +1,24 @@
-// Drawing entry points on GL: the vertices and indices are read from guest
-// memory on every draw, the fixed-function state comes from the library's
-// globals, and the result goes to the bound render target
+// Drawing entry points on GL: the vertices and indices come from guest
+// memory (kept in GL buffers while they stay the same, d3d8_gl_buffers.h),
+// the fixed-function state comes from the library's globals, and the result
+// goes to the bound render target
 // (docs/design/20261012-i023-d3d8-fixed-function-draw.md section 3).
 // Vertex-shader programs are translated to GLSL (d3d8_vsh.h) and paired with
-// the fixed-function fragment stage. Register-combiner pixel shaders and the
-// immediate-mode Begin/End path are reported once and not drawn yet.
+// the fixed-function fragment stage or a register-combiner pixel shader
+// (d3d8_psh.h). GL state is sent only when it differs from what the previous
+// draw set (docs/design/20261013-i040-draw-performance.md). The immediate-mode
+// Begin/End path is reported once and not drawn yet.
 
 #include "d3d8_ff_shader.h"
 #include "d3d8_fvf.h"
 #include "d3d8_gl.h"
+#include "d3d8_gl_buffers.h"
 #include "d3d8_gl_programs.h"
 #include "d3d8_gl_targets.h"
 #include "d3d8_gl_textures.h"
 #include "d3d8_globals.h"
 #include "d3d8_internal.h"
+#include "d3d8_profile.h"
 #include "d3d8_render_state.h"
 #include "d3d8_resource.h"
 #include "d3d8_psh.h"
@@ -54,6 +59,15 @@ struct VertexSource
 {
     GuestAddress base = 0;  // address of vertex 0
     uint32_t stride = 0;
+    bool from_buffer = false;  // a vertex buffer (cached) rather than UP data (streamed)
+};
+
+// Where a draw's indices come from.
+struct IndexSource
+{
+    GuestAddress address = 0;  // 16-bit guest indices; 0: vertices base .. base + count - 1
+    uint32_t base = 0;         // added to each index
+    bool cacheable = false;    // index data the title keeps (DrawIndexedVertices)
 };
 
 float FloatBits(uint32_t bits)
@@ -195,92 +209,215 @@ FixedFunctionKey BuildKey(const VertexLayout& layout, BoundTexture textures[kFix
     return key;
 }
 
-// Fixed per-fragment state from the render-state globals (design section 3.6).
-void ApplyFixedState(GuestAddress depth_target)
+// Fixed per-fragment state from the render-state globals (design section
+// 3.6), with the viewport and depth range.
+struct FixedState
 {
-    GlFunctions& gl = Gl();
-    gl.Disable(kGlScissorTest);
+    bool depth_test = false;
+    uint32_t depth_func = 0;
+    bool depth_write = false;
+    bool blend = false;
+    uint32_t src_blend = 0;
+    uint32_t dest_blend = 0;
+    uint32_t blend_op = 0;
+    uint32_t blend_color = 0;
+    bool cull = false;
+    uint32_t front_face = 0;
+    uint32_t cull_face = 0;
+    bool stencil = false;
+    uint32_t stencil_func = 0;
+    uint32_t stencil_ref = 0;
+    uint32_t stencil_mask = 0;
+    uint32_t stencil_fail = 0;
+    uint32_t stencil_zfail = 0;
+    uint32_t stencil_pass = 0;
+    uint32_t stencil_write_mask = 0;
+    uint32_t color_write = 0;
+    bool polygon_offset = false;
+    uint32_t offset_slope = 0;  // float bits
+    uint32_t offset_units = 0;
+    uint32_t fill = 0;
+    int32_t viewport[4] = {};
+    float depth_range[2] = {};
+};
 
-    const bool depth = depth_target != 0 && RenderStateValue(rs::kZEnable) != 0;
-    if (depth)
-    {
-        gl.Enable(kGlDepthTest);
-        gl.DepthFunc(RenderStateValue(rs::kZFunc));
-    }
-    else
-    {
-        gl.Disable(kGlDepthTest);
-    }
-    gl.DepthMask(depth && RenderStateValue(rs::kZWriteEnable) != 0 ? 1 : 0);
+FixedState g_applied_state;
+uint32_t g_applied_epoch = 0;
 
-    if (RenderStateValue(rs::kAlphaBlendEnable) != 0)
+FixedState CurrentFixedState(GuestAddress depth_target, bool pretransformed, uint32_t width, uint32_t height)
+{
+    FixedState s;
+    s.depth_test = depth_target != 0 && RenderStateValue(rs::kZEnable) != 0;
+    if (s.depth_test)
     {
-        gl.Enable(kGlBlend);
-        gl.BlendFunc(RenderStateValue(rs::kSrcBlend), RenderStateValue(rs::kDestBlend));
-        gl.BlendEquation(RenderStateValue(rs::kBlendOp));
-        float color[4];
-        ColorToFloats(RenderStateValue(rs::kBlendColor), color);
-        gl.BlendColor(color[0], color[1], color[2], color[3]);
+        s.depth_func = RenderStateValue(rs::kZFunc);
     }
-    else
+    s.depth_write = s.depth_test && RenderStateValue(rs::kZWriteEnable) != 0;
+    s.blend = RenderStateValue(rs::kAlphaBlendEnable) != 0;
+    if (s.blend)
     {
-        gl.Disable(kGlBlend);
+        s.src_blend = RenderStateValue(rs::kSrcBlend);
+        s.dest_blend = RenderStateValue(rs::kDestBlend);
+        s.blend_op = RenderStateValue(rs::kBlendOp);
+        s.blend_color = RenderStateValue(rs::kBlendColor);
     }
-
     const uint32_t cull = RenderStateValue(rs::kCullMode);
-    if (cull == kCullNone)
-    {
-        gl.Disable(kGlCullFace);
-    }
-    else
+    s.cull = cull != kCullNone;
+    if (s.cull)
     {
         const uint32_t front = RenderStateValue(rs::kFrontFace);
-        gl.Enable(kGlCullFace);
-        gl.FrontFace(front == kGlCcw ? kGlCcw : kGlCw);
-        gl.CullFace(cull == front ? kGlFront : kGlBack);
+        s.front_face = front == kGlCcw ? kGlCcw : kGlCw;
+        s.cull_face = cull == front ? kGlFront : kGlBack;
     }
-
-    if (depth_target != 0 && RenderStateValue(rs::kStencilEnable) != 0)
+    s.stencil = depth_target != 0 && RenderStateValue(rs::kStencilEnable) != 0;
+    if (s.stencil)
     {
-        gl.Enable(kGlStencilTest);
-        gl.StencilFunc(RenderStateValue(rs::kStencilFunc), static_cast<GLint>(RenderStateValue(rs::kStencilRef)),
-                       RenderStateValue(rs::kStencilMask));
-        gl.StencilOp(RenderStateValue(rs::kStencilFail), RenderStateValue(rs::kStencilZFail),
-                     RenderStateValue(rs::kStencilPass));
-        gl.StencilMask(RenderStateValue(rs::kStencilWriteMask));
+        s.stencil_func = RenderStateValue(rs::kStencilFunc);
+        s.stencil_ref = RenderStateValue(rs::kStencilRef);
+        s.stencil_mask = RenderStateValue(rs::kStencilMask);
+        s.stencil_fail = RenderStateValue(rs::kStencilFail);
+        s.stencil_zfail = RenderStateValue(rs::kStencilZFail);
+        s.stencil_pass = RenderStateValue(rs::kStencilPass);
+        s.stencil_write_mask = RenderStateValue(rs::kStencilWriteMask);
+    }
+    s.color_write = RenderStateValue(rs::kColorWriteEnable);
+    s.polygon_offset = RenderStateValue(rs::kSolidOffsetEnable) != 0;
+    if (s.polygon_offset)
+    {
+        s.offset_slope = RenderStateValue(rs::kPolygonOffsetZSlopeScale);
+        s.offset_units = RenderStateValue(rs::kPolygonOffsetZOffset);
+    }
+    const uint32_t fill = RenderStateValue(rs::kFillMode);
+    s.fill = fill == kGlPoint || fill == kGlLine ? fill : kGlFill;
+    if (pretransformed)
+    {
+        // Screen-space vertices are not mapped by the viewport.
+        s.viewport[2] = static_cast<int32_t>(width);
+        s.viewport[3] = static_cast<int32_t>(height);
+        s.depth_range[1] = 1.0f;
     }
     else
     {
-        gl.Disable(kGlStencilTest);
+        const Viewport& vp = State().viewport;
+        s.viewport[0] = static_cast<int32_t>(vp.x);
+        s.viewport[1] = static_cast<int32_t>(height) - static_cast<int32_t>(vp.y + vp.height);
+        s.viewport[2] = static_cast<int32_t>(vp.width);
+        s.viewport[3] = static_cast<int32_t>(vp.height);
+        s.depth_range[0] = vp.min_z;
+        s.depth_range[1] = vp.max_z;
     }
+    return s;
+}
 
-    // D3DCOLORWRITEENABLE: one byte per channel, A R G B from the top (inferred).
-    const uint32_t write = RenderStateValue(rs::kColorWriteEnable);
-    gl.ColorMask((write >> 16) & 0xFF ? 1 : 0, (write >> 8) & 0xFF ? 1 : 0, write & 0xFF ? 1 : 0,
-                 (write >> 24) & 0xFF ? 1 : 0);
-
-    if (RenderStateValue(rs::kSolidOffsetEnable) != 0)
+void SetCapability(GLenum capability, bool enabled)
+{
+    if (enabled)
     {
-        gl.Enable(kGlPolygonOffsetFill);
-        gl.PolygonOffset(FloatBits(RenderStateValue(rs::kPolygonOffsetZSlopeScale)),
-                         FloatBits(RenderStateValue(rs::kPolygonOffsetZOffset)));
+        Gl().Enable(capability);
     }
     else
     {
-        gl.Disable(kGlPolygonOffsetFill);
-    }
-
-    if (gl.PolygonMode != nullptr)
-    {
-        const uint32_t fill = RenderStateValue(rs::kFillMode);
-        gl.PolygonMode(kGlFrontAndBack, fill == kGlPoint || fill == kGlLine ? fill : kGlFill);
+        Gl().Disable(capability);
     }
 }
 
-void SetVertexAttributes(const VertexLayout& layout, uint32_t stride)
+// Sends the parts of `s` that differ from what the previous draw set (all of
+// it after the GL state cache was invalidated).
+void ApplyFixedState(const FixedState& s)
 {
     GlFunctions& gl = Gl();
-    const auto attribute = [&gl, stride](uint32_t index, int offset, GLint size, GLenum type, bool normalized) {
+    const bool known = g_applied_epoch == GlStateEpoch();
+    const FixedState& last = g_applied_state;
+    if (!known)
+    {
+        gl.Disable(kGlScissorTest);
+    }
+    if (!known || s.depth_test != last.depth_test)
+    {
+        SetCapability(kGlDepthTest, s.depth_test);
+    }
+    if (s.depth_test && (!known || s.depth_func != last.depth_func || !last.depth_test))
+    {
+        gl.DepthFunc(s.depth_func);
+    }
+    if (!known || s.depth_write != last.depth_write)
+    {
+        gl.DepthMask(s.depth_write ? 1 : 0);
+    }
+    if (!known || s.blend != last.blend)
+    {
+        SetCapability(kGlBlend, s.blend);
+    }
+    if (s.blend && (!known || !last.blend || s.src_blend != last.src_blend || s.dest_blend != last.dest_blend ||
+                    s.blend_op != last.blend_op || s.blend_color != last.blend_color))
+    {
+        gl.BlendFunc(s.src_blend, s.dest_blend);
+        gl.BlendEquation(s.blend_op);
+        float color[4];
+        ColorToFloats(s.blend_color, color);
+        gl.BlendColor(color[0], color[1], color[2], color[3]);
+    }
+    if (!known || s.cull != last.cull)
+    {
+        SetCapability(kGlCullFace, s.cull);
+    }
+    if (s.cull && (!known || !last.cull || s.front_face != last.front_face || s.cull_face != last.cull_face))
+    {
+        gl.FrontFace(s.front_face);
+        gl.CullFace(s.cull_face);
+    }
+    if (!known || s.stencil != last.stencil)
+    {
+        SetCapability(kGlStencilTest, s.stencil);
+    }
+    if (s.stencil &&
+        (!known || !last.stencil || s.stencil_func != last.stencil_func || s.stencil_ref != last.stencil_ref ||
+         s.stencil_mask != last.stencil_mask || s.stencil_fail != last.stencil_fail ||
+         s.stencil_zfail != last.stencil_zfail || s.stencil_pass != last.stencil_pass ||
+         s.stencil_write_mask != last.stencil_write_mask))
+    {
+        gl.StencilFunc(s.stencil_func, static_cast<GLint>(s.stencil_ref), s.stencil_mask);
+        gl.StencilOp(s.stencil_fail, s.stencil_zfail, s.stencil_pass);
+        gl.StencilMask(s.stencil_write_mask);
+    }
+    if (!known || s.color_write != last.color_write)
+    {
+        // D3DCOLORWRITEENABLE: one byte per channel, A R G B from the top (inferred).
+        const uint32_t write = s.color_write;
+        gl.ColorMask((write >> 16) & 0xFF ? 1 : 0, (write >> 8) & 0xFF ? 1 : 0, write & 0xFF ? 1 : 0,
+                     (write >> 24) & 0xFF ? 1 : 0);
+    }
+    if (!known || s.polygon_offset != last.polygon_offset)
+    {
+        SetCapability(kGlPolygonOffsetFill, s.polygon_offset);
+    }
+    if (s.polygon_offset && (!known || !last.polygon_offset || s.offset_slope != last.offset_slope ||
+                             s.offset_units != last.offset_units))
+    {
+        gl.PolygonOffset(FloatBits(s.offset_slope), FloatBits(s.offset_units));
+    }
+    if (gl.PolygonMode != nullptr && (!known || s.fill != last.fill))
+    {
+        gl.PolygonMode(kGlFrontAndBack, s.fill);
+    }
+    if (!known || std::memcmp(s.viewport, last.viewport, sizeof(s.viewport)) != 0)
+    {
+        gl.Viewport(s.viewport[0], s.viewport[1], s.viewport[2], s.viewport[3]);
+    }
+    if (!known || std::memcmp(s.depth_range, last.depth_range, sizeof(s.depth_range)) != 0)
+    {
+        GlDepthRange(s.depth_range[0], s.depth_range[1]);
+    }
+    g_applied_state = s;
+    g_applied_epoch = GlStateEpoch();
+}
+
+// `base` is the vertex data's offset in the streaming vertex buffer.
+void SetVertexAttributes(const VertexLayout& layout, uint32_t stride, size_t base)
+{
+    GlFunctions& gl = Gl();
+    const auto attribute = [&gl, stride, base](uint32_t index, int offset, GLint size, GLenum type,
+                                               bool normalized) {
         if (offset == kAbsent)
         {
             gl.DisableVertexAttribArray(index);
@@ -288,7 +425,7 @@ void SetVertexAttributes(const VertexLayout& layout, uint32_t stride)
         }
         gl.EnableVertexAttribArray(index);
         gl.VertexAttribPointer(index, size, type, normalized ? 1 : 0, static_cast<GLsizei>(stride),
-                               reinterpret_cast<const void*>(static_cast<uintptr_t>(offset)));
+                               reinterpret_cast<const void*>(base + static_cast<uintptr_t>(offset)));
     };
     attribute(attr::kPosition, 0, static_cast<GLint>(layout.position_components), kGlFloat, false);
     attribute(attr::kDiffuse, layout.diffuse, 4, kGlUnsignedByte, true);
@@ -303,7 +440,7 @@ void SetVertexAttributes(const VertexLayout& layout, uint32_t stride)
 // Vertex attributes v0..v15 of a vertex-shader program from its declaration
 // (stream 0, `stride` bytes per vertex). Registers the program reads but the
 // declaration leaves out keep GL's default (0, 0, 0, 1).
-void SetProgramAttributes(const vsh::Declaration& declaration, uint32_t stride, uint32_t used_inputs)
+void SetProgramAttributes(const vsh::Declaration& declaration, uint32_t stride, uint32_t used_inputs, size_t base)
 {
     GlFunctions& gl = Gl();
     uint32_t enabled = 0;
@@ -334,7 +471,7 @@ void SetProgramAttributes(const vsh::Declaration& declaration, uint32_t stride, 
         }
         gl.EnableVertexAttribArray(element.reg);
         gl.VertexAttribPointer(element.reg, element.components, type, normalized ? 1 : 0, static_cast<GLsizei>(stride),
-                               reinterpret_cast<const void*>(static_cast<uintptr_t>(element.offset)));
+                               reinterpret_cast<const void*>(base + static_cast<uintptr_t>(element.offset)));
         enabled |= 1u << element.reg;
     }
     for (uint32_t reg = 0; reg < vsh::kInputs; ++reg)
@@ -346,10 +483,11 @@ void SetProgramAttributes(const vsh::Declaration& declaration, uint32_t stride, 
     }
 }
 
-// One draw: `indices` are vertex numbers relative to `source.base` (implicit
-// 0..count-1 when empty).
-void Draw(const char* name, uint32_t primitive, uint32_t count, std::vector<uint32_t> indices, VertexSource source)
+// One draw of `count` vertices or indices; vertex numbers are relative to
+// `source.base`.
+void Draw(const char* name, uint32_t primitive, uint32_t count, IndexSource indices, VertexSource source)
 {
+    profile::Lap lap;
     const D3dState& state = State();
     if (!state.display_created || count == 0)
     {
@@ -410,44 +548,11 @@ void Draw(const char* name, uint32_t primitive, uint32_t count, std::vector<uint
         ReportOnce(Format("primitive %u", primitive), Format("%s: primitive type %u is not understood", name, primitive));
         return;
     }
-    TraceOnce(Format("draw fvf %08X prim %u", pipeline.vertex_shader, primitive),
-              Format("%s: FVF %08X (stride %u), primitive %u", name, pipeline.vertex_shader, layout.stride, primitive));
-
-    if (indices.empty())
+    if (D3d8TraceEnabled())
     {
-        indices.resize(count);
-        for (uint32_t i = 0; i < count; ++i)
-        {
-            indices[i] = i;
-        }
-    }
-    if (primitive == prim::kQuadList)
-    {
-        std::vector<uint32_t> triangles;
-        triangles.reserve(indices.size() / 4 * 6);
-        for (size_t q = 0; q + 3 < indices.size(); q += 4)
-        {
-            triangles.insert(triangles.end(),
-                             {indices[q], indices[q + 1], indices[q + 2], indices[q], indices[q + 2], indices[q + 3]});
-        }
-        indices.swap(triangles);
-    }
-    if (indices.empty())
-    {
-        return;
-    }
-    const auto [low, high] = std::minmax_element(indices.begin(), indices.end());
-    const uint32_t first = *low;
-    const uint32_t vertex_count = *high - first + 1;
-    const uint32_t stride = source.stride != 0 ? source.stride : layout.stride;
-    const GuestAddress begin = (source.base + first * stride) & kPhysicalMask;
-    const uint32_t bytes = vertex_count * stride;
-    runtime::GuestMemory& memory = Memory();
-    if (!memory.IsValid(begin, bytes))
-    {
-        ReportOnce(Format("vertices %08X", begin),
-                   Format("%s: vertices %08X+%X are outside guest memory", name, begin, bytes));
-        return;
+        TraceOnce(Format("draw fvf %08X prim %u", pipeline.vertex_shader, primitive),
+                  Format("%s: FVF %08X (stride %u), primitive %u", name, pipeline.vertex_shader, layout.stride,
+                         primitive));
     }
 
     GlFunctions& gl = Gl();
@@ -503,47 +608,73 @@ void Draw(const char* name, uint32_t primitive, uint32_t count, std::vector<uint
         }
     }
 
+    lap.Mark(profile::Phase::kSetup);
     BindRenderTarget(state.render_target, state.depth_target);
-    BindStreamingBuffers();
-    UploadVertexData(memory.Translate(begin), bytes);
+    lap.Mark(profile::Phase::kTarget);
+    BindDrawVertexArray();
+    DrawIndices index_data;
+    const bool arrays = indices.address == 0 && primitive != prim::kQuadList;
+    if (indices.address != 0)
+    {
+        if (!PrepareGuestIndices(indices.address, count, indices.base, primitive == prim::kQuadList,
+                                 indices.cacheable, &index_data))
+        {
+            return;
+        }
+    }
+    else if (!arrays)
+    {
+        // A quad list without indices: two triangles per quad.
+        std::vector<uint32_t> triangles;
+        triangles.reserve(count / 4 * 6);
+        for (uint32_t q = indices.base; q + 3 < indices.base + count; q += 4)
+        {
+            triangles.insert(triangles.end(), {q, q + 1, q + 2, q, q + 2, q + 3});
+        }
+        if (!PrepareHostIndices(triangles, &index_data))
+        {
+            return;
+        }
+    }
+    else
+    {
+        index_data.first = indices.base;
+        index_data.vertex_count = count;
+        index_data.count = count;
+    }
+    lap.Mark(profile::Phase::kIndices);
+    const uint32_t stride = source.stride != 0 ? source.stride : layout.stride;
+    const GuestAddress begin = (source.base + index_data.first * stride) & kPhysicalMask;
+    const uint32_t bytes = index_data.vertex_count * stride;
+    if (!Memory().IsValid(begin, bytes))
+    {
+        ReportOnce(Format("vertices %08X", begin),
+                   Format("%s: vertices %08X+%X are outside guest memory", name, begin, bytes));
+        return;
+    }
+    const size_t vertex_offset = PrepareVertexData(begin, bytes, source.from_buffer);
+    lap.Mark(profile::Phase::kUpload);
     if (is_program)
     {
-        SetProgramAttributes(shader->declaration, stride, vertex_program->used_inputs);
+        SetProgramAttributes(shader->declaration, stride, vertex_program->used_inputs, vertex_offset);
     }
     else
     {
-        SetVertexAttributes(layout, stride);
+        SetVertexAttributes(layout, stride, vertex_offset);
     }
-    std::vector<uint16_t> short_indices;
-    std::vector<uint32_t> long_indices;
-    const bool use_short = vertex_count <= 0x10000;
-    if (use_short)
-    {
-        short_indices.reserve(indices.size());
-        for (const uint32_t index : indices)
-        {
-            short_indices.push_back(static_cast<uint16_t>(index - first));
-        }
-        UploadIndexData(short_indices.data(), short_indices.size() * 2);
-    }
-    else
-    {
-        for (const uint32_t index : indices)
-        {
-            long_indices.push_back(index - first);
-        }
-        UploadIndexData(long_indices.data(), long_indices.size() * 4);
-    }
+    lap.Mark(profile::Phase::kAttributes);
 
     const uint32_t width = RenderTargetWidth();
     const uint32_t height = RenderTargetHeight();
     const int* tex_scale = nullptr;
     int tfactor_location = -1;
     int alpha_ref_location = -1;
+    UniformCache* uniforms = nullptr;
     if (is_program)
     {
-        gl.UseProgram(vertex_program->program);
-        gl.Uniform4fv(vertex_program->constants, static_cast<GLsizei>(vsh::kConstants), VertexShaderConstants());
+        UseProgram(vertex_program->program);
+        uniforms = &vertex_program->uniforms;
+        uniforms->SetArray4(vertex_program->constants, VertexShaderConstants());
         if (pixel_shader != nullptr)
         {
             float c0[psh::kStages][4];
@@ -551,13 +682,13 @@ void Draw(const char* name, uint32_t primitive, uint32_t count, std::vector<uint
             float final_c0[4];
             float final_c1[4];
             psh::StageConstants(*pixel_shader, PixelShaderConstants(), c0, c1, final_c0, final_c1);
-            gl.Uniform4fv(vertex_program->stage_c0, static_cast<GLsizei>(psh::kStages), &c0[0][0]);
-            gl.Uniform4fv(vertex_program->stage_c1, static_cast<GLsizei>(psh::kStages), &c1[0][0]);
-            gl.Uniform4fv(vertex_program->final_c0, 1, final_c0);
-            gl.Uniform4fv(vertex_program->final_c1, 1, final_c1);
+            uniforms->Set4fv(vertex_program->stage_c0, static_cast<int>(psh::kStages), &c0[0][0]);
+            uniforms->Set4fv(vertex_program->stage_c1, static_cast<int>(psh::kStages), &c1[0][0]);
+            uniforms->Set4fv(vertex_program->final_c0, 1, final_c0);
+            uniforms->Set4fv(vertex_program->final_c1, 1, final_c1);
             float fog[4];
             ColorToFloats(RenderStateValue(rs::kFogColor), fog);
-            gl.Uniform4fv(vertex_program->fog_color, 1, fog);
+            uniforms->Set4fv(vertex_program->fog_color, 1, fog);
         }
         tex_scale = vertex_program->tex_scale;
         tfactor_location = vertex_program->tfactor;
@@ -565,21 +696,23 @@ void Draw(const char* name, uint32_t primitive, uint32_t count, std::vector<uint
     }
     else
     {
-        gl.UseProgram(program->program);
-        gl.Uniform4f(program->target, static_cast<float>(width), static_cast<float>(height),
-                     pipeline.screen_space_offset_x, pipeline.screen_space_offset_y);
+        UseProgram(program->program);
+        uniforms = &program->uniforms;
+        uniforms->Set4f(program->target, static_cast<float>(width), static_cast<float>(height),
+                        pipeline.screen_space_offset_x, pipeline.screen_space_offset_y);
         const std::array<float, 16> transform =
             Multiply(Multiply(pipeline.transforms[ts::kWorld], pipeline.transforms[ts::kView]),
                      pipeline.transforms[ts::kProjection]);
-        gl.UniformMatrix4fv(program->transform, 1, 0, transform.data());
+        uniforms->SetMatrix4(program->transform, transform.data());
         tex_scale = program->tex_scale;
         tfactor_location = program->tfactor;
         alpha_ref_location = program->alpha_ref;
     }
     float tfactor[4];
     ColorToFloats(RenderStateValue(rs::kTextureFactor), tfactor);
-    gl.Uniform4f(tfactor_location, tfactor[0], tfactor[1], tfactor[2], tfactor[3]);
-    gl.Uniform1f(alpha_ref_location, static_cast<float>(RenderStateValue(rs::kAlphaRef) & 0xFF));
+    uniforms->Set4fv(tfactor_location, 1, tfactor);
+    uniforms->Set1f(alpha_ref_location, static_cast<float>(RenderStateValue(rs::kAlphaRef) & 0xFF));
+    lap.Mark(profile::Phase::kConstants);
     for (uint32_t s = 0; s < kFixedFunctionStages; ++s)
     {
         if (!sampled[s])
@@ -589,44 +722,26 @@ void Draw(const char* name, uint32_t primitive, uint32_t count, std::vector<uint
         BindStageTexture(s, textures[s]);
         if (tex_scale[s] >= 0)
         {
-            gl.Uniform2f(tex_scale[s], 1.0f / static_cast<float>(std::max(textures[s].width, 1u)),
-                         1.0f / static_cast<float>(std::max(textures[s].height, 1u)));
+            uniforms->Set2f(tex_scale[s], 1.0f / static_cast<float>(std::max(textures[s].width, 1u)),
+                            1.0f / static_cast<float>(std::max(textures[s].height, 1u)));
         }
     }
 
-    ApplyFixedState(state.depth_target);
-    if (layout.pretransformed)
+    lap.Mark(profile::Phase::kTextures);
+    ApplyFixedState(CurrentFixedState(state.depth_target, layout.pretransformed, width, height));
+    lap.Mark(profile::Phase::kState);
+    if (arrays)
     {
-        // Screen-space vertices are not mapped by the viewport.
-        gl.Viewport(0, 0, static_cast<GLsizei>(width), static_cast<GLsizei>(height));
-        GlDepthRange(0.0f, 1.0f);
+        gl.DrawArrays(mode, 0, static_cast<GLsizei>(count));
     }
     else
     {
-        const Viewport& vp = state.viewport;
-        gl.Viewport(static_cast<GLint>(vp.x), static_cast<GLint>(height) - static_cast<GLint>(vp.y + vp.height),
-                    static_cast<GLsizei>(vp.width), static_cast<GLsizei>(vp.height));
-        GlDepthRange(vp.min_z, vp.max_z);
+        gl.DrawElements(mode, static_cast<GLsizei>(index_data.count),
+                        index_data.use_short ? kGlUnsignedShort : kGlUnsignedInt,
+                        reinterpret_cast<const void*>(index_data.offset));
     }
-    gl.DrawElements(mode, static_cast<GLsizei>(indices.size()), use_short ? kGlUnsignedShort : kGlUnsignedInt,
-                    nullptr);
-}
-
-std::vector<uint32_t> ReadIndices(GuestAddress address, uint32_t count, uint32_t base)
-{
-    std::vector<uint32_t> indices;
-    runtime::GuestMemory& memory = Memory();
-    address &= kPhysicalMask;
-    if (!memory.IsValid(address, count * 2))
-    {
-        return indices;
-    }
-    indices.reserve(count);
-    for (uint32_t i = 0; i < count; ++i)
-    {
-        indices.push_back(memory.Read16(address + i * 2) + base);
-    }
-    return indices;
+    lap.Mark(profile::Phase::kDraw);
+    profile::CountDraw(is_program);
 }
 
 VertexSource StreamZero()
@@ -635,6 +750,7 @@ VertexSource StreamZero()
     const GuestAddress buffer = StreamVertexBuffer(0);
     source.base = buffer != 0 ? Memory().Read32(buffer + header::kData) : 0;
     source.stride = StreamStride(0);
+    source.from_buffer = buffer != 0;
     return source;
 }
 
@@ -642,14 +758,9 @@ VertexSource StreamZero()
 void D3DDevice_DrawVertices()
 {
     HleCall call;
-    const uint32_t start = call.Arg(1);
-    const uint32_t count = call.Arg(2);
-    std::vector<uint32_t> indices(count);
-    for (uint32_t i = 0; i < count; ++i)
-    {
-        indices[i] = start + i;
-    }
-    Draw("DrawVertices", call.Arg(0), count, std::move(indices), StreamZero());
+    IndexSource indices;
+    indices.base = call.Arg(1);
+    Draw("DrawVertices", call.Arg(0), call.Arg(2), indices, StreamZero());
     call.Return(kD3dOk, 3);
 }
 
@@ -658,12 +769,11 @@ void D3DDevice_DrawVertices()
 void D3DDevice_DrawIndexedVertices()
 {
     HleCall call;
-    const uint32_t count = call.Arg(1);
-    std::vector<uint32_t> indices = ReadIndices(call.Arg(2), count, Pipeline().base_vertex_index);
-    if (indices.size() == count)
-    {
-        Draw("DrawIndexedVertices", call.Arg(0), count, std::move(indices), StreamZero());
-    }
+    IndexSource indices;
+    indices.address = call.Arg(2);
+    indices.base = Pipeline().base_vertex_index;
+    indices.cacheable = true;
+    Draw("DrawIndexedVertices", call.Arg(0), call.Arg(1), indices, StreamZero());
     call.Return(kD3dOk, 3);
 }
 
@@ -675,7 +785,7 @@ void D3DDevice_DrawVerticesUP()
     VertexSource source;
     source.base = call.Arg(2);
     source.stride = call.Arg(3);
-    Draw("DrawVerticesUP", call.Arg(0), call.Arg(1), {}, source);
+    Draw("DrawVerticesUP", call.Arg(0), call.Arg(1), IndexSource{}, source);
     call.Return(kD3dOk, 4);
 }
 
@@ -684,15 +794,12 @@ void D3DDevice_DrawVerticesUP()
 void D3DDevice_DrawIndexedVerticesUP()
 {
     HleCall call;
-    const uint32_t count = call.Arg(1);
-    std::vector<uint32_t> indices = ReadIndices(call.Arg(2), count, 0);
+    IndexSource indices;
+    indices.address = call.Arg(2);
     VertexSource source;
     source.base = call.Arg(3);
     source.stride = call.Arg(4);
-    if (indices.size() == count)
-    {
-        Draw("DrawIndexedVerticesUP", call.Arg(0), count, std::move(indices), source);
-    }
+    Draw("DrawIndexedVerticesUP", call.Arg(0), call.Arg(1), indices, source);
     call.Return(kD3dOk, 5);
 }
 
