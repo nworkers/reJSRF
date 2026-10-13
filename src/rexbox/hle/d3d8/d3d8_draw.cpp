@@ -684,7 +684,7 @@ void Draw(const char* name, uint32_t primitive, uint32_t count, IndexSource indi
     {
         UseProgram(vertex_program->program);
         uniforms = &vertex_program->uniforms;
-        uniforms->SetArray4(vertex_program->constants, VertexShaderConstants());
+        uniforms->SetArray4(vertex_program->constants, VertexShaderConstants(), VertexShaderConstantsVersion());
         if (pixel_shader != nullptr)
         {
             float c0[psh::kStages][4];

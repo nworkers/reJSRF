@@ -18,6 +18,11 @@ namespace
 // Cached ranges unused for this many presents are dropped.
 constexpr uint32_t kIdleFrames = 600;
 
+// Ranges this large ask the guest memory's write version before comparing:
+// one query costs about as much as comparing 6 KiB
+// (docs/design/20261014-i046-hle-performance.md section 3.2).
+constexpr size_t kTrackedBytes = 8 * 1024;
+
 GLuint g_vertex_array = 0;
 uint32_t g_vertex_array_epoch = 0;
 
@@ -96,6 +101,7 @@ struct CachedRange
     GLuint buffer = 0;
     std::vector<uint8_t> copy;  // the guest bytes at the last upload
     uint32_t last_used = 0;     // frame
+    uint64_t write_version = 0; // guest write version when `copy` last matched
     DrawIndices indices;          // index ranges: the prepared result
 };
 
@@ -122,20 +128,35 @@ std::unordered_map<uint64_t, CachedRange> g_vertex_ranges;
 std::unordered_map<IndexKey, CachedRange, IndexKeyHash> g_index_ranges;
 uint32_t g_last_sweep = 0;
 
-// True when `range` holds `bytes` of `data` (and marks it used); otherwise
-// remembers `data` and the caller uploads it.
-bool Unchanged(CachedRange* range, const uint8_t* data, size_t bytes)
+// True when `range` holds the `bytes` at guest `address` (and marks it
+// used); otherwise remembers them and the caller uploads them. A large range
+// whose pages have not been written since it last matched is not compared.
+bool Unchanged(CachedRange* range, GuestAddress address, size_t bytes)
 {
+    runtime::GuestMemory& memory = Memory();
+    const uint8_t* data = memory.Translate(address);
     range->last_used = State().frame_count;
+    const bool tracked = bytes >= kTrackedBytes && memory.TracksWrites();
+    const uint64_t version = tracked ? memory.WriteVersion(address, bytes) : 0;
     if (range->buffer == 0)
     {
         Gl().GenBuffers(1, &range->buffer);
     }
-    else if (range->copy.size() == bytes && std::memcmp(range->copy.data(), data, bytes) == 0)
+    else if (range->copy.size() == bytes)
     {
-        return true;
+        if (tracked && version == range->write_version)
+        {
+            return true;
+        }
+        profile::CountCompare(bytes);
+        if (std::memcmp(range->copy.data(), data, bytes) == 0)
+        {
+            range->write_version = version;
+            return true;
+        }
     }
     range->copy.assign(data, data + bytes);
+    range->write_version = version;
     return false;
 }
 
@@ -220,7 +241,7 @@ size_t PrepareVertexData(uint32_t address, size_t bytes, bool cacheable)
         return g_vertex_stream.Append(data, bytes);
     }
     CachedRange& range = g_vertex_ranges[(static_cast<uint64_t>(address) << 32) | static_cast<uint32_t>(bytes)];
-    const bool unchanged = Unchanged(&range, data, bytes);
+    const bool unchanged = Unchanged(&range, address, bytes);
     g_array_binding.Bind(range.buffer);
     if (!unchanged)
     {
@@ -245,7 +266,7 @@ bool PrepareGuestIndices(uint32_t address, uint32_t count, uint32_t base, bool q
     if (cacheable)
     {
         range = &g_index_ranges[IndexKey{address, count, base, quads}];
-        if (Unchanged(range, data, count * 2))
+        if (Unchanged(range, address, count * 2))
         {
             if (range->indices.count == 0)
             {

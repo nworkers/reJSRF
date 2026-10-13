@@ -47,6 +47,7 @@
 * **추정**: 남은 비용의 큰 몫은 xboxrecomp의 코드 생성 방식이다(레지스터를 메모리에 두기, 메모리 기준 재로드).
 * **확인됨**(i044): 가장 뜨거운 명령은 XMM 도우미가 만든 스택 임시를 부분 저장 뒤 16바이트로 읽는 `movaps`/`movups`였다(store-to-load forwarding 실패).
   * 도우미를 SSE2 intrinsic으로 바꾸자 present 스레드 CPU 시간이 약 12% 줄었다.
+  * 그 intrinsic은 이제 선택 사항이다(CMake `REXBOX_RECOMP_XMM_SSE2`, 기본 `OFF`). 기본 빌드의 측정에는 이 이득이 들어 있지 않다([설계 i044 §3.4](../design/20261013-i044-recomp-codegen.md)).
   * 메모리 기준을 함수마다 한 번 읽는 것만으로는 차이가 없었다.
   * 그 뒤 lift 코드 샘플: guest 메모리 35%, TLS 레지스터 칸 21~25%, SSE 메모리 14%([설계 i044](../design/20261013-i044-recomp-codegen.md) §4).
 
@@ -79,6 +80,9 @@
    * 게스트 레지스터를 지역 변수로 두기: 상한은 leaf 함수만이면 전체 CPU 약 2%, 전부면 약 7%다.
    * 간접 호출 지점별 캐시: 약 1%.
 2. **D3D8 변경 감지**: 정점 범위 `memcmp`(1.3 ms)와 텍스처 표본 해시를 게스트 메모리의 쓰기 감시로 바꾼다(Windows `MEM_WRITE_WATCH`/`GetWriteWatch`). 그러면 바뀐 페이지가 있는 범위만 비교하면 된다.
+   * **확인됨**(i046, Ryzen 5 5600X): 조회는 범위당 약 0.7 µs라 `memcmp` 약 6 KiB와 같다. 그래서 8 KiB 이상 정점·인덱스 범위에만 쓴다.
+   * 비교량이 프레임당 4.3 MB에서 1.4 MB로, present 스레드 CPU가 11% 줄었다.
+   * 텍스처 표본 해시는 조회보다 싸서 그대로 둔다([설계 i046](../design/20261014-i046-hle-performance.md)).
 3. **GL 호출 수**: 정점 상수를 uniform buffer 하나로 보내고, 상태 묶음을 줄여 드라이버 시간(2.6 ms)을 줄인다.
 
 ---
@@ -124,6 +128,7 @@ Environment: Win32 x86 Release, Intel Core i5-7200U (2 cores, 4 threads), Intel 
 * **Inferred**: a large share of the remaining cost comes from how xboxrecomp generates code (registers kept in memory, reloads of the memory base).
 * **Confirmed** (i044): the hottest instructions were `movaps`/`movups` reading stack temporaries the XMM helpers had just written in parts, a failed store-to-load forward.
   * SSE2 intrinsics for the helpers cut the presenting thread's CPU time by about 12%.
+  * Those intrinsics are now opt-in (CMake `REXBOX_RECOMP_XMM_SSE2`, default `OFF`); measurements of the default build do not include that gain ([design i044 §3.4](../design/20261013-i044-recomp-codegen.md)).
   * Reading the memory base once per function alone made no difference.
   * Afterwards lifted-code samples are 35% guest memory, 21–25% TLS register slots and 14% SSE memory ([design i044](../design/20261013-i044-recomp-codegen.md) §4).
 
@@ -156,4 +161,7 @@ Variant executables were run alternately, three times each, close together in ti
    * guest registers in locals: at most about 2% of total CPU for leaf functions only, about 7% for everything
    * per-site indirect-call caches: about 1%
 2. **D3D8 change detection**: replace the vertex-range `memcmp` (1.3 ms) and the texture sample hash with write watching on guest memory (Windows `MEM_WRITE_WATCH`/`GetWriteWatch`), so only ranges with written pages are compared.
+   * **Confirmed** (i046, Ryzen 5 5600X): a query costs about 0.7 µs per range, as much as a `memcmp` of about 6 KiB, so only vertex and index ranges of 8 KiB or more use it.
+   * The bytes compared per frame fell from 4.3 MB to 1.4 MB, and presenting-thread CPU by 11%.
+   * The texture sample hash costs less than a query and stays ([design i046](../design/20261014-i046-hle-performance.md)).
 3. **Number of GL calls**: send vertex constants as one uniform buffer and reduce state groups, to cut driver time (2.6 ms).

@@ -40,6 +40,8 @@ void Add(Phase phase, std::chrono::steady_clock::duration elapsed);
 void CountDraw(bool program);
 // Bytes sent to GL buffers.
 void CountUpload(size_t vertex_bytes, size_t index_bytes);
+// Guest bytes compared with a cached copy to find out whether they changed.
+void CountCompare(size_t bytes);
 // Called once per present with the present's number; prints a report every
 // n presents and starts or stops sampling.
 void EndFrame(uint32_t frame);

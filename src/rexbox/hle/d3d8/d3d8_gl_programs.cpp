@@ -212,10 +212,15 @@ void UniformCache::SetMatrix4(int location, const float* values)
     }
 }
 
-void UniformCache::SetArray4(const std::vector<int>& locations, const float* values)
+void UniformCache::SetArray4(const std::vector<int>& locations, const float* values, uint64_t version)
 {
     const size_t count = locations.size();
     const bool fresh = array_.size() != count * 4;
+    if (!fresh && version == array_version_)
+    {
+        return;
+    }
+    array_version_ = version;
     if (fresh)
     {
         array_.assign(values, values + count * 4);

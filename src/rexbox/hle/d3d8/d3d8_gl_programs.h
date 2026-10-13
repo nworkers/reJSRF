@@ -26,8 +26,9 @@ public:
     void Set4fv(int location, int count, const float* values);
     void SetMatrix4(int location, const float* values);
     // A vec4 array whose element i is at locations[i] (-1 where the compiler
-    // dropped it); only runs of changed elements are sent.
-    void SetArray4(const std::vector<int>& locations, const float* values);
+    // dropped it); only runs of changed elements are sent. `version` changes
+    // whenever `values` may have; an unchanged version skips the comparison.
+    void SetArray4(const std::vector<int>& locations, const float* values, uint64_t version);
 
 private:
     struct Entry
@@ -40,6 +41,7 @@ private:
 
     std::vector<Entry> entries_;
     std::vector<float> array_;
+    uint64_t array_version_ = 0;
 };
 
 struct FixedFunctionProgram

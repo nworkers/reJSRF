@@ -28,6 +28,13 @@ add_library(rexbox_recomp STATIC
 )
 target_include_directories(rexbox_recomp PRIVATE "${REJSRF_XBOXRECOMP_DIR}/templates/runtime")
 target_link_libraries(rexbox_recomp PUBLIC rexbox_runtime)
+# The fork's SSE2 intrinsics for the XMM helpers are opt-in: by default every
+# target that includes recomp_types.h gets the plain C helpers (the upstream
+# design), so performance work stays on the HLE side until they are needed.
+option(REXBOX_RECOMP_XMM_SSE2 "Build the recompiled code's XMM helpers with SSE2 intrinsics" OFF)
+if(NOT REXBOX_RECOMP_XMM_SSE2)
+    target_compile_definitions(rexbox_recomp PUBLIC RECOMP_XMM_PORTABLE)
+endif()
 
 # HLE modules. Each links the runtime only, never another module, so any one
 # can be replaced (or reused by another title) on its own.

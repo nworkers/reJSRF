@@ -29,6 +29,8 @@ const ProgramShader* FindProgramShader(uint32_t handle);
 
 // c[0..191] as 192 x 4 floats (D3D register r is c[r + 96]).
 const float* VertexShaderConstants();
+// Changes whenever any vertex shader constant is written.
+uint64_t VertexShaderConstantsVersion();
 
 // The D3DPIXELSHADERDEF behind a CreatePixelShader handle, or nullptr.
 const psh::Definition* FindPixelShader(uint32_t handle);

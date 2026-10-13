@@ -59,6 +59,16 @@
 * **TLS 레지스터를 지역 변수로 두기**: 호출 지점(약 3만 7천 곳)과 반환마다 되쓰고 다시 읽어야 한다. 효과 상한은 §4의 측정으로 정했다.
 * **간접 호출의 지점별 캐시**: `recomp_lookup`의 평면 테이블(약 7 MB) 캐시 미스. lift 코드의 약 2%다.
 
+### 3.4 SSE2 intrinsic은 선택 사항 (후속, 2026-10-13)
+
+* **사용자 결정(2026-10-13)**: §3.1의 SSE2 intrinsic은 기본으로 끄고 필요할 때만 켠다. 당분간 성능 작업은 HLE 쪽에 집중한다.
+* fork 헤더는 바꾸지 않는다. reJSRF 빌드가 `RECOMP_XMM_PORTABLE`을 정의해 칸 단위 C(upstream 설계)를 고른다.
+  * CMake 옵션 `REXBOX_RECOMP_XMM_SSE2`(기본 `OFF`)를 `rexbox_recomp`에 둔다. `rexbox_recomp`를 대상으로 두는 옵션이라 이름이 타이틀이 아닌 `REXBOX_`로 시작한다.
+  * `OFF`이면 `rexbox_recomp`가 `RECOMP_XMM_PORTABLE`를 PUBLIC으로 정의한다. 그래서 `recomp_types.h`를 포함하는 모든 타깃(`rexbox_recomp`, `rejsrf_recomp`, `rejsrf_game`)이 같은 경로를 쓴다.
+  * `ON`(`cmake -DREXBOX_RECOMP_XMM_SSE2=ON`)이면 v0.0.18과 같다.
+* 헤더 내용이 그대로이므로 ABI 해시 검사(`src/game/jsrf/CMakeLists.txt`)와 생성 코드에는 영향이 없다. 옵션을 바꿔도 재생성할 필요 없이 다시 빌드만 하면 된다.
+* 대가: §4의 XMM intrinsic 이득(present 스레드 CPU 약 -12%)을 기본 빌드에서 잃는다. `perf/mem-base-local`은 그대로 둔다.
+
 ## 4. 측정
 
 | 구간(그리기 수) | v0.0.17 | + 메모리 기준 | + XMM intrinsic |
@@ -147,6 +157,16 @@ Prerequisites: [i042 frame-time analysis](20261013-i042-frame-time-analysis.md),
 
 * **Guest registers in locals**: they would have to be written back and reloaded around about 37,000 call sites and every return. §4 measured how much it could gain at most.
 * **Per-site caches for indirect calls**: cache misses in `recomp_lookup`'s flat table (about 7 MB), about 2% of lifted code.
+
+### 3.4 SSE2 intrinsics are opt-in (follow-up, 2026-10-13)
+
+* **User decision (2026-10-13)**: the SSE2 intrinsics of §3.1 are off by default and turned on only when needed. For now, performance work concentrates on the HLE.
+* The fork's header is unchanged. The reJSRF build defines `RECOMP_XMM_PORTABLE`, which selects the lane-wise C (the upstream design).
+  * The CMake option `REXBOX_RECOMP_XMM_SSE2` (default `OFF`) sits on `rexbox_recomp`. It targets `rexbox_recomp`, so its name starts with `REXBOX_`, not with a title.
+  * When it is `OFF`, `rexbox_recomp` defines `RECOMP_XMM_PORTABLE` as PUBLIC, so every target that includes `recomp_types.h` (`rexbox_recomp`, `rejsrf_recomp`, `rejsrf_game`) takes the same path.
+  * `ON` (`cmake -DREXBOX_RECOMP_XMM_SSE2=ON`) is the same as v0.0.18.
+* The header's content does not change, so neither the ABI hash check (`src/game/jsrf/CMakeLists.txt`) nor the generated code is affected. Changing the option needs a rebuild, not a regeneration.
+* The cost: the default build gives up the XMM intrinsics' gain of §4 (about -12% presenting-thread CPU). `perf/mem-base-local` stays.
 
 ## 4. Measurement
 

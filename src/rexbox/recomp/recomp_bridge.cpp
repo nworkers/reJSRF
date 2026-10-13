@@ -42,9 +42,21 @@ thread_local const RexboxHleSlot* t_stop_slot = nullptr;
 std::mutex g_log_mutex;
 std::unordered_set<uint32_t> g_logged_sites;
 
+// Sites this thread already asked about, direct mapped: a site met again and
+// again (an untranslated instruction in a loop) returns without the lock.
+// Slot value 0 is empty; site 0 always takes the locked path.
+constexpr size_t kSeenSiteSlots = 64;
+thread_local uint32_t t_seen_sites[kSeenSiteSlots] = {};
+
 // Logs each distinct site once; repeats would bury the first occurrence.
 bool FirstTimeAt(uint32_t site)
 {
+    uint32_t& slot = t_seen_sites[(site ^ (site >> 6)) % kSeenSiteSlots];
+    if (site != 0 && slot == site)
+    {
+        return false;
+    }
+    slot = site;
     std::lock_guard<std::mutex> lock(g_log_mutex);
     return g_logged_sites.insert(site).second;
 }
