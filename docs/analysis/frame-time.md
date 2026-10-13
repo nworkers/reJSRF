@@ -47,6 +47,7 @@
 * **추정**: 남은 비용의 큰 몫은 xboxrecomp의 코드 생성 방식이다(레지스터를 메모리에 두기, 메모리 기준 재로드).
 * **확인됨**(i044): 가장 뜨거운 명령은 XMM 도우미가 만든 스택 임시를 부분 저장 뒤 16바이트로 읽는 `movaps`/`movups`였다(store-to-load forwarding 실패).
   * 도우미를 SSE2 intrinsic으로 바꾸자 present 스레드 CPU 시간이 약 12% 줄었다.
+  * 그 intrinsic은 이제 선택 사항이다(CMake `REXBOX_RECOMP_XMM_SSE2`, 기본 `OFF`). 기본 빌드의 측정에는 이 이득이 들어 있지 않다([설계 i044 §3.4](../design/20261013-i044-recomp-codegen.md)).
   * 메모리 기준을 함수마다 한 번 읽는 것만으로는 차이가 없었다.
   * 그 뒤 lift 코드 샘플: guest 메모리 35%, TLS 레지스터 칸 21~25%, SSE 메모리 14%([설계 i044](../design/20261013-i044-recomp-codegen.md) §4).
 
@@ -124,6 +125,7 @@ Environment: Win32 x86 Release, Intel Core i5-7200U (2 cores, 4 threads), Intel 
 * **Inferred**: a large share of the remaining cost comes from how xboxrecomp generates code (registers kept in memory, reloads of the memory base).
 * **Confirmed** (i044): the hottest instructions were `movaps`/`movups` reading stack temporaries the XMM helpers had just written in parts, a failed store-to-load forward.
   * SSE2 intrinsics for the helpers cut the presenting thread's CPU time by about 12%.
+  * Those intrinsics are now opt-in (CMake `REXBOX_RECOMP_XMM_SSE2`, default `OFF`); measurements of the default build do not include that gain ([design i044 §3.4](../design/20261013-i044-recomp-codegen.md)).
   * Reading the memory base once per function alone made no difference.
   * Afterwards lifted-code samples are 35% guest memory, 21–25% TLS register slots and 14% SSE memory ([design i044](../design/20261013-i044-recomp-codegen.md) §4).
 
