@@ -87,6 +87,12 @@ fork 브랜치를 push한 뒤 검토를 거쳐 올린다.
 
 **PR 1** — `nworkers:fix/late-tail-jumps` → `sp00nznet:main` (PR #200 위에 쌓임; #200이 먼저 머지되어야 함)
 
+> **후속(머지 뒤, 사용자 결정)**: 따로 올리지 않고 [PR #200](https://github.com/sp00nznet/xboxrecomp/pull/200)에 합쳤다.
+> * `58f7166`은 PR 브랜치 `fix/cond-branch-into-body`의 fast-forward라서 그대로 push했다(`65648d4..58f7166`). push 전 테스트: 519 통과·38 건너뜀.
+> * PR 제목을 `disasm: re-examine branches of bodies made after the tail-jump pass`로 바꿨다. 본문은 두 pass(다른 본문 안으로 가는 분기, 빈 구간으로 가는 tail jump)와 JSRF의 화면 전환 결과를 담게 고쳤다.
+> * fork의 `fix/late-tail-jumps` 브랜치는 지웠다.
+> * 아래 초안은 기록으로 둔다.
+
 * 제목: `disasm: recover tail-jump targets of bodies made after the tail-jump pass`
 * 본문:
   > `_pass_tail_jump_targets` only sees the bodies pass 5 built. Functions made later by `_pass_gap_prologues`, and alias bodies, can tail-jump into a gap, and nothing looks at those jumps: `_pass_branches_into_bodies` takes only targets inside another body, and `_pass_alias_branch_orphans` needs a short probe to reach a `ret`, which a long function never does. The target became an unresolved-target stub that pops only a return address, so the whole function never ran.
@@ -197,6 +203,14 @@ Checking whether the XBE → C lift was complete showed that the 83 unresolved s
 * After the `0x352D0` seed: one more dispatch entry (9,203); demo frames identical in two of three runs (one run jittered); regression tools pass.
 * Win32 Debug and Release builds succeed with zero warnings.
 * Regression tools in both configurations: kernel 56/56, D3D8 116/116, DSOUND 48/48, d3d8 check 14,018/0, decomp check 6/0.
+
+## Follow-up after the merge
+
+* By the user's decision, `58f7166` went into [PR #200](https://github.com/sp00nznet/xboxrecomp/pull/200) instead of a separate pull request.
+  * It is a fast-forward of the PR branch `fix/cond-branch-into-body` and was pushed as is (`65648d4..58f7166`), after 519 tests passed with 38 skipped.
+  * The PR title became `disasm: re-examine branches of bodies made after the tail-jump pass`, and its description now covers both passes (branches into another body, tail jumps into a gap) and the JSRF transition result.
+  * The fork branch `fix/late-tail-jumps` was deleted.
+* `feat/stub-report` stays held; its draft (PR 2) is in the Korean section.
 
 ## Remaining
 

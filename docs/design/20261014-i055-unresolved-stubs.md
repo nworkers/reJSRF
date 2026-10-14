@@ -65,7 +65,8 @@ flowchart LR
 ### 3.4 upstream
 
 * 3.1과 3.2는 upstream main 기반의 fork 브랜치로 만들고 `rejsrf`에 합친다.
-* upstream PR은 **준비만 하고 올리지 않는다**(사용자 결정, 검토 뒤 올림). PR 제목과 본문 초안은 작업 로그에 둔다.
+* upstream PR은 **준비만 하고 올리지 않는다**(사용자 결정, 검토 뒤 올림).
+* 후속(사용자 결정): 3.1은 같은 주제(최종 본문에서 분기를 다시 봄)인 열린 upstream [PR #200](https://github.com/sp00nznet/xboxrecomp/pull/200)에 합쳤다. 3.2는 계속 보류한다. PR 제목과 본문 초안은 작업 로그에 둔다.
 
 ## 4. 검증
 
@@ -139,6 +140,7 @@ The diagram above applies: pass 5 bodies feed pass 6; gap-prologue and alias bod
 ### 3.4 Upstream
 
 * 3.1 and 3.2 are fork branches based on upstream main, merged into `rejsrf`.
+* Follow-up (the user's decision): 3.1 was added to the open upstream [PR #200](https://github.com/sp00nznet/xboxrecomp/pull/200), which has the same subject (re-examining branches on the final bodies); 3.2 stays held.
 * The upstream pull request is **prepared but not opened** (the user's decision, to be opened after review). Its title and description are drafted in the work log.
 
 ## 4. Verification
