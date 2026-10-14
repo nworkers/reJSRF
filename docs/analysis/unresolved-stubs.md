@@ -34,7 +34,8 @@
   * 진짜 함수다(`push ebx; push esi; mov esi, ecx`, thiscall). 바로 앞에 인라인 바이트 표가 있고, 그 표와 함수가 alias `sub_000348A0`의 범위(끝 `0x35560`) 안에 묻혀서 디스패치 항목이 없었다.
   * 표의 나머지 33칸과 상태 표 `0x1F9888`의 119칸은 모두 디스패치에 있다.
 * **고침**: `seed_functions.json`에 `observed` seed로 넣었다(issue #19의 `0x7BE30`과 같은 모양). 다시 생성하면 디스패치 항목이 하나 늘고(9,203 함수), 다른 출력은 같다.
-* 이 호출은 i055 평소 빌드에서도 건너뛰어졌다. 화면 전환 시험 빌드 셋 모두에서 같았으므로 화면 전환과는 관계없다.
+* **확인됨**(사용자 플레이): seed를 넣은 빌드로 New Game부터 같은 장면까지 정상으로 진행됐고, `[recomp]` 보고(스텁, 간접 호출 누락)는 0건이었다.
+* 이 호출은 seed 전의 i055 빌드에서도 건너뛰어졌다. 화면 전환 시험 빌드 셋 모두에서 같았으므로 화면 전환과는 관계없다.
 * **미확정**:
   * 이 함수가 빠져서 생기던 증상
   * 디스어셈블러가 alias 범위 안의 표 항목을 놓친 원인(데이터 포인터 pass의 조건)
@@ -98,7 +99,8 @@ An **unresolved stub** is an address that lifted code calls or jumps to but the 
   * It is a real function (`push ebx; push esi; mov esi, ecx`, thiscall). An inline byte table sits right before it, and both lay inside the range of the alias `sub_000348A0` (ending at `0x35560`), so it had no dispatch entry.
   * The other 33 entries of that table and the 119 of the state table `0x1F9888` are all in the dispatch table.
 * **Fixed**: an `observed` seed in `seed_functions.json`, the same shape as issue #19's `0x7BE30`. Regenerating adds one dispatch entry (9,203 functions) and changes nothing else.
-* The call was skipped in the i055 build too, and in all three transition test builds alike, so it is unrelated to the transition.
+* **Confirmed** (user play): with the seed, New Game through the same scene played normally, with no `[recomp]` reports (stubs or missed indirect calls).
+* The call was skipped in the i055 build before the seed too, and in all three transition test builds alike, so it is unrelated to the transition.
 * **Unresolved**:
   * what symptom its absence caused
   * why the disassembler missed a table entry inside an alias range (the conditions of the data-pointer pass)

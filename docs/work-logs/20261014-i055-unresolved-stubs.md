@@ -64,6 +64,7 @@
     * 표 `0x1EC288`의 10번 칸인 진짜 함수가 alias 범위 안에 묻혀 디스패치 항목이 없었다. i055 평소 빌드에서도 같다.
     * `observed` seed로 넣고 다시 생성했다. 디스패치 항목이 하나 늘었고(9,203), 스텁은 76개 그대로다.
     * 데모 프레임은 세 번 실행 중 첫 번째에서 3,000·4,800이 달랐다. 빌드 직후라 기계가 바빴던 탓으로 본다. 나머지 두 번은 6장 모두 기준과 같았다.
+13. **seed 뒤 플레이**(사용자): New Game부터 같은 장면까지 정상이었고, `[recomp]` 보고는 0건이었다.
 
 ## 검증
 
@@ -76,6 +77,7 @@
 | Win32 Debug / Release 빌드 | 성공, 경고 0 |
 | 게임 진행(사용자) | New Game 뒤 첫 대화 다음 화면 전환이 고쳐짐 |
 | 원인 시험(사용자) | `0xA5B60`만 스텁: 해결 안 됨(증상 달라짐), 7개 모두 스텁: 원래 증상 |
+| seed 뒤 플레이(사용자) | 같은 장면 정상, `[recomp]` 보고 0건 |
 | `0x352D0` seed 뒤 | 디스패치 +1(9,203), 데모 프레임 6장 같음(3회 중 2회, 1회는 흔들림), 회귀 도구 통과 |
 | 회귀 도구(Debug, Release) | kernel 56/56, d3d8 116/116, dsound 48/48, d3d8 check 14,018/0, decomp check 6/0 |
 
@@ -181,6 +183,7 @@ Checking whether the XBE → C lift was complete showed that the 83 unresolved s
     * A real function, entry 10 of the table `0x1EC288`, lay inside an alias range and had no dispatch entry; the i055 build is the same.
     * It was added as an `observed` seed and the code regenerated: one more dispatch entry (9,203), still 76 stubs.
     * In the first of three runs, demo frames 3,000 and 4,800 differed, taken to be the machine being busy right after a build; the other two runs matched the baseline in all six.
+13. **Play after the seed** (user): New Game through the same scene was normal, with no `[recomp]` reports.
 
 ## Verification
 
@@ -190,6 +193,7 @@ Checking whether the XBE → C lift was complete showed that the 83 unresolved s
 * Six frame dumps: byte-identical to before.
 * Play (user): the screen transition after the first dialogue following New Game is fixed.
 * Cause test (user): with only `0xA5B60` as a stub, not resolved (the symptom changed); with all seven, the original symptom.
+* Play after the seed (user): the same scene normal, no `[recomp]` reports.
 * After the `0x352D0` seed: one more dispatch entry (9,203); demo frames identical in two of three runs (one run jittered); regression tools pass.
 * Win32 Debug and Release builds succeed with zero warnings.
 * Regression tools in both configurations: kernel 56/56, D3D8 116/116, DSOUND 48/48, d3d8 check 14,018/0, decomp check 6/0.
