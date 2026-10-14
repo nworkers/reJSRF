@@ -40,7 +40,29 @@
   * 이 함수가 빠져서 생기던 증상
   * 디스어셈블러가 alias 범위 안의 표 항목을 놓친 원인(데이터 포인터 pass의 조건)
 
+## 2b. 늦은 본문의 조건 분기 (i058)
+
+* **확인됨**(정적): 위치가 애매했던 세 곳을 확인했다.
+  * `0x22F30`은 `sub_00022E50` 안의 루프 머리다. 원래 함수는 `goto`로 처리하고, 스텁은 아무도 부르지 않는 alias `sub_00022F7F`에서만 불린다. 영향이 없다.
+  * `0x1783FE`는 stdcall 메서드 `sub_001783D0`(`ret 0xc`)의 경로로, `jmp [ecx+0x20]`으로 넘긴다. 스텁이면 esp가 12바이트 어긋났을 것이다.
+  * `0x1296C7`은 가상 메서드 `0x129180`의 공통 마무리(`add esp, 0xc04; ret`)다. switch case 4에서 `je`로 닿는다. 스텁이면 프레임이 풀리지 않았을 것이다.
+* **원인**:
+  * 빈 구간으로 가는 `jcc`를 보는 `_pass_cond_branch_orphans`가 pass 6 안에서 돌아, 그 뒤에 생긴 본문을 보지 못했다.
+  * alias 쪽 pass는 간접 `jmp`로 끝나는 블록을 거절했다.
+* **고침**(xboxrecomp, [PR #200](https://github.com/sp00nznet/xboxrecomp/pull/200)에 덧붙임):
+  * 늦은 pass가 `jcc`도 받는다. 받기 조건은 `_pass_cond_branch_orphans`와 같고, 간접 `jmp`로 끝나는 블록을 더했다.
+  * 두 주소는 seed로도 넣었다(사용자 결정).
+  * 스텁은 76개에서 74개, 함수는 9,213개가 됐다.
+* **lifter 공백(같은 작업에서 드러남)**:
+  * 복구된 switch case 함수 안의 중첩 switch는 case 진입점을 얻지 못했다.
+  * 예: `0x129180` → case `0x1297EC` → 표 `0x12A5BC`의 8칸
+  * 이웃 빈 구간의 본문이 진입점을 우연히 대신 만들어 주던 동안에만 동작했다. `jcc` 수정으로 그 구간이 한 alias가 되자 디스패치 항목 12개가 사라졌다.
+  * `discover_jump_table_entries`가 새로 만든 case를 다시 검사하게 했다. 또 복구된 본문에는 "case가 모두 범위 안이면 건너뜀"을 적용하지 않는다.
+  * 디스패치는 늘기만 한다(9,203 → 9,213, seed 포함).
+
 ## 3. 남은 76개의 분류 (정적)
+
+(i058 뒤에는 74개다. `0x1783FE`, `0x1296C7`이 빠졌다.)
 
 **확인됨**(i055, 정적 분류): 분류는 대상 주소의 위치 기준이다. "호출 수"는 그 스텁을 부르는 lift 코드의 위치 수다.
 
@@ -105,7 +127,29 @@ An **unresolved stub** is an address that lifted code calls or jumps to but the 
   * what symptom its absence caused
   * why the disassembler missed a table entry inside an alias range (the conditions of the data-pointer pass)
 
+## 2b. Conditional branches from late bodies (i058)
+
+* **Confirmed** (static): three unclear stubs were checked.
+  * `0x22F30` is a loop head inside `sub_00022E50`. The function handles it with a `goto`, and the stub is called only from the alias `sub_00022F7F`, which nothing calls. No effect.
+  * `0x1783FE` is a path of the stdcall method `sub_001783D0` (`ret 0xc`) that forwards through `jmp [ecx+0x20]`. As a stub, esp would come back 12 off.
+  * `0x1296C7` is the shared epilogue of the virtual method `0x129180` (`add esp, 0xc04; ret`), reached by `je` from switch case 4. As a stub, the frame would never be unwound.
+* **Cause**:
+  * `_pass_cond_branch_orphans`, which takes a `jcc` into a gap, runs inside pass 6 and never saw later bodies.
+  * The alias pass refused blocks ending in an indirect `jmp`.
+* **Fixed** (xboxrecomp, added to [PR #200](https://github.com/sp00nznet/xboxrecomp/pull/200)):
+  * The late pass takes a `jcc` too, with `_pass_cond_branch_orphans`'s acceptance test extended to blocks ending in an indirect `jmp`.
+  * Both addresses were also seeded (the user's decision).
+  * Stubs went from 76 to 74, and functions to 9,213.
+* **A lifter gap found on the way**:
+  * A nested switch inside a recovered switch arm got no arm entries.
+  * Example: `0x129180` → arm `0x1297EC` → the 8 arms of table `0x12A5BC`.
+  * It worked only while a neighbouring gap body happened to supply the entries. Once the `jcc` fix made that region one alias, 12 dispatch entries disappeared.
+  * `discover_jump_table_entries` now scans the arms it adds, and a recovered body no longer gets the "all arms in range" skip.
+  * The dispatch table only grows (9,203 → 9,213, with the seeds).
+
 ## 3. The remaining 76 (static)
+
+(74 after i058, with `0x1783FE` and `0x1296C7` gone.)
 
 **Confirmed** (i055, static classification), by where the target lies; "callers" counts the lifted call sites:
 

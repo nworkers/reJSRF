@@ -19,5 +19,7 @@
   {"start": "0x001BE689", "note": "XPP USB class-driver callback (table 0x001BC898); FPO after ret, missed by disasm (issue #12)"},
   {"start": "0x001C213A", "note": "XPP class-driver callback using the 0x002649A8 timer block (table 0x001BC97C); missed by disasm (issue #12)"},
   {"start": "0x0007BE30", "observed": true, "note": "vtable slot (.data 0x0020D2B8) called from 0x0007BDDB at run time; follows sub_0007BDD0's switch tables, which the sweep decoded as code, so the plain seed was rejected as mid-instruction (issue #19)"},
-  {"start": "0x000352D0", "observed": true, "note": "entry 10 of the function table 0x001EC288, called from 0x00025768 at run time (New Game play); follows an inline byte table inside the alias sub_000348A0, so it had no dispatch entry and the call was skipped (issue #55)"}
+  {"start": "0x000352D0", "observed": true, "note": "entry 10 of the function table 0x001EC288, called from 0x00025768 at run time (New Game play); follows an inline byte table inside the alias sub_000348A0, so it had no dispatch entry and the call was skipped (issue #55)"},
+  {"start": "0x001783FE", "note": "path of the stdcall method sub_001783D0 (ret 0xc) forwarding to [ecx+0x20], reached by je from that alias body; also recovered by the late conditional-branch pass (issue #58)"},
+  {"start": "0x001296C7", "note": "shared epilogue (add esp, 0xc04; ret) of the virtual method 0x00129180, reached by je from its switch arm 0x00129367; also recovered by the late conditional-branch pass (issue #58)"}
 ]
