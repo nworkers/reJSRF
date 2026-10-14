@@ -34,7 +34,9 @@ This records how far the recompiled US build gets when run from its entry point.
 | #29 | 게스트 주소 공간 128 MiB와 slab; 스테이지 로드 통과, 3D 어트랙트 데모 / a 128 MiB guest address space and slabs; past the stage load, the 3D attract demo |
 | #37 | 정점 셰이더 프로그램과 컴바이너 픽셀 셰이더; 오프닝에 캐릭터가 그려짐 / vertex-shader programs and combiner pixel shaders; the opening draws the characters |
 | #40 | 그리기 경로의 GL 상태·버퍼 캐시; 데모가 초당 8~10에서 21~39프레임으로 / GL state and buffer caches in the draw path; the demo goes from 8–10 to 21–39 frames per second |
-| #44 | xboxrecomp XMM 도우미의 SSE2 intrinsic; 데모 프레임 CPU 시간 약 12% 감소 / SSE2 intrinsics for xboxrecomp's XMM helpers; demo frame CPU time about 12% lower |
+| #44 | xboxrecomp XMM 도우미의 SSE2 intrinsic; 데모 프레임 CPU 시간 약 12% 감소(그 뒤 선택 사항, 기본 끔) / SSE2 intrinsics for xboxrecomp's XMM helpers; demo frame CPU time about 12% lower (later optional, off by default) |
+| #46 | D3D8 변경 감지에 게스트 메모리 쓰기 감시(8 KiB 이상 범위), 상수 버전, 보고·렌더 타깃 조회 정리; 데모 프레임 CPU 시간 약 11% 감소 / write watching on guest memory for D3D8 change detection (ranges of 8 KiB or more), constant versions, cheaper reports and render-target lookups; demo frame CPU time about 11% lower |
+| #48 | 게스트 MXCSR과 `stmxcsr`/`ldmxcsr` lift, `CVTSS2SI` 반올림; 매 프레임의 미번역 경고 사라짐 / guest MXCSR, `stmxcsr`/`ldmxcsr` lifted, `CVTSS2SI` rounding; the per-frame untranslated warning is gone |
 
 ### issue #29 frontier 상세 / issue #29 frontier details
 
