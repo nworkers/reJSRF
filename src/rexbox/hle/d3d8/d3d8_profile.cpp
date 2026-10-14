@@ -6,6 +6,7 @@
 #include "rexbox/platform/host_thread.h"
 #include "rexbox/platform/sampler.h"
 
+#include <algorithm>
 #include <array>
 #include <cstdio>
 #include <cstdlib>
@@ -37,9 +38,15 @@ uint64_t g_program_draws = 0;
 uint64_t g_vertex_bytes = 0;
 uint64_t g_index_bytes = 0;
 uint64_t g_compares = 0;
+uint32_t g_programs_built = 0;
+uint32_t g_programs_cached = 0;
+Clock::duration g_program_time{};
 uint64_t g_compare_bytes = 0;
 uint32_t g_frames = 0;
 Clock::time_point g_window_start;
+Clock::time_point g_last_present;  // the previous EndFrame
+Clock::duration g_worst_frame{};    // the longest present-to-present time in the window
+uint32_t g_slow_frames = 0;         // frames longer than two vertical blanks (33.4 ms)
 uint64_t g_window_cpu_ns = 0;
 bool g_started = false;
 
@@ -140,6 +147,16 @@ void CountUpload(size_t vertex_bytes, size_t index_bytes)
     g_index_bytes += index_bytes;
 }
 
+void CountProgram(bool cached, Clock::duration elapsed)
+{
+    if (!Enabled() || !t_presenting)
+    {
+        return;
+    }
+    ++(cached ? g_programs_cached : g_programs_built);
+    g_program_time += elapsed;
+}
+
 void CountCompare(size_t bytes)
 {
     if (!Enabled() || !t_presenting)
@@ -161,6 +178,14 @@ void EndFrame(uint32_t frame)
     }
     const Clock::time_point now = Clock::now();
     const uint64_t cpu_ns = platform::ThreadCpuTimeNanoseconds();
+    if (g_started)
+    {
+        // Stutter shows in single frames, which a window's average hides.
+        const Clock::duration since_last = now - g_last_present;
+        g_worst_frame = std::max(g_worst_frame, since_last);
+        g_slow_frames += since_last > std::chrono::microseconds(33400) ? 1 : 0;
+    }
+    g_last_present = now;
     if (!g_started)
     {
         g_started = true;
@@ -187,10 +212,11 @@ void EndFrame(uint32_t frame)
         return Milliseconds(g_phases[static_cast<size_t>(phase)]) / frames;
     };
     std::fprintf(stderr,
-                 "[d3d8 profile] %.1f fps, %.2f ms/frame, cpu %.2f: draws %.0f (%.0f program), uploads %.0f KiB vertices %.0f KiB indices, compared %.0f KiB in %.0f ranges | indices %.2f setup %.2f "
+                 "[d3d8 profile] %.1f fps, %.2f ms/frame, worst %.1f (%u over 33.4), cpu %.2f: draws %.0f (%.0f program), uploads %.0f KiB vertices %.0f KiB indices, compared %.0f KiB in %.0f ranges | indices %.2f setup %.2f "
                  "target %.2f upload %.2f attributes %.2f constants %.2f textures %.2f state %.2f draw %.2f present %.2f wait %.2f | "
                  "other %.2f\n",
-                 1000.0 / wall, wall, static_cast<double>(cpu_ns - g_window_cpu_ns) / 1e6 / frames,
+                 1000.0 / wall, wall, Milliseconds(g_worst_frame), g_slow_frames,
+                 static_cast<double>(cpu_ns - g_window_cpu_ns) / 1e6 / frames,
                  static_cast<double>(g_draws) / frames,
                  static_cast<double>(g_program_draws) / frames, static_cast<double>(g_vertex_bytes) / frames / 1024.0,
                  static_cast<double>(g_index_bytes) / frames / 1024.0, static_cast<double>(g_compare_bytes) / frames / 1024.0,
@@ -198,6 +224,14 @@ void EndFrame(uint32_t frame)
                  per_frame(Phase::kTarget), per_frame(Phase::kUpload), per_frame(Phase::kAttributes),
                  per_frame(Phase::kConstants), per_frame(Phase::kTextures), per_frame(Phase::kState),
                  per_frame(Phase::kDraw), per_frame(Phase::kPresent), per_frame(Phase::kWait), wall - measured);
+    if (g_programs_built + g_programs_cached != 0)
+    {
+        // Programs made in this window (not per frame): they come in bursts.
+        std::fprintf(stderr, "[d3d8 profile] programs: %u compiled, %u from the binary cache, %.1f ms in all\n",
+                     g_programs_built, g_programs_cached, Milliseconds(g_program_time));
+        g_programs_built = g_programs_cached = 0;
+        g_program_time = {};
+    }
     if (GlCallCountingEnabled())
     {
         // REXBOX_GL_CALLS=1: GL calls per frame, by entry point.
@@ -216,6 +250,8 @@ void EndFrame(uint32_t frame)
     }
     g_window_start = now;
     g_window_cpu_ns = cpu_ns;
+    g_worst_frame = {};
+    g_slow_frames = 0;
     g_phases = {};
     g_draws = g_program_draws = 0;
     g_vertex_bytes = g_index_bytes = 0;

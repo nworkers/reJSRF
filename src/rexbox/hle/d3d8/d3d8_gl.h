@@ -85,6 +85,9 @@ constexpr GLenum kGlVertexShader = 0x8B31;
 constexpr GLenum kGlCompileStatus = 0x8B81;
 constexpr GLenum kGlLinkStatus = 0x8B82;
 constexpr GLenum kGlInfoLogLength = 0x8B84;
+constexpr GLenum kGlProgramBinaryRetrievableHint = 0x8257;
+constexpr GLenum kGlProgramBinaryLength = 0x8741;
+constexpr GLenum kGlNumProgramBinaryFormats = 0x87FE;
 
 // Textures and samplers.
 constexpr GLenum kGlTexture2D = 0x0DE1;
@@ -179,6 +182,13 @@ struct GlFunctions
     void(REXBOX_GL_APIENTRY* GetProgramInfoLog)(GLuint program, GLsizei max_length, GLsizei* length,
                                                 GLchar* info_log) = nullptr;
     void(REXBOX_GL_APIENTRY* UseProgram)(GLuint program) = nullptr;
+    void(REXBOX_GL_APIENTRY* DeleteProgram)(GLuint program) = nullptr;
+    // Optional: program binaries (GL 4.1, ARB_get_program_binary, GLES 3.0).
+    void(REXBOX_GL_APIENTRY* GetProgramBinary)(GLuint program, GLsizei buffer_size, GLsizei* length,
+                                               GLenum* format, void* binary) = nullptr;
+    void(REXBOX_GL_APIENTRY* ProgramBinary)(GLuint program, GLenum format, const void* binary,
+                                            GLsizei length) = nullptr;
+    void(REXBOX_GL_APIENTRY* ProgramParameteri)(GLuint program, GLenum pname, GLint value) = nullptr;
     GLint(REXBOX_GL_APIENTRY* GetUniformLocation)(GLuint program, const GLchar* name) = nullptr;
     void(REXBOX_GL_APIENTRY* Uniform1i)(GLint location, GLint v0) = nullptr;
     void(REXBOX_GL_APIENTRY* Uniform1f)(GLint location, GLfloat v0) = nullptr;

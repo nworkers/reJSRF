@@ -22,6 +22,7 @@ third_party/refs/
 cfg/
 saves/
 hdd/
+cache/
 
 # Local run artifacts and logs.
 *.log

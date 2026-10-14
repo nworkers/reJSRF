@@ -90,6 +90,7 @@ add_library(rexbox_hle_d3d8 STATIC
     hle/d3d8/d3d8_gamma.cpp
     hle/d3d8/d3d8_gl.cpp
     hle/d3d8/d3d8_gl_buffers.cpp
+    hle/d3d8/d3d8_gl_program_cache.cpp
     hle/d3d8/d3d8_gl_programs.cpp
     hle/d3d8/d3d8_gl_targets.cpp
     hle/d3d8/d3d8_gl_textures.cpp
