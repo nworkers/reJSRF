@@ -49,6 +49,7 @@
    * 스텁 보고는 0건이었고, 프레임 6장은 기준과 바이트 단위로 같았다.
    * `0x54750`의 동작이 이 데모 화면에는 드러나지 않는다는 뜻이다.
    * 보고 경로가 링크된 것은 `rejsrf.map`의 `recomp_unresolved_stub_log`로 확인했다.
+   * 끝에서 끝까지: 시작할 때 스텁 `sub_220FC7E7`을 한 번 직접 부르게 임시로 고쳐(커밋하지 않음) 실행하자 `[recomp] unresolved stub 220FC7E7 called; ...`가 나왔다.
 9. **남은 76개 분류**([unresolved-stubs §3](../analysis/unresolved-stubs.md)):
    * 다른 본문 안 42, 명령 경계 아님 28, 섹션 밖 4, 기타 2
    * "다른 본문 안" 46쌍 중 35쌍은 alias 본문이 자기 시작 앞쪽으로 되돌아가는 분기다(**추정**: alias 구조의 한계).
@@ -152,6 +153,7 @@ Checking whether the XBE → C lift was complete showed that the 83 unresolved s
    * There were no stub reports, and the six frames were byte-identical to the baseline.
    * So what `0x54750` does does not show in this demo's frames.
    * That the reporting path is linked was checked through `recomp_unresolved_stub_log` in `rejsrf.map`.
+   * End to end: with a temporary change (not committed) calling the stub `sub_220FC7E7` once at startup, the run printed `[recomp] unresolved stub 220FC7E7 called; ...`.
 9. **The remaining 76** ([unresolved-stubs §3](../analysis/unresolved-stubs.md)):
    * 42 inside another body, 28 off an instruction boundary, 4 outside every section, 2 others
    * 35 of the 46 caller-target pairs inside another body are an alias body branching back before its own start (**inferred**: a limit of aliases)
