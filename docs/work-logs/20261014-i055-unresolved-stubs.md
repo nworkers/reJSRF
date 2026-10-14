@@ -52,7 +52,6 @@
 9. **남은 76개 분류**([unresolved-stubs §3](../analysis/unresolved-stubs.md)):
    * 다른 본문 안 42, 명령 경계 아님 28, 섹션 밖 4, 기타 2
    * "다른 본문 안" 46쌍 중 35쌍은 alias 본문이 자기 시작 앞쪽으로 되돌아가는 분기다(**추정**: alias 구조의 한계).
-
 10. **게임 진행 확인**(사용자): New Game 뒤 첫 대화가 끝난 다음의 화면 전환이 전에는 제대로 되지 않았는데, i055 빌드에서는 제대로 된다. 되찾은 7개 중 어느 함수 덕분인지는 따로 확인하지 않았다.
 
 ## 검증
@@ -79,7 +78,7 @@ fork 브랜치를 push한 뒤 검토를 거쳐 올린다.
   >
   > `_pass_late_tail_jumps` takes, on the final bodies and gap aliases, every unconditional `jmp` that leaves its body for a decoded instruction no body claims, and registers it as an alias entry (no candidate, so it cannot cut a body short). Same evidence as pass 6.
   >
-  > Jet Set Radio Future: 7 new functions, unresolved stubs 83 → 76. One of them (0x00054750, tail-jumped to from a state handler in a 119-entry table) runs every frame of the attract demo and was being skipped. Frames identical before/after in the demo.
+  > Jet Set Radio Future: 7 new functions, unresolved stubs 83 → 76. One of them (0x00054750, tail-jumped to from a state handler in a 119-entry table) runs every frame of the attract demo and was being skipped. Frames identical before/after in the demo; in play, the screen transition after the first dialogue of a new game, which used to fail, now works.
   >
   > Tests: `tools/disasm/test_late_tail_jumps.py` (4).
 
