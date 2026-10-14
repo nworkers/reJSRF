@@ -45,6 +45,24 @@
 | 망가진 항목(바이너리 일부 변조, 잘린 파일) | 다시 컴파일하고 항목을 다시 씀 |
 | Debug/Release, 회귀 도구 | 경고 0, 회귀 없음 |
 
+## 4. 후속: 저장 경로의 비용과 실패
+
+v0.0.22의 검증은 정상 저장(첫 실행 57개)과 망가진 항목의 재작성만 확인했다. 다음이 남아 있었다.
+
+* **비용**: 프로파일은 컴파일·링크 시간만 세고, 그 뒤의 `StoreProgram`(바이너리 받기, 파일 쓰기, 이름 바꾸기)은 세지 않았다. 캐시가 빈 첫 실행은 캐시를 끈 실행과 비교된 적이 없다. 링크 전에 켜는 `GL_PROGRAM_BINARY_RETRIEVABLE_HINT`가 링크를 느리게 하는지도 모른다.
+  * 프로파일이 저장 수와 시간을 따로 낸다(`stored N, X ms`). 컴파일 시간에는 섞지 않는다.
+  * 캐시를 끈 실행(힌트 없음, 저장 없음)과 캐시를 비운 첫 실행(힌트, 저장)을 번갈아 비교한다.
+* **실패**:
+  * 파일은 `close()` 뒤 스트림 상태까지 확인한 다음에만 이름을 바꾼다. 소멸자에서 버퍼를 비우다 실패하면 잘린 파일이 정식 항목이 되던 경로를 막는다.
+  * 쓰기나 이름 바꾸기가 실패하면 임시 파일을 지우고, 실패를 한 번 보고한다(`ReportOnce`). 쓸 수 없는 폴더에서 매번 말없이 컴파일만 하지 않게 한다.
+  * 저장 실패는 프로그램 사용에 영향을 주지 않는다. 그 실행은 그대로 진행한다.
+* **한계(추가)**: 옛 항목은 지우지 않는다. 셰이더 생성기를 바꾸면 소스 해시가 바뀌어 새 파일이 생기고 옛 파일은 남는다. 폴더를 지우면 다음 실행에서 다시 채워진다.
+
+| 검증 | 기대 |
+|---|---|
+| 캐시 끔 / 빈 캐시 첫 실행 번갈아 | 저장 시간과 컴파일 시간, 첫 구간의 가장 긴 프레임을 비교해 첫 실행의 추가 비용을 숫자로 남김 |
+| 읽기 전용 캐시 폴더 | 보고 한 번, `.tmp` 없음, 게임은 그대로 그림 |
+
 ---
 
 # Design: less stutter from compiling GL programs on first use (issue #51)
@@ -93,3 +111,21 @@ The table above applies:
 * Alternating runs with the cache off and on: lower worst frames in the first demo window and after.
 * Damaged entries (a binary with altered bytes, a truncated file): recompiled and rewritten.
 * Debug and Release with zero warnings; no regressions in the tools.
+
+## 4. Follow-up: cost and failures of the store path
+
+The v0.0.22 checks covered normal stores (57 on the first run) and the rewrite of damaged entries only. These were left open:
+
+* **Cost**: the profile counted compiling and linking only, not the `StoreProgram` that follows (getting the binary, writing the file, renaming). A first run with an empty cache was never compared with a run with the cache off, and whether `GL_PROGRAM_BINARY_RETRIEVABLE_HINT`, set before linking, slows linking is unknown.
+  * The profile reports stores and their time separately (`stored N, X ms`), kept out of the compile time.
+  * Runs with the cache off (no hint, no stores) alternate with first runs on an empty cache (hint, stores).
+* **Failures**:
+  * The file is renamed only after `close()` and a check of the stream state, closing the path where a flush failing in the destructor made a truncated file the entry.
+  * When writing or renaming fails, the temporary file is removed and the failure is reported once (`ReportOnce`), so an unwritable folder does not silently compile every run.
+  * A failed store does not affect the program, and the run goes on.
+* **Limits (added)**: old entries are not removed. Changing the shader generator changes the source hashes, so new files appear and old ones stay; deleting the folder refills it on the next run.
+
+Checks:
+
+* Cache off alternating with first runs on an empty cache: compare the store time, the compile time and the first window's longest frame, recording the first run's extra cost as numbers.
+* Read-only cache folder: one report, no `.tmp`, the title draws as usual.

@@ -117,7 +117,11 @@ GLuint Link(const std::string& vertex_source, const std::string& fragment_source
         return 0;
     }
     profile::CountProgram(false, std::chrono::steady_clock::now() - started);
-    StoreProgram(program, vertex_source, fragment_source);
+    const auto stored = std::chrono::steady_clock::now();
+    if (StoreProgram(program, vertex_source, fragment_source))
+    {
+        profile::CountProgramStore(std::chrono::steady_clock::now() - stored);
+    }
     return program;
 }
 
