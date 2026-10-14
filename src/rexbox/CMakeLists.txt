@@ -15,6 +15,7 @@ add_library(rexbox_runtime STATIC
     runtime/guest_memory.cpp
     runtime/hle_call.cpp
     runtime/hle_registry.cpp
+    runtime/thread_activity.cpp
     runtime/xbe_loader.cpp
 )
 target_link_libraries(rexbox_runtime PUBLIC rexbox_xbe rexbox_platform)

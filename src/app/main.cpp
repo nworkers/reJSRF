@@ -21,6 +21,7 @@
 #include "rexbox/runtime/guest_memory.h"
 #include "rexbox/runtime/hle_registry.h"
 #include "rexbox/runtime/kernel_thunks.h"
+#include "rexbox/runtime/thread_activity.h"
 #include "rexbox/runtime/xbe_loader.h"
 #include "rexbox/xbe/xbe_image.h"
 
@@ -323,6 +324,10 @@ int main(int argc, char** argv)
         std::fprintf(stderr, "error: %s\n", error.c_str());
         return 1;
     }
+
+    // REXBOX_STALL_REPORT=<seconds> (default 10, 0 off): when presents stop
+    // for that long, print what each guest thread is doing.
+    rexbox::runtime::StartStallMonitor();
 
     // REXBOX_WATCHDOG=<seconds>: a run that is still going after that long
     // dumps the guest threads' direct-call profile and ends (diagnostic for a

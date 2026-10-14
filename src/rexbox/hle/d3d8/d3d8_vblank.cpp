@@ -1,5 +1,7 @@
 #include "d3d8_vblank.h"
 
+#include "rexbox/runtime/thread_activity.h"
+
 #include <atomic>
 #include <chrono>
 #include <thread>
@@ -45,6 +47,7 @@ uint64_t VerticalBlankCount()
 
 void WaitForVerticalBlank()
 {
+    const runtime::ScopedWait note("D3D8 vertical blank", nullptr, 0, false, 17);
     std::this_thread::sleep_until(TickTime(VerticalBlankCount() + 1));
 }
 
@@ -62,7 +65,10 @@ void WaitForPresentInterval(uint32_t interval)
         // Late (or the first present): show at the next blank.
         target = now + 1;
     }
-    std::this_thread::sleep_until(TickTime(target));
+    {
+        const runtime::ScopedWait note("D3D8 present interval", nullptr, 0, false, 17 * static_cast<int64_t>(interval));
+        std::this_thread::sleep_until(TickTime(target));
+    }
     g_last_present.store(target);
 }
 

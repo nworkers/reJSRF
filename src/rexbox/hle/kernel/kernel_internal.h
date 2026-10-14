@@ -226,6 +226,17 @@ using Deadline = std::optional<std::chrono::steady_clock::time_point>;
 // positive absolute system time, null pointer = wait forever) to a deadline.
 Deadline DeadlineFromTimeout(GuestAddress timeout_pointer);
 
+// Publishes the calling thread's wait for the stall report
+// (runtime/thread_activity.h) while it lives.
+class WaitNote
+{
+public:
+    WaitNote(const char* what, const std::vector<GuestAddress>& objects, bool all, const Deadline& deadline);
+    ~WaitNote();
+    WaitNote(const WaitNote&) = delete;
+    WaitNote& operator=(const WaitNote&) = delete;
+};
+
 // Current system time as an NT time (100 ns since 1601-01-01).
 uint64_t SystemTimeNt();
 // Milliseconds since boot (KeTickCount) and 100 ns interrupt time.

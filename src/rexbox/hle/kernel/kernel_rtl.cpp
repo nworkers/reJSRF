@@ -3,6 +3,8 @@
 
 #include "kernel_internal.h"
 
+#include "rexbox/runtime/thread_activity.h"
+
 namespace rexbox::hle::kernel
 {
 
@@ -61,6 +63,7 @@ void RtlEnterCriticalSection()
     // A wait this long is a deadlock in practice; report the section once so
     // the owner can be identified (diagnostic, no behavior change).
     bool reported = false;
+    const runtime::ScopedWait note("RtlEnterCriticalSection", &cs, 1, false, -1);
     while (!state.signalled.wait_for(lock, std::chrono::seconds(5),
                                      [&] { return memory.Read32(cs + kCsRecursionCount) == 0; }))
     {

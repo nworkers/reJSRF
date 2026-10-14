@@ -10,6 +10,7 @@
 #include "rexbox/runtime/guest_memory.h"
 #include "rexbox/runtime/hle_registry.h"
 #include "rexbox/runtime/kernel_thunks.h"
+#include "rexbox/runtime/thread_activity.h"
 
 #include <atomic>
 #include <chrono>
@@ -381,7 +382,25 @@ recomp_func_t recomp_lookup_manual(uint32_t xbox_va)
                      rexbox::runtime::KernelThunkOrdinal(xbox_va), memory->Read32(esp), memory->Read32(esp + 4),
                      memory->Read32(esp + 8), esp);
     }
-    return registry == nullptr ? nullptr : registry->Lookup(xbox_va);
+    if (registry == nullptr)
+    {
+        return nullptr;
+    }
+    if (rexbox::runtime::IsKernelThunkVa(xbox_va))
+    {
+        // Kernel imports are called through their thunk slots, so this is
+        // where a guest thread enters one (the stall report's last HLE call).
+        const rexbox::runtime::HleExport* bound = registry->LookupExport(xbox_va);
+        if (bound != nullptr)
+        {
+            const uint32_t esp = rexbox_recomp_get_gpr(4);
+            rexbox::runtime::GuestMemory* memory = bridge::BridgeMemory();
+            rexbox::runtime::NoteHleEntry(bound->symbol.c_str(),
+                                          memory != nullptr && memory->IsValid(esp, 4) ? memory->Read32(esp) : 0);
+        }
+        return bound == nullptr ? nullptr : bound->thunk;
+    }
+    return registry->Lookup(xbox_va);
 }
 
 // Generated overrides of XDK library functions enter here. The export is
@@ -397,6 +416,12 @@ void rexbox_hle_enter(RexboxHleSlot* slot)
     }
     if (slot->state == 1)
     {
+        {
+            const uint32_t esp = rexbox_recomp_get_gpr(4);
+            rexbox::runtime::GuestMemory* memory = bridge::BridgeMemory();
+            rexbox::runtime::NoteHleEntry(slot->name,
+                                          memory != nullptr && memory->IsValid(esp, 4) ? memory->Read32(esp) : 0);
+        }
         bridge::CheckWatchedHeap(slot->name);
         bridge::CheckWatchedDwords(slot->name);
         // Diagnostic: REXBOX_HLE_TRACE=<n> logs the first n HLE entries (default 4000).
