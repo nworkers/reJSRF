@@ -90,9 +90,20 @@ v0.0.22는 정상 저장과 망가진 항목의 재작성만 확인했다. 저�
 | 쓰기 실패, 이름 바꾸기 실패 | 보고 한 번, `.tmp` 없음 |
 | 측정 | 위 표 |
 
+### 게스트 파일 쓰기 확인
+
+i042 샘플의 `ZwWriteFile`이 끊김 원인인지 보려고 임시 계측(커밋하지 않음)을 넣었다. `NtWriteFile`의 시각·스레드·경로·길이·걸린 시간과, 25 ms를 넘은 present의 시각·스레드·번호를 기록했다(캐시 끔, 90초).
+
+* 쓰기는 두 번뿐이었다. 첫 프레임 약 1.1초 뒤 `Media\Mark\DEFAULT\JSRF_TEXS0.JTX`·`JSRF_TEXS1.JTX`(각 1 MB), 0.284 ms·0.257 ms였다.
+* 호출 스레드는 present 스레드였지만, 느린 프레임(프레임 3, 2,427~2,462, 3,232 등)과 겹치지 않았다.
+* 결론과 남은 질문은 [frame-time §6.5](../analysis/frame-time.md)에 적었다.
+
+### 결정
+
+* 캐시는 모든 드라이버에서 기본으로 켠다(사용자 결정). 이득이 큰 드라이버(Intel HD 620, 약 2.4초 → 약 0.13초)의 효과가 손해인 드라이버(RTX 4090, 프로그램당 1~2 ms)보다 훨씬 크다. 끄려면 `REXBOX_SHADER_CACHE=0`.
+
 ### 남은 일
 
-* 캐시가 이득인지는 드라이버마다 다르다. 이득이 없는 드라이버(이 기계의 NVIDIA)에서 기본으로 끌지, 그대로 둘지 정해야 한다.
 * 저장을 그리기 스레드 밖(다음 프레임, 다른 스레드)으로 옮기면 첫 실행 비용을 줄일 수 있다. 다만 GL 호출(`glGetProgramBinary`)은 컨텍스트 스레드에서 해야 한다.
 
 ---
@@ -187,7 +198,18 @@ Findings:
 * Write and rename failures: one report each, no `.tmp`.
 * Measurements as above.
 
+### Guest file writes
+
+To see whether the `ZwWriteFile` in the i042 samples causes stutter, temporary instrumentation (not committed) logged each `NtWriteFile` (time, thread, path, length, time taken) and each present over 25 ms (time, thread, number), with the cache off for 90 s.
+
+* There were only two writes, about 1.1 s after the first frame: `Media\Mark\DEFAULT\JSRF_TEXS0.JTX` and `JSRF_TEXS1.JTX` (1 MB each), 0.284 ms and 0.257 ms.
+* They ran on the presenting thread but did not meet the slow frames (frames 3, 2,427–2,462, 3,232 and others).
+* The conclusion and open questions are in [frame-time §6.5](../analysis/frame-time.md).
+
+### Decision
+
+* The cache stays on by default on every driver (the user's decision): its gain where it pays (Intel HD 620, about 2.4 s → about 0.13 s) far outweighs its cost where it does not (RTX 4090, 1–2 ms a program). `REXBOX_SHADER_CACHE=0` turns it off.
+
 ### Remaining
 
-* Whether the cache pays depends on the driver. It remains to decide whether to turn it off by default where it does not (this machine's NVIDIA) or leave it on.
 * Moving the store off the drawing path (to a later frame or another thread) would cut the first run's cost, though the GL call (`glGetProgramBinary`) must stay on the context's thread.

@@ -56,6 +56,7 @@ v0.0.22의 검증은 정상 저장(첫 실행 57개)과 망가진 항목의 재�
   * 파일은 `close()` 뒤 스트림 상태까지 확인한 다음에만 이름을 바꾼다. 소멸자에서 버퍼를 비우다 실패하면 잘린 파일이 정식 항목이 되던 경로를 막는다.
   * 쓰기나 이름 바꾸기가 실패하면 임시 파일을 지우고, 실패를 한 번 보고한다(`ReportOnce`). 쓸 수 없는 폴더에서 매번 말없이 컴파일만 하지 않게 한다.
   * 저장 실패는 프로그램 사용에 영향을 주지 않는다. 그 실행은 그대로 진행한다.
+* **기본값**: 캐시는 모든 드라이버에서 켠다. 측정해 보니 컴파일이 싼 드라이버(RTX 4090)에서는 불러오기가 오히려 느렸지만 차이는 프로그램당 1~2 ms다. 컴파일이 비싼 드라이버(Intel HD 620)에서 줄어드는 끊김이 훨씬 크다.
 * **한계(추가)**: 옛 항목은 지우지 않는다. 셰이더 생성기를 바꾸면 소스 해시가 바뀌어 새 파일이 생기고 옛 파일은 남는다. 폴더를 지우면 다음 실행에서 다시 채워진다.
 
 | 검증 | 기대 |
@@ -123,6 +124,7 @@ The v0.0.22 checks covered normal stores (57 on the first run) and the rewrite o
   * The file is renamed only after `close()` and a check of the stream state, closing the path where a flush failing in the destructor made a truncated file the entry.
   * When writing or renaming fails, the temporary file is removed and the failure is reported once (`ReportOnce`), so an unwritable folder does not silently compile every run.
   * A failed store does not affect the program, and the run goes on.
+* **Default**: the cache is on for every driver. Where compiling is cheap (RTX 4090) loading was measured slower, but only by 1–2 ms a program; the stutter removed where compiling is expensive (Intel HD 620) is far larger.
 * **Limits (added)**: old entries are not removed. Changing the shader generator changes the source hashes, so new files appear and old ones stay; deleting the folder refills it on the next run.
 
 Checks:
