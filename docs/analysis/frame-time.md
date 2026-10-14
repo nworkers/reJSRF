@@ -85,7 +85,7 @@
    * **확인됨**(i046, Ryzen 5 5600X): 조회는 범위당 약 0.7 µs라 `memcmp` 약 6 KiB와 같다. 그래서 8 KiB 이상 정점·인덱스 범위에만 쓴다.
    * 비교량이 프레임당 4.3 MB에서 1.4 MB로, present 스레드 CPU가 11% 줄었다.
    * 텍스처 표본 해시는 조회보다 싸서 그대로 둔다([설계 i046](../design/20261014-i046-hle-performance.md)).
-3. **GL 호출 수**: **확인됨**(i050): 그리기 483개 프레임의 GL 호출이 10,505번이었다. 정점 속성 끄기·켜기, 그리기마다 프레임버퍼 바인딩, 상수 run마다의 `glUniform4fv`가 대부분이었다. 바뀐 것만 보내게 해 4,123번(-61%), present 스레드 CPU 약 -5%(Intel HD 620)가 됐다. 다음은 범위마다 VAO를 두어 남은 포인터 지정(1,446)과 버퍼 바인딩(912)을 줄이는 것이다([설계 i050](../design/20261014-i050-gl-calls.md)).
+3. **GL 호출 수**: **확인됨**(i050): 그리기 483개 프레임의 GL 호출이 10,505번이었다. 정점 속성 끄기·켜기, 그리기마다 프레임버퍼 바인딩, 상수 run마다의 `glUniform4fv`가 대부분이었다. 바뀐 것만 보내게 해 4,123번(-61%), present 스레드 CPU 약 -5%(Intel HD 620)가 됐다. 범위마다 VAO를 두어 2,115번이 됐지만, 그 단계의 CPU 차이는 흔들림 안이었다(VAO 전환이 공짜가 아님, **추정**; [설계 i050](../design/20261014-i050-gl-calls.md)).
 4. **처음 쓸 때의 셰이더 컴파일**: 프로그램을 처음 쓰는 그리기에서 컴파일·링크해 첫 데모 구간의 setup이 14.5 ms까지 오르고, Intel 셰이더 컴파일러(`igc32`)가 프레임 2,400~3,600 샘플의 5.8%였다. 프로그램 바이너리 캐시나 미리 빌드하기로 줄인다(issue #51).
 
 ---
@@ -169,5 +169,5 @@ Variant executables were run alternately, three times each, close together in ti
    * **Confirmed** (i046, Ryzen 5 5600X): a query costs about 0.7 µs per range, as much as a `memcmp` of about 6 KiB, so only vertex and index ranges of 8 KiB or more use it.
    * The bytes compared per frame fell from 4.3 MB to 1.4 MB, and presenting-thread CPU by 11%.
    * The texture sample hash costs less than a query and stays ([design i046](../design/20261014-i046-hle-performance.md)).
-3. **Number of GL calls**: **Confirmed** (i050): a 483-draw frame made 10,505 GL calls, mostly attribute disables and enables, a framebuffer bind per draw and one `glUniform4fv` per constant run. Sending only what changes left 4,123 (-61%) and cut presenting-thread CPU by about 5% (Intel HD 620). Next, a VAO per range would cut the remaining pointer calls (1,446) and buffer bindings (912) ([design i050](../design/20261014-i050-gl-calls.md)).
+3. **Number of GL calls**: **Confirmed** (i050): a 483-draw frame made 10,505 GL calls, mostly attribute disables and enables, a framebuffer bind per draw and one `glUniform4fv` per constant run. Sending only what changes left 4,123 (-61%) and cut presenting-thread CPU by about 5% (Intel HD 620). A VAO per range brought calls to 2,115, but that step's CPU difference stayed within the noise (a VAO switch is not free, **inferred**; [design i050](../design/20261014-i050-gl-calls.md)).
 4. **Shader compilation on first use**: programs are compiled and linked on the first draw that needs them; setup in the first demo window reaches 14.5 ms, and the Intel shader compiler (`igc32`) was 5.8% of the samples over frames 2,400–3,600. A program binary cache or building ahead would reduce it (issue #51).

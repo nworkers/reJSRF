@@ -132,6 +132,7 @@ bool LoadGlFunctions(GlFunctions* functions, std::string* missing)
     need(Load<__LINE__>(&f.BufferData, "glBufferData", &first_missing));
     need(Load<__LINE__>(&f.BufferSubData, "glBufferSubData", &first_missing));
     need(Load<__LINE__>(&f.GenVertexArrays, "glGenVertexArrays", &first_missing));
+    need(Load<__LINE__>(&f.DeleteVertexArrays, "glDeleteVertexArrays", &first_missing));
     need(Load<__LINE__>(&f.BindVertexArray, "glBindVertexArray", &first_missing));
     need(Load<__LINE__>(&f.EnableVertexAttribArray, "glEnableVertexAttribArray", &first_missing));
     need(Load<__LINE__>(&f.DisableVertexAttribArray, "glDisableVertexAttribArray", &first_missing));

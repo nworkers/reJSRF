@@ -100,7 +100,7 @@ flowchart BT
 | `d3d8_gl_targets.h/.cpp` | 렌더 타깃: 색 서피스 = GL 텍스처, 깊이 = 렌더버퍼, 쌍마다 FBO; present(단위 램프는 blit, 아니면 감마 셰이더), BMP 덤프 |
 | `d3d8_gl_textures.h/.cpp` | 텍스처 캐시(헤더 → GL 텍스처, Lock·해시로 재업로드), 스테이지 샘플러 |
 | `d3d8_gl_programs.h/.cpp` | 프로그램 캐시(고정 기능, 정점 프로그램 + 고정 기능 프래그먼트, 정점 프로그램 + 컴바이너; 구조체 키와 해시), 프로그램별 유니폼 캐시 |
-| `d3d8_gl_buffers.h/.cpp` | 정점·인덱스 데이터: 게스트 버퍼 범위는 GL 버퍼에 두고 게스트 바이트가 바뀔 때만 다시 올림, UP 데이터와 만든 인덱스는 스트리밍 버퍼, QUADLIST 전개(설계 i040) |
+| `d3d8_gl_buffers.h/.cpp` | 정점·인덱스 데이터: 게스트 버퍼 범위는 GL 버퍼에 두고 게스트 바이트가 바뀔 때만 다시 올림, UP 데이터와 만든 인덱스는 스트리밍 버퍼, QUADLIST 전개(설계 i040); 캐시한 정점 범위는 (버퍼, 속성 배치)마다 VAO, 스트리밍 정점은 공용 VAO에 바뀐 속성만, 인덱스 업로드는 `GL_COPY_WRITE_BUFFER`(설계 i050) |
 | `d3d8_profile.h/.cpp` | `REXBOX_D3D8_PROFILE`: present 스레드에서 잰 그리기 단계·present·vblank 대기·나머지의 프레임당 시간, CPU 시간, 그리기 수, 업로드 바이트; `REXBOX_SAMPLE`: 샘플링 구간 |
 
 ## 2. 재컴파일 코드 생성

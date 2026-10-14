@@ -6,6 +6,12 @@
 // differ, so unchanged geometry is not sent again. Data passed with the draw
 // (the UP calls) and generated indices are appended to streaming buffers,
 // which are refilled from the start (orphaned) when full.
+//
+// Vertex arrays (docs/design/20261014-i050-gl-calls.md): a cached vertex
+// range gets one vertex array object per attribute layout, pointed once, so
+// a draw that uses it binds one object instead of re-pointing attributes.
+// Streamed vertices use a shared array whose attribute state is sent only
+// where it changes. Uploads never touch a vertex array's element binding.
 
 #ifndef REXBOX_HLE_D3D8_D3D8_GL_BUFFERS_H
 #define REXBOX_HLE_D3D8_D3D8_GL_BUFFERS_H
@@ -17,31 +23,51 @@
 namespace rexbox::hle::d3d8
 {
 
-// Binds the vertex array object the draws use. Call before preparing data.
-void BindDrawVertexArray();
+// The attributes a draw reads, with offsets inside one vertex.
+struct VertexInput
+{
+    struct Attribute
+    {
+        uint32_t index = 0;
+        int size = 0;
+        uint32_t type = 0;
+        bool normalized = false;
+        uint32_t offset = 0;
+        bool operator==(const Attribute&) const = default;
+    };
+    static constexpr uint32_t kMaxAttributes = 16;
+    Attribute attributes[kMaxAttributes];
+    uint32_t count = 0;
+    uint32_t stride = 0;
 
-// The attributes of the draw vertex array object, sent only where they
-// differ from what the previous draw left (enable bits, and per attribute the
-// buffer, format, stride and offset). SetAttribute points `index` at
-// `offset` in the bound array buffer and enables it; FinishAttributes
-// disables the enabled attributes no SetAttribute named since the last call.
-void SetAttribute(uint32_t index, int size, uint32_t type, bool normalized, uint32_t stride, size_t offset);
-void FinishAttributes();
+    void Add(uint32_t index, int size, uint32_t type, bool normalized, uint32_t offset)
+    {
+        attributes[count++] = {index, size, type, normalized, offset};
+    }
+    bool operator==(const VertexInput& other) const;
+};
 
-// Puts `bytes` vertex bytes from guest `address` in a GL buffer and binds it
-// as the array buffer. `cacheable` ranges (from a vertex buffer) are kept
-// and reused while the guest bytes stay the same; others are streamed.
-// Returns the data's offset in the bound buffer.
-size_t PrepareVertexData(uint32_t address, size_t bytes, bool cacheable);
+// Vertex bytes in a GL buffer.
+struct VertexData
+{
+    uint32_t buffer = 0;
+    size_t offset = 0;    // of vertex 0 in the buffer
+    bool cached = false;  // a kept range (its own buffer), not streamed
+};
 
-// Indices ready for glDrawElements in the bound element buffer, rebased so
-// that vertex `first` is 0.
+// Puts `bytes` vertex bytes from guest `address` in a GL buffer. `cacheable`
+// ranges (from a vertex buffer) are kept and reused while the guest bytes
+// stay the same; others are streamed.
+VertexData PrepareVertexData(uint32_t address, size_t bytes, bool cacheable);
+
+// Indices ready for glDrawElements, rebased so that vertex `first` is 0.
 struct DrawIndices
 {
     uint32_t first = 0;         // lowest vertex number used
     uint32_t vertex_count = 0;  // highest - lowest + 1
     uint32_t count = 0;         // indices to draw
     bool use_short = true;      // 16-bit, else 32-bit
+    uint32_t buffer = 0;        // the element buffer
     size_t offset = 0;          // in the element buffer
 };
 
@@ -55,7 +81,12 @@ bool PrepareGuestIndices(uint32_t address, uint32_t count, uint32_t base, bool q
 // Indices built on the host (vertex numbers), streamed.
 bool PrepareHostIndices(const std::vector<uint32_t>& indices, DrawIndices* out);
 
-// Once per present: drops cached ranges no draw has used for a while.
+// Binds a vertex array reading `input` from `data`, with `indices`' buffer
+// as its element buffer (none for a draw without indices).
+void BindVertexInput(const VertexInput& input, const VertexData& data, const DrawIndices* indices);
+
+// Once per present: drops cached ranges (and their vertex arrays) no draw
+// has used for a while.
 void EndVertexDataFrame();
 
 }  // namespace rexbox::hle::d3d8
