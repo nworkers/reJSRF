@@ -76,14 +76,17 @@
 
 ## 6. 다음 후보
 
-1. **xboxrecomp 코드 생성**: XMM intrinsic과 메모리 기준 지역화는 i044에서 했다. 남은 후보는 두 가지다.
-   * 게스트 레지스터를 지역 변수로 두기: 상한은 leaf 함수만이면 전체 CPU 약 2%, 전부면 약 7%다.
-   * 간접 호출 지점별 캐시: 약 1%.
+1. **xboxrecomp 코드 생성**: XMM intrinsic과 메모리 기준 지역화는 i044에서 했다.
+   * XMM intrinsic은 그 뒤 선택 사항이 됐다. 기본 빌드(CMake `REXBOX_RECOMP_XMM_SSE2=OFF`)는 칸 단위 C를 쓰므로 i044의 약 12%는 켰을 때만 얻는다([설계 i044 §3.4](../design/20261013-i044-recomp-codegen.md)).
+   * 남은 후보는 두 가지다.
+     * 게스트 레지스터를 지역 변수로 두기: 상한은 leaf 함수만이면 전체 CPU 약 2%, 전부면 약 7%다.
+     * 간접 호출 지점별 캐시: 약 1%.
 2. **D3D8 변경 감지**: 정점 범위 `memcmp`(1.3 ms)와 텍스처 표본 해시를 게스트 메모리의 쓰기 감시로 바꾼다(Windows `MEM_WRITE_WATCH`/`GetWriteWatch`). 그러면 바뀐 페이지가 있는 범위만 비교하면 된다.
    * **확인됨**(i046, Ryzen 5 5600X): 조회는 범위당 약 0.7 µs라 `memcmp` 약 6 KiB와 같다. 그래서 8 KiB 이상 정점·인덱스 범위에만 쓴다.
    * 비교량이 프레임당 4.3 MB에서 1.4 MB로, present 스레드 CPU가 11% 줄었다.
    * 텍스처 표본 해시는 조회보다 싸서 그대로 둔다([설계 i046](../design/20261014-i046-hle-performance.md)).
-3. **GL 호출 수**: 정점 상수를 uniform buffer 하나로 보내고, 상태 묶음을 줄여 드라이버 시간(2.6 ms)을 줄인다.
+3. **GL 호출 수**: **확인됨**(i050): 그리기 483개 프레임의 GL 호출이 10,505번이었다. 정점 속성 끄기·켜기, 그리기마다 프레임버퍼 바인딩, 상수 run마다의 `glUniform4fv`가 대부분이었다. 바뀐 것만 보내게 해 4,123번(-61%), present 스레드 CPU 약 -5%(Intel HD 620)가 됐다. 범위마다 VAO를 두는 2차는 2,115번까지 줄였지만 CPU 차이가 흔들림 안이어서 되돌렸다(VAO 전환이 공짜가 아님, **추정**; [설계 i050](../design/20261014-i050-gl-calls.md) §2.4).
+4. **처음 쓸 때의 셰이더 컴파일**: 프로그램을 처음 쓰는 그리기에서 컴파일·링크해 첫 데모 구간의 setup이 14.5 ms까지 오르고, Intel 셰이더 컴파일러(`igc32`)가 프레임 2,400~3,600 샘플의 5.8%였다. 프로그램 바이너리 캐시나 미리 빌드하기로 줄인다(issue #51).
 
 ---
 
@@ -157,11 +160,14 @@ Variant executables were run alternately, three times each, close together in ti
 
 ## 6. Next candidates
 
-1. **xboxrecomp code generation**: the XMM intrinsics and the local memory base were done in i044. Two candidates remain:
-   * guest registers in locals: at most about 2% of total CPU for leaf functions only, about 7% for everything
-   * per-site indirect-call caches: about 1%
+1. **xboxrecomp code generation**: the XMM intrinsics and the local memory base were done in i044.
+   * The XMM intrinsics later became optional: the default build (CMake `REXBOX_RECOMP_XMM_SSE2=OFF`) uses the lane-wise C, so i044's roughly 12% applies only when they are switched on ([design i044 §3.4](../design/20261013-i044-recomp-codegen.md)).
+   * Two candidates remain:
+     * guest registers in locals: at most about 2% of total CPU for leaf functions only, about 7% for everything
+     * per-site indirect-call caches: about 1%
 2. **D3D8 change detection**: replace the vertex-range `memcmp` (1.3 ms) and the texture sample hash with write watching on guest memory (Windows `MEM_WRITE_WATCH`/`GetWriteWatch`), so only ranges with written pages are compared.
    * **Confirmed** (i046, Ryzen 5 5600X): a query costs about 0.7 µs per range, as much as a `memcmp` of about 6 KiB, so only vertex and index ranges of 8 KiB or more use it.
    * The bytes compared per frame fell from 4.3 MB to 1.4 MB, and presenting-thread CPU by 11%.
    * The texture sample hash costs less than a query and stays ([design i046](../design/20261014-i046-hle-performance.md)).
-3. **Number of GL calls**: send vertex constants as one uniform buffer and reduce state groups, to cut driver time (2.6 ms).
+3. **Number of GL calls**: **Confirmed** (i050): a 483-draw frame made 10,505 GL calls, mostly attribute disables and enables, a framebuffer bind per draw and one `glUniform4fv` per constant run. Sending only what changes left 4,123 (-61%) and cut presenting-thread CPU by about 5% (Intel HD 620). A second pass with a VAO per range reached 2,115 calls but stayed within the CPU noise and was reverted (a VAO switch is not free, **inferred**; [design i050](../design/20261014-i050-gl-calls.md) §2.4).
+4. **Shader compilation on first use**: programs are compiled and linked on the first draw that needs them; setup in the first demo window reaches 14.5 ms, and the Intel shader compiler (`igc32`) was 5.8% of the samples over frames 2,400–3,600. A program binary cache or building ahead would reduce it (issue #51).

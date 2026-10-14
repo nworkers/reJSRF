@@ -34,6 +34,8 @@ struct DepthTarget
 std::unordered_map<GuestAddress, ColorTarget> g_colors;
 std::unordered_map<GuestAddress, DepthTarget> g_depths;
 std::map<std::pair<GuestAddress, GuestAddress>, GLuint> g_framebuffers;
+GLuint g_bound_framebuffer = 0;  // GL_FRAMEBUFFER as BindRenderTarget left it, valid in g_framebuffer_epoch
+uint32_t g_framebuffer_epoch = 0;
 GuestAddress g_bound_color = 0;
 GuestAddress g_bound_depth = 0;
 uint32_t g_width = 0;
@@ -116,6 +118,7 @@ GLuint Framebuffer(GuestAddress color, GuestAddress depth)
     GlFunctions& gl = Gl();
     GLuint framebuffer = 0;
     gl.GenFramebuffers(1, &framebuffer);
+    InvalidateGlStateCache();  // binds the new framebuffer
     gl.BindFramebuffer(kGlFramebuffer, framebuffer);
     if (color != 0)
     {
@@ -278,8 +281,14 @@ bool BindRenderTarget(GuestAddress color, GuestAddress depth)
         }
         resolved.valid = color != 0 || depth != 0;
     }
-    // Always bound: other paths (present, gamma, copies) change the binding.
-    Gl().BindFramebuffer(kGlFramebuffer, resolved.framebuffer);
+    // Other paths that bind framebuffers (present, dumps, creation)
+    // invalidate the GL state cache.
+    if (g_framebuffer_epoch != GlStateEpoch() || g_bound_framebuffer != resolved.framebuffer)
+    {
+        Gl().BindFramebuffer(kGlFramebuffer, resolved.framebuffer);
+        g_bound_framebuffer = resolved.framebuffer;
+        g_framebuffer_epoch = GlStateEpoch();
+    }
     g_bound_color = color;
     g_bound_depth = depth;
     g_width = resolved.width;
@@ -349,6 +358,7 @@ bool DumpRenderTarget(GuestAddress color, const std::string& path, const GammaRa
     gl.ReadPixels(0, 0, static_cast<GLsizei>(source.width), static_cast<GLsizei>(source.height), kGlRgba,
                   kGlUnsignedByte, rgba.data());
     gl.BindFramebuffer(kGlFramebuffer, Framebuffer(g_bound_color, g_bound_depth));
+    InvalidateGlStateCache();
 
     ApplyGammaRamp(ramp, rgba.data(), static_cast<size_t>(source.width) * source.height);
 

@@ -225,26 +225,47 @@ void UniformCache::SetArray4(const std::vector<int>& locations, const float* val
     {
         array_.assign(values, values + count * 4);
     }
+    if (fresh)
+    {
+        // chain_[i]: the first element of the run of consecutive locations
+        // that holds element i.
+        chain_.assign(count, 0);
+        for (size_t i = 1; i < count; ++i)
+        {
+            chain_[i] = locations[i] >= 0 && locations[i] == locations[i - 1] + 1 ? chain_[i - 1]
+                                                                                   : static_cast<uint32_t>(i);
+        }
+    }
+    // One call per run of consecutive locations, from its first changed
+    // element to its last: the unchanged ones between go along, since a call
+    // costs more than the bytes (issue #50 counted four calls per draw).
     GlFunctions& gl = Gl();
-    size_t i = 0;
-    while (i < count)
+    size_t span_begin = count;
+    size_t span_end = 0;
+    const auto flush = [&] {
+        if (span_begin < span_end)
+        {
+            std::memcpy(&array_[span_begin * 4], values + span_begin * 4, (span_end - span_begin) * 16);
+            gl.Uniform4fv(locations[span_begin], static_cast<GLsizei>(span_end - span_begin), values + span_begin * 4);
+        }
+        span_begin = count;
+    };
+    for (size_t i = 0; i < count; ++i)
     {
         if (locations[i] < 0 || (!fresh && std::memcmp(&array_[i * 4], values + i * 4, 16) == 0))
         {
-            ++i;
             continue;
         }
-        // A run of changed elements at consecutive locations goes in one call.
-        size_t end = i + 1;
-        while (end < count && locations[end] == locations[end - 1] + 1 &&
-               (fresh || std::memcmp(&array_[end * 4], values + end * 4, 16) != 0))
+        if (span_begin < count && chain_[i] <= span_begin)
         {
-            ++end;
+            span_end = i + 1;
+            continue;
         }
-        std::memcpy(&array_[i * 4], values + i * 4, (end - i) * 16);
-        gl.Uniform4fv(locations[i], static_cast<GLsizei>(end - i), values + i * 4);
-        i = end;
+        flush();
+        span_begin = i;
+        span_end = i + 1;
     }
+    flush();
 }
 
 const FixedFunctionProgram* GetFixedFunctionProgram(const FixedFunctionKey& key)

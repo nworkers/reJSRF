@@ -1,5 +1,9 @@
 #include "d3d8_gl.h"
 
+#include <algorithm>
+#include <cstdlib>
+#include <vector>
+
 namespace rexbox::hle::d3d8
 {
 
@@ -10,7 +14,45 @@ GlFunctions g_gl;
 bool g_es = false;
 uint32_t g_state_epoch = 1;
 
-template <typename Function>
+// REXBOX_GL_CALLS=1: every entry point goes through a wrapper that counts
+// its calls (diagnostic, read by d3d8_profile). Each Load line instantiates
+// its own wrapper, so each keeps its own pointer to the driver's function.
+struct CallCounter
+{
+    const char* name;
+    uint64_t count;
+};
+std::vector<CallCounter> g_counters;
+
+template <int Id, typename Function>
+struct Counted;
+
+template <int Id, typename R, typename... Args>
+struct Counted<Id, R(REXBOX_GL_APIENTRY*)(Args...)>
+{
+    static inline R(REXBOX_GL_APIENTRY* real)(Args...) = nullptr;
+    static inline size_t index = 0;
+    static R REXBOX_GL_APIENTRY Call(Args... args)
+    {
+        ++g_counters[index].count;
+        return real(args...);
+    }
+};
+
+template <int Id, typename Function>
+void Install(Function* slot, void* address, const char* name)
+{
+    *slot = reinterpret_cast<Function>(address);
+    if (address != nullptr && GlCallCountingEnabled())
+    {
+        Counted<Id, Function>::real = *slot;
+        Counted<Id, Function>::index = g_counters.size();
+        g_counters.push_back({name, 0});
+        *slot = &Counted<Id, Function>::Call;
+    }
+}
+
+template <int Id, typename Function>
 bool Load(Function* slot, const char* name, std::string* missing)
 {
     void* address = platform::GetGlProcAddress(name);
@@ -22,15 +64,14 @@ bool Load(Function* slot, const char* name, std::string* missing)
         }
         return false;
     }
-    *slot = reinterpret_cast<Function>(address);
+    Install<Id>(slot, address, name);
     return true;
 }
 
-template <typename Function>
+template <int Id, typename Function>
 void LoadOptional(Function* slot, const char* name)
 {
-    void* address = platform::GetGlProcAddress(name);
-    *slot = address != nullptr ? reinterpret_cast<Function>(address) : nullptr;
+    Install<Id>(slot, platform::GetGlProcAddress(name), name);
 }
 
 }  // namespace
@@ -42,86 +83,86 @@ bool LoadGlFunctions(GlFunctions* functions, std::string* missing)
     bool ok = true;
     // Every entry point is tried so the first missing one is reported.
     const auto need = [&ok, &first_missing](bool loaded) { ok = ok && loaded; };
-    need(Load(&f.GetString, "glGetString", &first_missing));
-    need(Load(&f.GetIntegerv, "glGetIntegerv", &first_missing));
-    need(Load(&f.GetError, "glGetError", &first_missing));
-    need(Load(&f.Viewport, "glViewport", &first_missing));
-    need(Load(&f.Scissor, "glScissor", &first_missing));
-    need(Load(&f.Enable, "glEnable", &first_missing));
-    need(Load(&f.Disable, "glDisable", &first_missing));
-    need(Load(&f.ClearColor, "glClearColor", &first_missing));
-    need(Load(&f.ClearStencil, "glClearStencil", &first_missing));
-    need(Load(&f.Clear, "glClear", &first_missing));
-    need(Load(&f.DepthMask, "glDepthMask", &first_missing));
-    need(Load(&f.DepthFunc, "glDepthFunc", &first_missing));
-    need(Load(&f.ColorMask, "glColorMask", &first_missing));
-    need(Load(&f.StencilMask, "glStencilMask", &first_missing));
-    need(Load(&f.StencilFunc, "glStencilFunc", &first_missing));
-    need(Load(&f.StencilOp, "glStencilOp", &first_missing));
-    need(Load(&f.BlendFunc, "glBlendFunc", &first_missing));
-    need(Load(&f.BlendEquation, "glBlendEquation", &first_missing));
-    need(Load(&f.BlendColor, "glBlendColor", &first_missing));
-    need(Load(&f.CullFace, "glCullFace", &first_missing));
-    need(Load(&f.FrontFace, "glFrontFace", &first_missing));
-    need(Load(&f.PolygonOffset, "glPolygonOffset", &first_missing));
-    need(Load(&f.PixelStorei, "glPixelStorei", &first_missing));
-    need(Load(&f.ReadPixels, "glReadPixels", &first_missing));
-    need(Load(&f.CreateShader, "glCreateShader", &first_missing));
-    need(Load(&f.ShaderSource, "glShaderSource", &first_missing));
-    need(Load(&f.CompileShader, "glCompileShader", &first_missing));
-    need(Load(&f.GetShaderiv, "glGetShaderiv", &first_missing));
-    need(Load(&f.GetShaderInfoLog, "glGetShaderInfoLog", &first_missing));
-    need(Load(&f.DeleteShader, "glDeleteShader", &first_missing));
-    need(Load(&f.CreateProgram, "glCreateProgram", &first_missing));
-    need(Load(&f.AttachShader, "glAttachShader", &first_missing));
-    need(Load(&f.LinkProgram, "glLinkProgram", &first_missing));
-    need(Load(&f.GetProgramiv, "glGetProgramiv", &first_missing));
-    need(Load(&f.GetProgramInfoLog, "glGetProgramInfoLog", &first_missing));
-    need(Load(&f.UseProgram, "glUseProgram", &first_missing));
-    need(Load(&f.GetUniformLocation, "glGetUniformLocation", &first_missing));
-    need(Load(&f.Uniform1i, "glUniform1i", &first_missing));
-    need(Load(&f.Uniform1f, "glUniform1f", &first_missing));
-    need(Load(&f.Uniform2f, "glUniform2f", &first_missing));
-    need(Load(&f.Uniform4f, "glUniform4f", &first_missing));
-    need(Load(&f.Uniform4fv, "glUniform4fv", &first_missing));
-    need(Load(&f.UniformMatrix4fv, "glUniformMatrix4fv", &first_missing));
-    need(Load(&f.GenBuffers, "glGenBuffers", &first_missing));
-    need(Load(&f.DeleteBuffers, "glDeleteBuffers", &first_missing));
-    need(Load(&f.BindBuffer, "glBindBuffer", &first_missing));
-    need(Load(&f.BufferData, "glBufferData", &first_missing));
-    need(Load(&f.BufferSubData, "glBufferSubData", &first_missing));
-    need(Load(&f.GenVertexArrays, "glGenVertexArrays", &first_missing));
-    need(Load(&f.BindVertexArray, "glBindVertexArray", &first_missing));
-    need(Load(&f.EnableVertexAttribArray, "glEnableVertexAttribArray", &first_missing));
-    need(Load(&f.DisableVertexAttribArray, "glDisableVertexAttribArray", &first_missing));
-    need(Load(&f.VertexAttribPointer, "glVertexAttribPointer", &first_missing));
-    need(Load(&f.DrawArrays, "glDrawArrays", &first_missing));
-    need(Load(&f.DrawElements, "glDrawElements", &first_missing));
-    need(Load(&f.GenTextures, "glGenTextures", &first_missing));
-    need(Load(&f.DeleteTextures, "glDeleteTextures", &first_missing));
-    need(Load(&f.BindTexture, "glBindTexture", &first_missing));
-    need(Load(&f.ActiveTexture, "glActiveTexture", &first_missing));
-    need(Load(&f.TexImage2D, "glTexImage2D", &first_missing));
-    need(Load(&f.TexImage3D, "glTexImage3D", &first_missing));
-    need(Load(&f.TexParameteri, "glTexParameteri", &first_missing));
-    need(Load(&f.GenSamplers, "glGenSamplers", &first_missing));
-    need(Load(&f.BindSampler, "glBindSampler", &first_missing));
-    need(Load(&f.SamplerParameteri, "glSamplerParameteri", &first_missing));
-    need(Load(&f.SamplerParameterf, "glSamplerParameterf", &first_missing));
-    need(Load(&f.GenFramebuffers, "glGenFramebuffers", &first_missing));
-    need(Load(&f.BindFramebuffer, "glBindFramebuffer", &first_missing));
-    need(Load(&f.FramebufferTexture2D, "glFramebufferTexture2D", &first_missing));
-    need(Load(&f.FramebufferRenderbuffer, "glFramebufferRenderbuffer", &first_missing));
-    need(Load(&f.CheckFramebufferStatus, "glCheckFramebufferStatus", &first_missing));
-    need(Load(&f.GenRenderbuffers, "glGenRenderbuffers", &first_missing));
-    need(Load(&f.BindRenderbuffer, "glBindRenderbuffer", &first_missing));
-    need(Load(&f.RenderbufferStorage, "glRenderbufferStorage", &first_missing));
-    need(Load(&f.BlitFramebuffer, "glBlitFramebuffer", &first_missing));
-    LoadOptional(&f.ClearDepthf, "glClearDepthf");
-    LoadOptional(&f.ClearDepth, "glClearDepth");
-    LoadOptional(&f.DepthRangef, "glDepthRangef");
-    LoadOptional(&f.DepthRange, "glDepthRange");
-    LoadOptional(&f.PolygonMode, "glPolygonMode");
+    need(Load<__LINE__>(&f.GetString, "glGetString", &first_missing));
+    need(Load<__LINE__>(&f.GetIntegerv, "glGetIntegerv", &first_missing));
+    need(Load<__LINE__>(&f.GetError, "glGetError", &first_missing));
+    need(Load<__LINE__>(&f.Viewport, "glViewport", &first_missing));
+    need(Load<__LINE__>(&f.Scissor, "glScissor", &first_missing));
+    need(Load<__LINE__>(&f.Enable, "glEnable", &first_missing));
+    need(Load<__LINE__>(&f.Disable, "glDisable", &first_missing));
+    need(Load<__LINE__>(&f.ClearColor, "glClearColor", &first_missing));
+    need(Load<__LINE__>(&f.ClearStencil, "glClearStencil", &first_missing));
+    need(Load<__LINE__>(&f.Clear, "glClear", &first_missing));
+    need(Load<__LINE__>(&f.DepthMask, "glDepthMask", &first_missing));
+    need(Load<__LINE__>(&f.DepthFunc, "glDepthFunc", &first_missing));
+    need(Load<__LINE__>(&f.ColorMask, "glColorMask", &first_missing));
+    need(Load<__LINE__>(&f.StencilMask, "glStencilMask", &first_missing));
+    need(Load<__LINE__>(&f.StencilFunc, "glStencilFunc", &first_missing));
+    need(Load<__LINE__>(&f.StencilOp, "glStencilOp", &first_missing));
+    need(Load<__LINE__>(&f.BlendFunc, "glBlendFunc", &first_missing));
+    need(Load<__LINE__>(&f.BlendEquation, "glBlendEquation", &first_missing));
+    need(Load<__LINE__>(&f.BlendColor, "glBlendColor", &first_missing));
+    need(Load<__LINE__>(&f.CullFace, "glCullFace", &first_missing));
+    need(Load<__LINE__>(&f.FrontFace, "glFrontFace", &first_missing));
+    need(Load<__LINE__>(&f.PolygonOffset, "glPolygonOffset", &first_missing));
+    need(Load<__LINE__>(&f.PixelStorei, "glPixelStorei", &first_missing));
+    need(Load<__LINE__>(&f.ReadPixels, "glReadPixels", &first_missing));
+    need(Load<__LINE__>(&f.CreateShader, "glCreateShader", &first_missing));
+    need(Load<__LINE__>(&f.ShaderSource, "glShaderSource", &first_missing));
+    need(Load<__LINE__>(&f.CompileShader, "glCompileShader", &first_missing));
+    need(Load<__LINE__>(&f.GetShaderiv, "glGetShaderiv", &first_missing));
+    need(Load<__LINE__>(&f.GetShaderInfoLog, "glGetShaderInfoLog", &first_missing));
+    need(Load<__LINE__>(&f.DeleteShader, "glDeleteShader", &first_missing));
+    need(Load<__LINE__>(&f.CreateProgram, "glCreateProgram", &first_missing));
+    need(Load<__LINE__>(&f.AttachShader, "glAttachShader", &first_missing));
+    need(Load<__LINE__>(&f.LinkProgram, "glLinkProgram", &first_missing));
+    need(Load<__LINE__>(&f.GetProgramiv, "glGetProgramiv", &first_missing));
+    need(Load<__LINE__>(&f.GetProgramInfoLog, "glGetProgramInfoLog", &first_missing));
+    need(Load<__LINE__>(&f.UseProgram, "glUseProgram", &first_missing));
+    need(Load<__LINE__>(&f.GetUniformLocation, "glGetUniformLocation", &first_missing));
+    need(Load<__LINE__>(&f.Uniform1i, "glUniform1i", &first_missing));
+    need(Load<__LINE__>(&f.Uniform1f, "glUniform1f", &first_missing));
+    need(Load<__LINE__>(&f.Uniform2f, "glUniform2f", &first_missing));
+    need(Load<__LINE__>(&f.Uniform4f, "glUniform4f", &first_missing));
+    need(Load<__LINE__>(&f.Uniform4fv, "glUniform4fv", &first_missing));
+    need(Load<__LINE__>(&f.UniformMatrix4fv, "glUniformMatrix4fv", &first_missing));
+    need(Load<__LINE__>(&f.GenBuffers, "glGenBuffers", &first_missing));
+    need(Load<__LINE__>(&f.DeleteBuffers, "glDeleteBuffers", &first_missing));
+    need(Load<__LINE__>(&f.BindBuffer, "glBindBuffer", &first_missing));
+    need(Load<__LINE__>(&f.BufferData, "glBufferData", &first_missing));
+    need(Load<__LINE__>(&f.BufferSubData, "glBufferSubData", &first_missing));
+    need(Load<__LINE__>(&f.GenVertexArrays, "glGenVertexArrays", &first_missing));
+    need(Load<__LINE__>(&f.BindVertexArray, "glBindVertexArray", &first_missing));
+    need(Load<__LINE__>(&f.EnableVertexAttribArray, "glEnableVertexAttribArray", &first_missing));
+    need(Load<__LINE__>(&f.DisableVertexAttribArray, "glDisableVertexAttribArray", &first_missing));
+    need(Load<__LINE__>(&f.VertexAttribPointer, "glVertexAttribPointer", &first_missing));
+    need(Load<__LINE__>(&f.DrawArrays, "glDrawArrays", &first_missing));
+    need(Load<__LINE__>(&f.DrawElements, "glDrawElements", &first_missing));
+    need(Load<__LINE__>(&f.GenTextures, "glGenTextures", &first_missing));
+    need(Load<__LINE__>(&f.DeleteTextures, "glDeleteTextures", &first_missing));
+    need(Load<__LINE__>(&f.BindTexture, "glBindTexture", &first_missing));
+    need(Load<__LINE__>(&f.ActiveTexture, "glActiveTexture", &first_missing));
+    need(Load<__LINE__>(&f.TexImage2D, "glTexImage2D", &first_missing));
+    need(Load<__LINE__>(&f.TexImage3D, "glTexImage3D", &first_missing));
+    need(Load<__LINE__>(&f.TexParameteri, "glTexParameteri", &first_missing));
+    need(Load<__LINE__>(&f.GenSamplers, "glGenSamplers", &first_missing));
+    need(Load<__LINE__>(&f.BindSampler, "glBindSampler", &first_missing));
+    need(Load<__LINE__>(&f.SamplerParameteri, "glSamplerParameteri", &first_missing));
+    need(Load<__LINE__>(&f.SamplerParameterf, "glSamplerParameterf", &first_missing));
+    need(Load<__LINE__>(&f.GenFramebuffers, "glGenFramebuffers", &first_missing));
+    need(Load<__LINE__>(&f.BindFramebuffer, "glBindFramebuffer", &first_missing));
+    need(Load<__LINE__>(&f.FramebufferTexture2D, "glFramebufferTexture2D", &first_missing));
+    need(Load<__LINE__>(&f.FramebufferRenderbuffer, "glFramebufferRenderbuffer", &first_missing));
+    need(Load<__LINE__>(&f.CheckFramebufferStatus, "glCheckFramebufferStatus", &first_missing));
+    need(Load<__LINE__>(&f.GenRenderbuffers, "glGenRenderbuffers", &first_missing));
+    need(Load<__LINE__>(&f.BindRenderbuffer, "glBindRenderbuffer", &first_missing));
+    need(Load<__LINE__>(&f.RenderbufferStorage, "glRenderbufferStorage", &first_missing));
+    need(Load<__LINE__>(&f.BlitFramebuffer, "glBlitFramebuffer", &first_missing));
+    LoadOptional<__LINE__>(&f.ClearDepthf, "glClearDepthf");
+    LoadOptional<__LINE__>(&f.ClearDepth, "glClearDepth");
+    LoadOptional<__LINE__>(&f.DepthRangef, "glDepthRangef");
+    LoadOptional<__LINE__>(&f.DepthRange, "glDepthRange");
+    LoadOptional<__LINE__>(&f.PolygonMode, "glPolygonMode");
     if (ok && f.ClearDepthf == nullptr && f.ClearDepth == nullptr)
     {
         first_missing = "glClearDepth";
@@ -170,6 +211,30 @@ void GlClearDepth(float depth)
     {
         g_gl.ClearDepth(static_cast<GLdouble>(depth));
     }
+}
+
+bool GlCallCountingEnabled()
+{
+    static const bool enabled = [] {
+        const char* value = std::getenv("REXBOX_GL_CALLS");
+        return value != nullptr && value[0] != '\0' && value[0] != '0';
+    }();
+    return enabled;
+}
+
+std::vector<std::pair<const char*, uint64_t>> TakeGlCallCounts()
+{
+    std::vector<std::pair<const char*, uint64_t>> counts;
+    for (CallCounter& counter : g_counters)
+    {
+        if (counter.count != 0)
+        {
+            counts.emplace_back(counter.name, counter.count);
+            counter.count = 0;
+        }
+    }
+    std::sort(counts.begin(), counts.end(), [](const auto& a, const auto& b) { return a.second > b.second; });
+    return counts;
 }
 
 void InvalidateGlStateCache()

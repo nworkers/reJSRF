@@ -26,6 +26,33 @@ constexpr size_t kTrackedBytes = 8 * 1024;
 GLuint g_vertex_array = 0;
 uint32_t g_vertex_array_epoch = 0;
 
+// What the draw vertex array holds per attribute (vertex array state, so it
+// survives other code binding its own arrays). The pointers are forgotten
+// when a buffer is deleted: its name may come back for a new buffer while
+// the array still refers to the old one.
+struct AttributeState
+{
+    bool pointed = false;
+    GLuint buffer = 0;
+    int size = 0;
+    uint32_t type = 0;
+    bool normalized = false;
+    uint32_t stride = 0;
+    size_t offset = 0;
+};
+constexpr uint32_t kAttributes = 16;
+AttributeState g_attributes[kAttributes];
+uint32_t g_enabled_attributes = 0;  // enable bits the array holds
+uint32_t g_named_attributes = 0;    // named since the last FinishAttributes
+
+void ForgetAttributePointers()
+{
+    for (AttributeState& attribute : g_attributes)
+    {
+        attribute.pointed = false;
+    }
+}
+
 // A buffer binding the draws change, valid while `epoch` is the GL state
 // epoch. The element binding belongs to the vertex array object, which only
 // the draws use.
@@ -205,6 +232,7 @@ void Sweep(Map* map, uint32_t frame, Binding* binding)
                 binding->epoch = 0;
             }
             gl.DeleteBuffers(1, &it->second.buffer);
+            ForgetAttributePointers();
             it = map->erase(it);
         }
         else
@@ -222,6 +250,9 @@ void BindDrawVertexArray()
     if (g_vertex_array == 0)
     {
         gl.GenVertexArrays(1, &g_vertex_array);
+        // A new array has every attribute disabled and unpointed.
+        ForgetAttributePointers();
+        g_enabled_attributes = 0;
     }
     else if (g_vertex_array_epoch == GlStateEpoch())
     {
@@ -230,6 +261,43 @@ void BindDrawVertexArray()
     gl.BindVertexArray(g_vertex_array);
     g_vertex_array_epoch = GlStateEpoch();
     g_element_binding.epoch = 0;  // re-sent with the next index data
+}
+
+void SetAttribute(uint32_t index, int size, uint32_t type, bool normalized, uint32_t stride, size_t offset)
+{
+    GlFunctions& gl = Gl();
+    const uint32_t bit = 1u << index;
+    g_named_attributes |= bit;
+    if ((g_enabled_attributes & bit) == 0)
+    {
+        gl.EnableVertexAttribArray(index);
+        g_enabled_attributes |= bit;
+    }
+    AttributeState& a = g_attributes[index];
+    const GLuint buffer = g_array_binding.buffer;
+    if (a.pointed && a.buffer == buffer && a.size == size && a.type == type && a.normalized == normalized &&
+        a.stride == stride && a.offset == offset)
+    {
+        return;
+    }
+    gl.VertexAttribPointer(index, size, type, normalized ? 1 : 0, static_cast<GLsizei>(stride),
+                           reinterpret_cast<const void*>(offset));
+    a = {true, buffer, size, type, normalized, stride, offset};
+}
+
+void FinishAttributes()
+{
+    GlFunctions& gl = Gl();
+    uint32_t unused = g_enabled_attributes & ~g_named_attributes;
+    for (uint32_t index = 0; unused != 0; ++index, unused >>= 1)
+    {
+        if ((unused & 1) != 0)
+        {
+            gl.DisableVertexAttribArray(index);
+        }
+    }
+    g_enabled_attributes &= g_named_attributes;
+    g_named_attributes = 0;
 }
 
 size_t PrepareVertexData(uint32_t address, size_t bytes, bool cacheable)

@@ -11,6 +11,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace rexbox::hle::d3d8
 {
@@ -257,6 +259,12 @@ void GlDepthRange(float near_value, float far_value);
 // texture uploads, object creation) calls InvalidateGlStateCache, and each
 // cache compares the epoch it was filled in with GlStateEpoch.
 void InvalidateGlStateCache();
+
+// REXBOX_GL_CALLS=1: every GL entry point is called through a counting
+// wrapper (diagnostic). TakeGlCallCounts returns the calls since the last
+// take by entry point, most first, and starts counting again.
+bool GlCallCountingEnabled();
+std::vector<std::pair<const char*, uint64_t>> TakeGlCallCounts();
 uint32_t GlStateEpoch();
 
 }  // namespace rexbox::hle::d3d8
