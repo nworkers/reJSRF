@@ -54,6 +54,16 @@
    * 다른 본문 안 42, 명령 경계 아님 28, 섹션 밖 4, 기타 2
    * "다른 본문 안" 46쌍 중 35쌍은 alias 본문이 자기 시작 앞쪽으로 되돌아가는 분기다(**추정**: alias 구조의 한계).
 10. **게임 진행 확인**(사용자): New Game 뒤 첫 대화가 끝난 다음의 화면 전환이 전에는 제대로 되지 않았는데, i055 빌드에서는 제대로 된다. 되찾은 7개 중 어느 함수 덕분인지는 따로 확인하지 않았다.
+11. **원인 함수 가리기**(사용자 플레이):
+    * 생성 코드를 `gen/jsrf_us_stubtest`로 복사했다. 일부 함수 본문 맨 앞에 `RECOMP_UNRESOLVED_STUB(va); g_esp += 4; return;`을 넣어 i055 전 스텁과 같게 했다. 이것을 별도 빌드(`build/win32_x86_stubtest`)로 만들었다.
+    * 7개 모두 되돌림: 원래 증상이 재현됐다. 보고는 `0x54750`, `0xA5B60`이었다.
+    * `0xA5B60`만 되돌림: 증상이 달라졌지만 해결되지 않았다.
+    * 결론: `0xA5B60`이 필요하다(**확인됨**). 달라진 증상은 `0x54750` 때문이다(**추정**).
+    * PowerShell의 `2>` 리디렉션은 로그를 UTF-16으로 저장한다. 그래서 처음에 `grep`이 보고를 찾지 못했다.
+12. **`0x352D0`**: 1차 시험 로그에 `indirect call to 000352D0 has no target`이 있었다.
+    * 표 `0x1EC288`의 10번 칸인 진짜 함수가 alias 범위 안에 묻혀 디스패치 항목이 없었다. i055 평소 빌드에서도 같다.
+    * `observed` seed로 넣고 다시 생성했다. 디스패치 항목이 하나 늘었고(9,203), 스텁은 76개 그대로다.
+    * 데모 프레임은 세 번 실행 중 첫 번째에서 3,000·4,800이 달랐다. 빌드 직후라 기계가 바빴던 탓으로 본다. 나머지 두 번은 6장 모두 기준과 같았다.
 
 ## 검증
 
@@ -65,6 +75,8 @@
 | 프레임 덤프 6장 | 바꾸기 전과 바이트 단위로 같음 |
 | Win32 Debug / Release 빌드 | 성공, 경고 0 |
 | 게임 진행(사용자) | New Game 뒤 첫 대화 다음 화면 전환이 고쳐짐 |
+| 원인 시험(사용자) | `0xA5B60`만 스텁: 해결 안 됨(증상 달라짐), 7개 모두 스텁: 원래 증상 |
+| `0x352D0` seed 뒤 | 디스패치 +1(9,203), 데모 프레임 6장 같음(3회 중 2회, 1회는 흔들림), 회귀 도구 통과 |
 | 회귀 도구(Debug, Release) | kernel 56/56, d3d8 116/116, dsound 48/48, d3d8 check 14,018/0, decomp check 6/0 |
 
 ## upstream PR 초안 (보류)
@@ -159,6 +171,16 @@ Checking whether the XBE → C lift was complete showed that the 83 unresolved s
    * 35 of the 46 caller-target pairs inside another body are an alias body branching back before its own start (**inferred**: a limit of aliases)
 
 10. **Play check** (user): after New Game, the screen transition after the first dialogue did not work before and works in the i055 build. Which of the seven recovered functions fixed it was not checked separately.
+11. **Telling which function** (user play):
+    * The generated code was copied to `gen/jsrf_us_stubtest`. Some function bodies were made to start with `RECOMP_UNRESOLVED_STUB(va); g_esp += 4; return;`, the stub of before i055, and this was built separately (`build/win32_x86_stubtest`).
+    * All seven turned back: the original symptom returned; the reports were `0x54750` and `0xA5B60`.
+    * Only `0xA5B60` turned back: the symptom changed but was not resolved.
+    * So `0xA5B60` is required (**confirmed**), and the changed symptom comes from `0x54750` (**inferred**).
+    * PowerShell's `2>` redirection writes the log as UTF-16, which is why `grep` first found no reports.
+12. **`0x352D0`**: the first test log had `indirect call to 000352D0 has no target`.
+    * A real function, entry 10 of the table `0x1EC288`, lay inside an alias range and had no dispatch entry; the i055 build is the same.
+    * It was added as an `observed` seed and the code regenerated: one more dispatch entry (9,203), still 76 stubs.
+    * In the first of three runs, demo frames 3,000 and 4,800 differed, taken to be the machine being busy right after a build; the other two runs matched the baseline in all six.
 
 ## Verification
 
@@ -167,6 +189,8 @@ Checking whether the XBE → C lift was complete showed that the 83 unresolved s
 * Logos and demo for 95 s: `0x54750` ran more than 1,000 times; no stub reports.
 * Six frame dumps: byte-identical to before.
 * Play (user): the screen transition after the first dialogue following New Game is fixed.
+* Cause test (user): with only `0xA5B60` as a stub, not resolved (the symptom changed); with all seven, the original symptom.
+* After the `0x352D0` seed: one more dispatch entry (9,203); demo frames identical in two of three runs (one run jittered); regression tools pass.
 * Win32 Debug and Release builds succeed with zero warnings.
 * Regression tools in both configurations: kernel 56/56, D3D8 116/116, DSOUND 48/48, d3d8 check 14,018/0, decomp check 6/0.
 
