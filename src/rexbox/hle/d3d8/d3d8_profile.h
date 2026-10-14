@@ -45,6 +45,9 @@ void CountCompare(size_t bytes);
 // A GL program made for a draw: compiled and linked from source, or (cached)
 // created from a stored program binary; `elapsed` is the time it took.
 void CountProgram(bool cached, std::chrono::steady_clock::duration elapsed);
+// A compiled program written to the binary cache; `elapsed` covers getting
+// the binary and writing the entry, which CountProgram does not.
+void CountProgramStore(std::chrono::steady_clock::duration elapsed);
 // Called once per present with the present's number; prints a report every
 // n presents and starts or stops sampling.
 void EndFrame(uint32_t frame);

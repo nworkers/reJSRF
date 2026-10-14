@@ -209,18 +209,18 @@ uint32_t LoadCachedProgram(const std::string& vertex_source, const std::string& 
     return program;
 }
 
-void StoreProgram(uint32_t program, const std::string& vertex_source, const std::string& fragment_source)
+bool StoreProgram(uint32_t program, const std::string& vertex_source, const std::string& fragment_source)
 {
     if (!ProgramCacheEnabled())
     {
-        return;
+        return false;
     }
     GlFunctions& gl = Gl();
     GLint length = 0;
     gl.GetProgramiv(program, kGlProgramBinaryLength, &length);
     if (length <= 0)
     {
-        return;
+        return false;
     }
     std::vector<char> binary(static_cast<size_t>(length));
     GLsizei written = 0;
@@ -228,7 +228,7 @@ void StoreProgram(uint32_t program, const std::string& vertex_source, const std:
     gl.GetProgramBinary(program, length, &written, &format, binary.data());
     if (written <= 0)
     {
-        return;
+        return false;
     }
     std::vector<char> out(kMagic, kMagic + 4);
     PutU32(&out, kLayoutVersion);
@@ -241,15 +241,32 @@ void StoreProgram(uint32_t program, const std::string& vertex_source, const std:
     const std::filesystem::path path = EntryPath(vertex_source, fragment_source);
     std::filesystem::path temporary = path;
     temporary += ".tmp";
-    {
-        std::ofstream file(temporary, std::ios::binary | std::ios::trunc);
-        if (!file.write(out.data(), static_cast<std::streamsize>(out.size())))
-        {
-            return;
-        }
-    }
+    // Closed and checked before the rename: a flush failing in the
+    // destructor would otherwise publish a truncated entry.
+    std::ofstream file(temporary, std::ios::binary | std::ios::trunc);
+    file.write(out.data(), static_cast<std::streamsize>(out.size()));
+    file.close();
     std::error_code error;
-    std::filesystem::rename(temporary, path, error);
+    const char* failed = nullptr;
+    if (!file)
+    {
+        failed = "cannot be written";
+    }
+    else
+    {
+        std::filesystem::rename(temporary, path, error);
+        failed = error ? "cannot be renamed" : nullptr;
+    }
+    if (failed != nullptr)
+    {
+        std::error_code ignored;
+        std::filesystem::remove(temporary, ignored);
+        ReportOnce("shader cache store",
+                   Format("shader cache entry %s %s%s%s; programs not stored are compiled again on the next run",
+                          temporary.string().c_str(), failed, error ? ": " : "", error ? error.message().c_str() : ""));
+        return false;
+    }
+    return true;
 }
 
 }  // namespace rexbox::hle::d3d8

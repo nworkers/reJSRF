@@ -26,9 +26,11 @@ bool ProgramCacheEnabled();
 // A linked program made from the stored binary of these sources, or 0.
 uint32_t LoadCachedProgram(const std::string& vertex_source, const std::string& fragment_source);
 
-// Stores a program linked from these sources. The program must have been
-// linked with the retrievable hint (MarkProgramRetrievable).
-void StoreProgram(uint32_t program, const std::string& vertex_source, const std::string& fragment_source);
+// Stores a program linked from these sources; true when an entry was
+// written. The program must have been linked with the retrievable hint
+// (MarkProgramRetrievable). A failure is reported once and leaves no
+// temporary file; the program itself is unaffected.
+bool StoreProgram(uint32_t program, const std::string& vertex_source, const std::string& fragment_source);
 
 // Asks the driver, before linking, to keep the program's binary.
 void MarkProgramRetrievable(uint32_t program);
