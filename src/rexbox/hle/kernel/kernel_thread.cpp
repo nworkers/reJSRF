@@ -45,7 +45,7 @@ void OnThreadStart(void* context)
     t_current = thread;
     char name[40];
     std::snprintf(name, sizeof(name), "thread %u (%08X)", thread->id, launch->function);
-    runtime::NoteThreadName(name);
+    runtime::NoteThreadName(name, thread->id);
     std::unique_lock<std::mutex> lock(thread->gate);
     const runtime::ScopedWait note("thread start (created suspended)", nullptr, 0, false, -1);
     thread->resumed.wait(lock, [thread] { return thread->suspend_count <= 0; });
@@ -366,8 +366,55 @@ KernelThread* CurrentThread()
     return t_current;
 }
 
+namespace
+{
+
+// For the stall report: what the kernel knows of a guest thread. Other
+// threads' suspensions only count (NtSuspendThread), so a count above zero on
+// a running thread is worth seeing.
+std::string DescribeThread(uint32_t id)
+{
+    std::shared_ptr<KernelThread> thread;
+    std::vector<uint32_t> handles;
+    {
+        std::lock_guard<std::mutex> lock(State().dispatcher);
+        const auto it = State().threads.find(id);
+        if (it == State().threads.end())
+        {
+            return "";
+        }
+        thread = it->second;
+        for (const auto& [handle, object] : State().handles)
+        {
+            if (object->kind == KernelObject::Kind::kThread && object->object == thread->ethread)
+            {
+                handles.push_back(handle);
+            }
+        }
+    }
+    int suspend_count = 0;
+    {
+        std::lock_guard<std::mutex> lock(thread->gate);
+        suspend_count = thread->suspend_count;
+    }
+    char text[96];
+    std::snprintf(text, sizeof(text), "ethread %08X, suspend count %d, base priority %d", thread->ethread,
+                  suspend_count, static_cast<int8_t>(Memory().Read8(thread->ethread + L::kThreadBasePriority)));
+    std::string described = text;
+    std::sort(handles.begin(), handles.end());
+    for (size_t i = 0; i < handles.size(); ++i)
+    {
+        std::snprintf(text, sizeof(text), "%s%X", i == 0 ? ", handles " : " ", handles[i]);
+        described += text;
+    }
+    return described;
+}
+
+}  // namespace
+
 void RegisterThreadExports(runtime::HleRegistry& registry)
 {
+    runtime::SetThreadDescriber(&DescribeThread);
     registry.AddExport("kernel", "PsCreateSystemThreadEx", &PsCreateSystemThreadEx);
     registry.AddExport("kernel", "PsTerminateSystemThread", &PsTerminateSystemThread);
     registry.AddExport("kernel", "KeDelayExecutionThread", &KeDelayExecutionThread);

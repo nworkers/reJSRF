@@ -46,6 +46,15 @@ flowchart LR
   * "running"인데 마지막 HLE가 오래됐다면, 게스트 코드가 HLE를 부르지 않고 돌고 있다는 뜻이다(돌기 또는 무한 루프).
 * **비용**: HLE 호출마다 thread_local 필드 몇 개를 쓴다(원자적 저장). 보고는 정지 때만 한다. 그래서 기본으로 켠다.
 
+### 2.1 추가(첫 사용자 보고 뒤)
+
+첫 보고에서는 present 스레드가 XAPI 래퍼(`GetThreadPriority`) 안에서 도는 것까지만 보였다. 어느 루프인지 알 수 없어서 다음을 더했다.
+
+* **추정 호출 스택**: HLE에 들어올 때의 esp를 기록한다. 보고할 때 그 위 2 KiB에서 call 명령 바로 뒤를 가리키는 값(`E8`, `FF 15`, `FF /2`의 레지스터·메모리 형식)을 안쪽부터 최대 8개 쓴다. 추정이므로 오래된 스택 값이 섞일 수 있다.
+* **커널 스레드 설명**: 커널이 등록한 함수가 스레드 id로 ETHREAD, suspend count, 기본 우선순위, 그 스레드를 가리키는 핸들을 준다.
+  * 다른 스레드에 대한 `NtSuspendThread`는 횟수만 세므로, "running"인데 suspend count가 0보다 큰 스레드가 보인다.
+* **`REXBOX_STALL_DUMP=<파일>`**: 보고할 때 게스트 주소 공간(128 MiB)을 저장한다. 게임 변수(스레드 핸들, 플래그)를 나중에 읽기 위해서다.
+
 ## 3. 검증
 
 | 검증 | 기대 |
@@ -87,6 +96,15 @@ flowchart LR
   * It checks every second, reports once per stall, and writes `[stall] presents resumed after X s` when presents come back.
 * **Report format** (stderr): as above, one header line and a line per thread. A thread that is "running" with an old last HLE call is executing guest code without calling the HLE (spinning, or an endless loop).
 * **Cost**: a few thread_local fields written per HLE call (atomic stores); reports only on a stall. So it is on by default.
+
+### 2.1 Added (after the first user report)
+
+The first report showed only that the presenting thread was running inside an XAPI wrapper (`GetThreadPriority`), not in which loop. So these were added:
+
+* **A guessed call stack**: the esp at HLE entry is recorded. The report writes, innermost first, up to 8 values from the 2 KiB above it that point just past a call instruction (`E8`, `FF 15`, or `FF /2` with a register or memory operand). It is a guess, and stale stack values can appear.
+* **Kernel thread description**: a function the kernel registers gives, by thread id, the ETHREAD, suspension count, base priority and the handles that refer to the thread.
+  * `NtSuspendThread` on another thread only counts, so a "running" thread with a count above zero can show.
+* **`REXBOX_STALL_DUMP=<file>`**: writes the guest address space (128 MiB) when reporting, to read the title's variables (thread handles, flags) afterwards.
 
 ## 3. Verification
 

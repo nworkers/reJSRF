@@ -393,10 +393,7 @@ recomp_func_t recomp_lookup_manual(uint32_t xbox_va)
         const rexbox::runtime::HleExport* bound = registry->LookupExport(xbox_va);
         if (bound != nullptr)
         {
-            const uint32_t esp = rexbox_recomp_get_gpr(4);
-            rexbox::runtime::GuestMemory* memory = bridge::BridgeMemory();
-            rexbox::runtime::NoteHleEntry(bound->symbol.c_str(),
-                                          memory != nullptr && memory->IsValid(esp, 4) ? memory->Read32(esp) : 0);
+            rexbox::runtime::NoteHleEntry(bound->symbol.c_str(), rexbox_recomp_get_gpr(4));
         }
         return bound == nullptr ? nullptr : bound->thunk;
     }
@@ -416,12 +413,7 @@ void rexbox_hle_enter(RexboxHleSlot* slot)
     }
     if (slot->state == 1)
     {
-        {
-            const uint32_t esp = rexbox_recomp_get_gpr(4);
-            rexbox::runtime::GuestMemory* memory = bridge::BridgeMemory();
-            rexbox::runtime::NoteHleEntry(slot->name,
-                                          memory != nullptr && memory->IsValid(esp, 4) ? memory->Read32(esp) : 0);
-        }
+        rexbox::runtime::NoteHleEntry(slot->name, rexbox_recomp_get_gpr(4));
         bridge::CheckWatchedHeap(slot->name);
         bridge::CheckWatchedDwords(slot->name);
         // Diagnostic: REXBOX_HLE_TRACE=<n> logs the first n HLE entries (default 4000).
