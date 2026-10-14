@@ -76,7 +76,6 @@ constexpr GLenum kGlUnsignedInt248 = 0x84FA;
 // Buffers.
 constexpr GLenum kGlArrayBuffer = 0x8892;
 constexpr GLenum kGlElementArrayBuffer = 0x8893;
-constexpr GLenum kGlCopyWriteBuffer = 0x8F37;
 constexpr GLenum kGlStreamDraw = 0x88E0;
 constexpr GLenum kGlStaticDraw = 0x88E4;
 
@@ -197,7 +196,6 @@ struct GlFunctions
     void(REXBOX_GL_APIENTRY* BufferSubData)(GLenum target, GLintptr offset, GLsizeiptr size,
                                             const void* data) = nullptr;
     void(REXBOX_GL_APIENTRY* GenVertexArrays)(GLsizei n, GLuint* arrays) = nullptr;
-    void(REXBOX_GL_APIENTRY* DeleteVertexArrays)(GLsizei n, const GLuint* arrays) = nullptr;
     void(REXBOX_GL_APIENTRY* BindVertexArray)(GLuint array) = nullptr;
     void(REXBOX_GL_APIENTRY* EnableVertexAttribArray)(GLuint index) = nullptr;
     void(REXBOX_GL_APIENTRY* DisableVertexAttribArray)(GLuint index) = nullptr;

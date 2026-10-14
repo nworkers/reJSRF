@@ -418,35 +418,30 @@ void ApplyFixedState(const FixedState& s)
 }
 
 // `base` is the vertex data's offset in the streaming vertex buffer.
-// The fixed-function attribute locations (attr::) for an FVF layout.
-VertexInput FixedFunctionInput(const VertexLayout& layout, uint32_t stride)
+void SetVertexAttributes(const VertexLayout& layout, uint32_t stride, size_t base)
 {
-    VertexInput input;
-    input.stride = stride;
-    const auto attribute = [&input](uint32_t index, int offset, int size, GLenum type, bool normalized) {
+    const auto attribute = [stride, base](uint32_t index, int offset, GLint size, GLenum type, bool normalized) {
         if (offset != kAbsent)
         {
-            input.Add(index, size, type, normalized, static_cast<uint32_t>(offset));
+            SetAttribute(index, size, type, normalized, stride, base + static_cast<size_t>(offset));
         }
     };
-    attribute(attr::kPosition, 0, static_cast<int>(layout.position_components), kGlFloat, false);
+    attribute(attr::kPosition, 0, static_cast<GLint>(layout.position_components), kGlFloat, false);
     attribute(attr::kDiffuse, layout.diffuse, 4, kGlUnsignedByte, true);
     attribute(attr::kSpecular, layout.specular, 4, kGlUnsignedByte, true);
     for (uint32_t i = 0; i < kMaxTexCoords; ++i)
     {
-        attribute(attr::kTexCoord0 + i, layout.tex_offset[i], static_cast<int>(layout.tex_components[i]), kGlFloat,
+        attribute(attr::kTexCoord0 + i, layout.tex_offset[i], static_cast<GLint>(layout.tex_components[i]), kGlFloat,
                   false);
     }
-    return input;
+    FinishAttributes();
 }
 
 // Vertex attributes v0..v15 of a vertex-shader program from its declaration
 // (stream 0, `stride` bytes per vertex). Registers the program reads but the
 // declaration leaves out keep GL's default (0, 0, 0, 1).
-VertexInput ProgramInput(const vsh::Declaration& declaration, uint32_t stride, uint32_t used_inputs)
+void SetProgramAttributes(const vsh::Declaration& declaration, uint32_t stride, uint32_t used_inputs, size_t base)
 {
-    VertexInput input;
-    input.stride = stride;
     for (const vsh::VertexElement& element : declaration.elements)
     {
         if ((used_inputs & (1u << element.reg)) == 0 || element.stream != 0)
@@ -472,9 +467,10 @@ VertexInput ProgramInput(const vsh::Declaration& declaration, uint32_t stride, u
             normalized = true;
             break;
         }
-        input.Add(element.reg, static_cast<int>(element.components), type, normalized, element.offset);
+        SetAttribute(element.reg, static_cast<int>(element.components), type, normalized, stride,
+                     base + static_cast<size_t>(element.offset));
     }
-    return input;
+    FinishAttributes();
 }
 
 // One draw of `count` vertices or indices; vertex numbers are relative to
@@ -610,6 +606,7 @@ void Draw(const char* name, uint32_t primitive, uint32_t count, IndexSource indi
     lap.Mark(profile::Phase::kSetup);
     BindRenderTarget(state.render_target, state.depth_target);
     lap.Mark(profile::Phase::kTarget);
+    BindDrawVertexArray();
     DrawIndices index_data;
     const bool arrays = indices.address == 0 && primitive != prim::kQuadList;
     if (indices.address != 0)
@@ -650,11 +647,16 @@ void Draw(const char* name, uint32_t primitive, uint32_t count, IndexSource indi
                    Format("%s: vertices %08X+%X are outside guest memory", name, begin, bytes));
         return;
     }
-    const VertexData vertex_data = PrepareVertexData(begin, bytes, source.from_buffer);
+    const size_t vertex_offset = PrepareVertexData(begin, bytes, source.from_buffer);
     lap.Mark(profile::Phase::kUpload);
-    BindVertexInput(is_program ? ProgramInput(shader->declaration, stride, vertex_program->used_inputs)
-                               : FixedFunctionInput(layout, stride),
-                    vertex_data, arrays ? nullptr : &index_data);
+    if (is_program)
+    {
+        SetProgramAttributes(shader->declaration, stride, vertex_program->used_inputs, vertex_offset);
+    }
+    else
+    {
+        SetVertexAttributes(layout, stride, vertex_offset);
+    }
     lap.Mark(profile::Phase::kAttributes);
 
     const uint32_t width = RenderTargetWidth();
