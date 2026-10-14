@@ -520,6 +520,17 @@ void recomp_icall_fail_log(uint32_t va)
     }
 }
 
+// An unresolved-target stub ran: the disassembler did not find a function at
+// va, so the code there was skipped.
+void recomp_unresolved_stub_log(uint32_t va)
+{
+    if (bridge::BridgeFirstTimeAt(va))
+    {
+        std::fprintf(stderr, "[recomp] unresolved stub %08X called; its code was skipped (returns to %08X)\n", va,
+                     bridge::BridgeReturnAddress());
+    }
+}
+
 void recomp_icall_not_code_log(uint32_t va)
 {
     if (bridge::BridgeFirstTimeAt(va))

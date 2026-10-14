@@ -28,6 +28,7 @@ flowchart LR
 * [DSOUND: 게임이 부르는 함수, 원본 의미, 효과 이미지, 부팅에서 본 호출](dsound.md)
 * [프레임 시간: 오프닝 3D 데모의 한 프레임 구성, CPU 작업의 내역, 측정 시 주의점](frame-time.md)
 * [lift되지 않은 명령: 남은 종류, 실제로 실행되는 것, MXCSR 검사](unlifted-instructions.md)
+* [미해결 스텁: 실행 중 보고, 되찾은 함수, 남은 스텁의 분류](unresolved-stubs.md)
 
 ---
 
@@ -50,3 +51,4 @@ Labels:
 * [DSOUND: the functions the game calls, their original meaning, the effects image, calls seen during boot](dsound.md)
 * [Frame time: what a frame of the opening 3D demo is made of, the CPU work, what to watch when measuring](frame-time.md)
 * [Unlifted instructions: the remaining kinds, the ones that run, the MXCSR check](unlifted-instructions.md)
+* [Unresolved stubs: reporting at run time, recovered functions, the remaining stubs](unresolved-stubs.md)

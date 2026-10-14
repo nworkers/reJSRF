@@ -49,6 +49,9 @@ if(EXISTS "${REJSRF_RECOMP_GEN_DIR}/recomp_dispatch.c")
     if(REJSRF_RECOMP_ABI_CHECK)
         target_compile_definitions(rejsrf_recomp PRIVATE RECOMP_ABI_CHECK)
     endif()
+    # An unresolved-target stub that runs reports itself once
+    # (recomp_unresolved_stub_log in rexbox_recomp, design i055).
+    target_compile_definitions(rejsrf_recomp PRIVATE RECOMP_STUB_REPORT)
     target_link_libraries(rejsrf_recomp PUBLIC rexbox_recomp)
 
     # Decompiled sources include the generated declarations.
