@@ -54,13 +54,18 @@ i055와 같은 pass 순서 문제의 `jcc` 판이었다. 디스어셈블러 수�
    * fork의 `fix/cond-branch-into-body`(`58f7166..7c58ec6`)와 `rejsrf`(`2e73f7c..1991221`)를 올렸다.
    * PR #200은 커밋 5개가 됐고, 제목은 `disasm, recomp: re-examine branches of bodies made after the tail-jump pass`로 바꿨다.
    * 본문에 `jcc`(§2)와 lifter(§3) 내용, 테스트 목록을 더했다.
+8. **간접 호출 누락 `0x1FD10`**(사용자 플레이 로그, [unresolved-stubs §2c](../analysis/unresolved-stubs.md)):
+   * 표 `0x1EBC80`(78칸)의 23번 칸이다. 같은 표의 81번 칸 `0x20F10`도 빠져 있었다.
+   * 둘 다 인라인 바이트 표 뒤의 함수라, i017부터 있던 포인터 seed가 "명령 한가운데"로 거절되고 있었다.
+   * `observed` seed로 넣었다. 다시 생성하자 디스패치가 2개 늘었고(9,215), 거절된 seed와 `find_pointer_targets.py` 후보는 0개가 됐다.
+   * 데모 2회는 `[recomp]` 0건, 프레임 6장이 같았다. Debug/Release 빌드와 회귀 도구도 통과했다.
 
 ## 검증
 
 | 검증 | 결과 |
 |---|---|
 | xboxrecomp `pytest tools/recomp tools/disasm` | PR 브랜치 526 통과·38 건너뜀, `rejsrf` 548 통과·42 건너뜀 |
-| 다시 생성(seed 포함) | 9,213 함수(실패 0), 스텁 74, 디스패치는 늘기만 함 |
+| 다시 생성(seed 포함) | 9,215 함수(실패 0), 스텁 74, 디스패치는 늘기만 함, 거절된 seed 0, 포인터 후보 0 |
 | 데모 95초 4회 | `[recomp]` 0건, 프레임 6장 3회 같음(1회 흔들림) |
 | Win32 Debug / Release 빌드 | 성공, 경고 0 |
 | 회귀 도구(Debug, Release) | kernel 56/56, d3d8 116/116, dsound 48/48, d3d8 check 14,018/0, decomp check 6/0 |
@@ -128,11 +133,16 @@ Results:
    * The fork's `fix/cond-branch-into-body` (`58f7166..7c58ec6`) and `rejsrf` (`2e73f7c..1991221`) were pushed.
    * PR #200 now has five commits and is titled `disasm, recomp: re-examine branches of bodies made after the tail-jump pass`.
    * Its description gained the `jcc` (§2) and lifter (§3) parts and the updated test list.
+8. **The missed indirect call `0x1FD10`** (user play log, [unresolved-stubs §2c](../analysis/unresolved-stubs.md)):
+   * It is entry 23 of table `0x1EBC80` (78 entries); entry 81 of the same table, `0x20F10`, was missing too.
+   * Both follow an inline byte table, so the pointer seeds in place since i017 were refused as mid-instruction.
+   * They became `observed` seeds. Regenerating added two dispatch entries (9,215), and left no refused seeds and no `find_pointer_targets.py` candidates.
+   * Two demo runs: no `[recomp]` reports, six frames identical; Debug and Release builds and the regression tools pass.
 
 ## Verification
 
 * xboxrecomp `pytest tools/recomp tools/disasm`: the PR branch 526 passed, 38 skipped; `rejsrf` 548 passed, 42 skipped.
-* Regeneration with seeds: 9,213 functions (0 failed), 74 stubs, dispatch only grows.
+* Regeneration with seeds: 9,215 functions (0 failed), 74 stubs, dispatch only grows, no refused seeds, no pointer candidates.
 * Four 95 s demo runs: no `[recomp]` reports; the six frames identical in three runs (one jittered).
 * Win32 Debug and Release builds succeed with zero warnings.
 * Regression tools in both configurations: kernel 56/56, D3D8 116/116, DSOUND 48/48, d3d8 check 14,018/0, decomp check 6/0.

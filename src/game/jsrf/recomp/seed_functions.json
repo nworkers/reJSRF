@@ -21,5 +21,7 @@
   {"start": "0x0007BE30", "observed": true, "note": "vtable slot (.data 0x0020D2B8) called from 0x0007BDDB at run time; follows sub_0007BDD0's switch tables, which the sweep decoded as code, so the plain seed was rejected as mid-instruction (issue #19)"},
   {"start": "0x000352D0", "observed": true, "note": "entry 10 of the function table 0x001EC288, called from 0x00025768 at run time (New Game play); follows an inline byte table inside the alias sub_000348A0, so it had no dispatch entry and the call was skipped (issue #55)"},
   {"start": "0x001783FE", "note": "path of the stdcall method sub_001783D0 (ret 0xc) forwarding to [ecx+0x20], reached by je from that alias body; also recovered by the late conditional-branch pass (issue #58)"},
-  {"start": "0x001296C7", "note": "shared epilogue (add esp, 0xc04; ret) of the virtual method 0x00129180, reached by je from its switch arm 0x00129367; also recovered by the late conditional-branch pass (issue #58)"}
+  {"start": "0x001296C7", "note": "shared epilogue (add esp, 0xc04; ret) of the virtual method 0x00129180, reached by je from its switch arm 0x00129367; also recovered by the late conditional-branch pass (issue #58)"},
+  {"start": "0x0001FD10", "observed": true, "note": "entry 23 of the function table 0x001EBC80, called from 0x00023769 at run time (play); follows an inline byte table, so the sweep decoded through it and the plain seed in seed_pointer_targets.json was rejected as mid-instruction (issue #58)"},
+  {"start": "0x00020F10", "observed": true, "note": "entry 81 of the same table 0x001EBC80; same shape as 0x0001FD10 (inline byte table, three nops, aligned function), so marked like it although not yet seen called; the plain seed was rejected the same way (issue #58)"}
 ]

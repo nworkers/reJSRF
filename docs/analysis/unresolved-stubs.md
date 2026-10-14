@@ -60,6 +60,20 @@
   * `discover_jump_table_entries`가 새로 만든 case를 다시 검사하게 했다. 또 복구된 본문에는 "case가 모두 범위 안이면 건너뜀"을 적용하지 않는다.
   * 디스패치는 늘기만 한다(9,203 → 9,213, seed 포함).
 
+## 2c. 거절되던 포인터 seed: `0x1FD10`, `0x20F10` (i058)
+
+* **확인됨**(사용자 플레이 로그): `[recomp] indirect call to 0001FD10 has no target; skipped (returns to 00023770)`.
+  * `0x23769`의 `call [eax*4 + 0x1ebc80]`이 부른다. 표 `0x1EBC80`은 객체 종류별 처리 함수 표로, 78칸이다.
+  * `0x1FD10`은 23번 칸, `0x20F10`은 81번 칸이다. 둘 다 디스패치에 없었다. 나머지 76칸은 디스패치에 있다.
+  * 두 함수 모두 앞 함수 끝의 인라인 바이트 표, nop 3개, 16바이트 정렬 함수 순서로 놓여 있다.
+  * 선형 스윕이 바이트 표를 명령으로 읽어 정렬이 어긋났다. `0x1FD0C`의 명령 하나가 `0x1FD10`의 시작을 덮었다.
+* **확인됨**: 두 주소는 i017부터 `seed_pointer_targets.json`에 있었다. 그러나 "이미 디코드된 명령 한가운데"라는 이유로 매번 거절됐다(생성 로그의 `Rejected 2 seed(s)`).
+  * 즉 i055나 i058 때문에 생긴 회귀가 아니다. i055 전에도 디스패치에 없었다.
+* **고침**: `seed_functions.json`에 `observed` seed로 넣었다(`0x7BE30`, `0x352D0`과 같은 모양).
+  * `0x1FD10`은 실행에서 관측됐다.
+  * `0x20F10`은 같은 표, 같은 모양이라 정적 판단으로 함께 표시했다. 아직 불리는 것은 보지 못했다.
+  * 다시 생성하자 디스패치가 2개 늘었고(9,215), 거절된 seed는 0개가 됐다. `find_pointer_targets.py`의 후보도 0개다.
+
 ## 3. 남은 76개의 분류 (정적)
 
 (i058 뒤에는 74개다. `0x1783FE`, `0x1296C7`이 빠졌다.)
@@ -146,6 +160,20 @@ An **unresolved stub** is an address that lifted code calls or jumps to but the 
   * It worked only while a neighbouring gap body happened to supply the entries. Once the `jcc` fix made that region one alias, 12 dispatch entries disappeared.
   * `discover_jump_table_entries` now scans the arms it adds, and a recovered body no longer gets the "all arms in range" skip.
   * The dispatch table only grows (9,203 → 9,213, with the seeds).
+
+## 2c. Pointer seeds that were refused: `0x1FD10`, `0x20F10` (i058)
+
+* **Confirmed** (user play log): `[recomp] indirect call to 0001FD10 has no target; skipped (returns to 00023770)`.
+  * The caller is `call [eax*4 + 0x1ebc80]` at `0x23769`. Table `0x1EBC80` holds the handler for each object kind and has 78 entries.
+  * `0x1FD10` is entry 23 and `0x20F10` entry 81; neither had a dispatch entry. The other 76 entries do.
+  * Both are laid out as an inline byte table at the end of the previous function, three nops, then a function aligned to 16.
+  * The linear sweep decoded the byte table as instructions and lost alignment; an instruction at `0x1FD0C` covered the start of `0x1FD10`.
+* **Confirmed**: both addresses had been in `seed_pointer_targets.json` since i017, but were refused each time as "inside an already-decoded instruction" (`Rejected 2 seed(s)` in the generation log).
+  * So this is not a regression from i055 or i058; they were missing before i055 too.
+* **Fixed**: both are `observed` seeds in `seed_functions.json`, the same shape as `0x7BE30` and `0x352D0`.
+  * `0x1FD10` was observed in a run.
+  * `0x20F10`, in the same table with the same shape, is marked by static judgement; it has not been seen called yet.
+  * Regenerating added two dispatch entries (9,215) and left no refused seeds; `find_pointer_targets.py` finds no candidates.
 
 ## 3. The remaining 76 (static)
 
