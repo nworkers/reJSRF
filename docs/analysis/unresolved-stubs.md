@@ -19,6 +19,8 @@
 * 그중 `0x00054750`은 데모의 매 프레임 실행된다. 상태 표 `0x1F9888`의 처리 함수 `0x0005BB31`이 그 함수로 tail jump한다.
 * xboxrecomp fork의 `_pass_late_tail_jumps`가 무조건 `jmp`인 6개(0x54750, 0x75E90, 0xA5B60, 0xB8A60, 0xC67A0, 0x11B680)와 `0x1295BC`를 alias로 되찾았다. 남은 스텁은 76개다.
 * **확인됨**: 다시 생성한 뒤 `0x54750`이 실행된다(데모 95초에 1,000번 이상). 프레임 300·1,200·2,400·3,000·3,600·4,800은 바이트 단위로 같았다.
+* **확인됨**(사용자 플레이, i055 빌드): New Game 뒤 첫 대화가 끝난 다음의 화면 전환이 전에는 제대로 되지 않았다. 지금은 제대로 된다.
+  * **미확정**: 되찾은 7개 가운데 어느 함수 덕분인지. `0x54750`은 상태 표 `0x1F9888`의 처리 함수에서 넘어오므로 후보지만 따로 확인하지 않았다.
 * `0x22F30`은 조건 분기(`jcc`)로만 닿아서 이 pass의 대상이 아니다. 남은 76개 중 "다른 본문 안"에 들어 있다.
 
 ## 3. 남은 76개의 분류 (정적)
@@ -65,6 +67,8 @@ An **unresolved stub** is an address that lifted code calls or jumps to but the 
 * One of them, `0x00054750`, runs every demo frame: the handler `0x0005BB31` in the state table `0x1F9888` tail-jumps to it.
 * The xboxrecomp fork's `_pass_late_tail_jumps` recovered the six reached by an unconditional `jmp` (0x54750, 0x75E90, 0xA5B60, 0xB8A60, 0xC67A0, 0x11B680) and `0x1295BC` as aliases, leaving 76 stubs.
 * **Confirmed**: after regenerating, `0x54750` runs (more than 1,000 times in 95 s of the demo), and frames 300, 1,200, 2,400, 3,000, 3,600 and 4,800 are byte-identical.
+* **Confirmed** (user play, i055 build): after New Game, the screen transition that follows the first dialogue did not work before and now does.
+  * **Unresolved**: which of the seven recovered functions fixed it. `0x54750` is a candidate, being reached from a handler in the state table `0x1F9888`, but this was not checked separately.
 * `0x22F30` is reached only by a conditional branch (`jcc`), so it is outside this pass; it is among the remaining 76, inside another body.
 
 ## 3. The remaining 76 (static)

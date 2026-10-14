@@ -53,6 +53,8 @@
    * 다른 본문 안 42, 명령 경계 아님 28, 섹션 밖 4, 기타 2
    * "다른 본문 안" 46쌍 중 35쌍은 alias 본문이 자기 시작 앞쪽으로 되돌아가는 분기다(**추정**: alias 구조의 한계).
 
+10. **게임 진행 확인**(사용자): New Game 뒤 첫 대화가 끝난 다음의 화면 전환이 전에는 제대로 되지 않았는데, i055 빌드에서는 제대로 된다. 되찾은 7개 중 어느 함수 덕분인지는 따로 확인하지 않았다.
+
 ## 검증
 
 | 검증 | 결과 |
@@ -62,6 +64,7 @@
 | 로고·데모 95초 | `0x54750` 1,000번 이상 실행, 스텁 보고 0 |
 | 프레임 덤프 6장 | 바꾸기 전과 바이트 단위로 같음 |
 | Win32 Debug / Release 빌드 | 성공, 경고 0 |
+| 게임 진행(사용자) | New Game 뒤 첫 대화 다음 화면 전환이 고쳐짐 |
 | 회귀 도구(Debug, Release) | kernel 56/56, d3d8 116/116, dsound 48/48, d3d8 check 14,018/0, decomp check 6/0 |
 
 ## upstream PR 초안 (보류)
@@ -154,12 +157,15 @@ Checking whether the XBE → C lift was complete showed that the 83 unresolved s
    * 42 inside another body, 28 off an instruction boundary, 4 outside every section, 2 others
    * 35 of the 46 caller-target pairs inside another body are an alias body branching back before its own start (**inferred**: a limit of aliases)
 
+10. **Play check** (user): after New Game, the screen transition after the first dialogue did not work before and works in the i055 build. Which of the seven recovered functions fixed it was not checked separately.
+
 ## Verification
 
 * xboxrecomp `pytest tools/recomp tools/disasm`: `fix/late-tail-jumps` 519 passed, 38 skipped; `feat/stub-report` 508 passed, 40 skipped; `rejsrf` 541 passed, 42 skipped.
 * Regeneration: 9,202 functions (0 failed), 76 stubs.
 * Logos and demo for 95 s: `0x54750` ran more than 1,000 times; no stub reports.
 * Six frame dumps: byte-identical to before.
+* Play (user): the screen transition after the first dialogue following New Game is fixed.
 * Win32 Debug and Release builds succeed with zero warnings.
 * Regression tools in both configurations: kernel 56/56, D3D8 116/116, DSOUND 48/48, d3d8 check 14,018/0, decomp check 6/0.
 
