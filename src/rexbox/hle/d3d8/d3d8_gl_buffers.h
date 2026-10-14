@@ -20,6 +20,14 @@ namespace rexbox::hle::d3d8
 // Binds the vertex array object the draws use. Call before preparing data.
 void BindDrawVertexArray();
 
+// The attributes of the draw vertex array object, sent only where they
+// differ from what the previous draw left (enable bits, and per attribute the
+// buffer, format, stride and offset). SetAttribute points `index` at
+// `offset` in the bound array buffer and enables it; FinishAttributes
+// disables the enabled attributes no SetAttribute named since the last call.
+void SetAttribute(uint32_t index, int size, uint32_t type, bool normalized, uint32_t stride, size_t offset);
+void FinishAttributes();
+
 // Puts `bytes` vertex bytes from guest `address` in a GL buffer and binds it
 // as the array buffer. `cacheable` ranges (from a vertex buffer) are kept
 // and reused while the guest bytes stay the same; others are streamed.

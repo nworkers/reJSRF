@@ -420,17 +420,11 @@ void ApplyFixedState(const FixedState& s)
 // `base` is the vertex data's offset in the streaming vertex buffer.
 void SetVertexAttributes(const VertexLayout& layout, uint32_t stride, size_t base)
 {
-    GlFunctions& gl = Gl();
-    const auto attribute = [&gl, stride, base](uint32_t index, int offset, GLint size, GLenum type,
-                                               bool normalized) {
-        if (offset == kAbsent)
+    const auto attribute = [stride, base](uint32_t index, int offset, GLint size, GLenum type, bool normalized) {
+        if (offset != kAbsent)
         {
-            gl.DisableVertexAttribArray(index);
-            return;
+            SetAttribute(index, size, type, normalized, stride, base + static_cast<size_t>(offset));
         }
-        gl.EnableVertexAttribArray(index);
-        gl.VertexAttribPointer(index, size, type, normalized ? 1 : 0, static_cast<GLsizei>(stride),
-                               reinterpret_cast<const void*>(base + static_cast<uintptr_t>(offset)));
     };
     attribute(attr::kPosition, 0, static_cast<GLint>(layout.position_components), kGlFloat, false);
     attribute(attr::kDiffuse, layout.diffuse, 4, kGlUnsignedByte, true);
@@ -440,6 +434,7 @@ void SetVertexAttributes(const VertexLayout& layout, uint32_t stride, size_t bas
         attribute(attr::kTexCoord0 + i, layout.tex_offset[i], static_cast<GLint>(layout.tex_components[i]), kGlFloat,
                   false);
     }
+    FinishAttributes();
 }
 
 // Vertex attributes v0..v15 of a vertex-shader program from its declaration
@@ -447,8 +442,6 @@ void SetVertexAttributes(const VertexLayout& layout, uint32_t stride, size_t bas
 // declaration leaves out keep GL's default (0, 0, 0, 1).
 void SetProgramAttributes(const vsh::Declaration& declaration, uint32_t stride, uint32_t used_inputs, size_t base)
 {
-    GlFunctions& gl = Gl();
-    uint32_t enabled = 0;
     for (const vsh::VertexElement& element : declaration.elements)
     {
         if ((used_inputs & (1u << element.reg)) == 0 || element.stream != 0)
@@ -474,18 +467,10 @@ void SetProgramAttributes(const vsh::Declaration& declaration, uint32_t stride, 
             normalized = true;
             break;
         }
-        gl.EnableVertexAttribArray(element.reg);
-        gl.VertexAttribPointer(element.reg, element.components, type, normalized ? 1 : 0, static_cast<GLsizei>(stride),
-                               reinterpret_cast<const void*>(base + static_cast<uintptr_t>(element.offset)));
-        enabled |= 1u << element.reg;
+        SetAttribute(element.reg, static_cast<int>(element.components), type, normalized, stride,
+                     base + static_cast<size_t>(element.offset));
     }
-    for (uint32_t reg = 0; reg < vsh::kInputs; ++reg)
-    {
-        if ((enabled & (1u << reg)) == 0)
-        {
-            gl.DisableVertexAttribArray(reg);
-        }
-    }
+    FinishAttributes();
 }
 
 // One draw of `count` vertices or indices; vertex numbers are relative to

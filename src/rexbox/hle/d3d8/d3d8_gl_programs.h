@@ -41,6 +41,7 @@ private:
 
     std::vector<Entry> entries_;
     std::vector<float> array_;
+    std::vector<uint32_t> chain_;  // per element: where its run of consecutive locations starts
     uint64_t array_version_ = 0;
 };
 

@@ -1,5 +1,8 @@
 #include "d3d8_profile.h"
 
+#include "d3d8_gl.h"
+#include "d3d8_trace.h"
+
 #include "rexbox/platform/host_thread.h"
 #include "rexbox/platform/sampler.h"
 
@@ -195,6 +198,22 @@ void EndFrame(uint32_t frame)
                  per_frame(Phase::kTarget), per_frame(Phase::kUpload), per_frame(Phase::kAttributes),
                  per_frame(Phase::kConstants), per_frame(Phase::kTextures), per_frame(Phase::kState),
                  per_frame(Phase::kDraw), per_frame(Phase::kPresent), per_frame(Phase::kWait), wall - measured);
+    if (GlCallCountingEnabled())
+    {
+        // REXBOX_GL_CALLS=1: GL calls per frame, by entry point.
+        uint64_t total = 0;
+        const auto counts = TakeGlCallCounts();
+        for (const auto& [name, count] : counts)
+        {
+            total += count;
+        }
+        std::string line = Format("[d3d8 profile] gl calls %.0f/frame:", static_cast<double>(total) / frames);
+        for (size_t i = 0; i < counts.size() && i < 16; ++i)
+        {
+            line += Format(" %s %.0f", counts[i].first, static_cast<double>(counts[i].second) / frames);
+        }
+        std::fprintf(stderr, "%s\n", line.c_str());
+    }
     g_window_start = now;
     g_window_cpu_ns = cpu_ns;
     g_phases = {};
