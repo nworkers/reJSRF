@@ -119,6 +119,10 @@ bool LoadGlFunctions(GlFunctions* functions, std::string* missing)
     need(Load<__LINE__>(&f.GetProgramiv, "glGetProgramiv", &first_missing));
     need(Load<__LINE__>(&f.GetProgramInfoLog, "glGetProgramInfoLog", &first_missing));
     need(Load<__LINE__>(&f.UseProgram, "glUseProgram", &first_missing));
+    need(Load<__LINE__>(&f.DeleteProgram, "glDeleteProgram", &first_missing));
+    LoadOptional<__LINE__>(&f.GetProgramBinary, "glGetProgramBinary");
+    LoadOptional<__LINE__>(&f.ProgramBinary, "glProgramBinary");
+    LoadOptional<__LINE__>(&f.ProgramParameteri, "glProgramParameteri");
     need(Load<__LINE__>(&f.GetUniformLocation, "glGetUniformLocation", &first_missing));
     need(Load<__LINE__>(&f.Uniform1i, "glUniform1i", &first_missing));
     need(Load<__LINE__>(&f.Uniform1f, "glUniform1f", &first_missing));

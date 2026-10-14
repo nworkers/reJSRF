@@ -1,6 +1,8 @@
 #include "d3d8_gl_programs.h"
 
 #include "d3d8_gl.h"
+#include "d3d8_gl_program_cache.h"
+#include "d3d8_profile.h"
 #include "d3d8_trace.h"
 
 #include <cstdio>
@@ -75,6 +77,12 @@ GLuint Compile(GLenum type, const std::string& source, const std::string& key)
 // Compiles and links; 0 (reported once) on failure.
 GLuint Link(const std::string& vertex_source, const std::string& fragment_source, const std::string& id)
 {
+    const auto started = std::chrono::steady_clock::now();
+    if (const GLuint cached = LoadCachedProgram(vertex_source, fragment_source); cached != 0)
+    {
+        profile::CountProgram(true, std::chrono::steady_clock::now() - started);
+        return cached;
+    }
     GlFunctions& gl = Gl();
     const GLuint vertex = Compile(kGlVertexShader, vertex_source, id);
     const GLuint fragment = Compile(kGlFragmentShader, fragment_source, id);
@@ -93,6 +101,7 @@ GLuint Link(const std::string& vertex_source, const std::string& fragment_source
     const GLuint program = gl.CreateProgram();
     gl.AttachShader(program, vertex);
     gl.AttachShader(program, fragment);
+    MarkProgramRetrievable(program);
     gl.LinkProgram(program);
     gl.DeleteShader(vertex);
     gl.DeleteShader(fragment);
@@ -107,6 +116,8 @@ GLuint Link(const std::string& vertex_source, const std::string& fragment_source
         ReportOnce("link " + id, Format("program for key %s does not link: %s", id.c_str(), log.data()));
         return 0;
     }
+    profile::CountProgram(false, std::chrono::steady_clock::now() - started);
+    StoreProgram(program, vertex_source, fragment_source);
     return program;
 }
 

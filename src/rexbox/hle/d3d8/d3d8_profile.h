@@ -42,6 +42,9 @@ void CountDraw(bool program);
 void CountUpload(size_t vertex_bytes, size_t index_bytes);
 // Guest bytes compared with a cached copy to find out whether they changed.
 void CountCompare(size_t bytes);
+// A GL program made for a draw: compiled and linked from source, or (cached)
+// created from a stored program binary; `elapsed` is the time it took.
+void CountProgram(bool cached, std::chrono::steady_clock::duration elapsed);
 // Called once per present with the present's number; prints a report every
 // n presents and starts or stops sampling.
 void EndFrame(uint32_t frame);
