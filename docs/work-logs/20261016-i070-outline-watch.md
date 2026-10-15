@@ -29,6 +29,15 @@
 * 사용자 첫 플레이 로그에 감시 줄이 없었다. 플레이에서는 데모 핸들이 쓰이지 않는다.
 * `REXBOX_VSH_WATCH=all`을 더했다. Debug 데모 150초에서 19개 핸들 × 4줄 = 76줄이 나왔다.
 
+## 추가: 프레임 캡처 (설계 §2.2)
+
+* 두 번째 플레이 로그: 윤곽선 셰이더 `66950913`, `66942593`의 `c[97] = (0.08, 0, 0, 1)`이다. 데모와 같고 거의 검정이다. 흰 테두리는 윤곽선 그리기의 상수 탓이 아니다.
+* `d3d8_capture.h/.cpp`, 플랫폼 `ConsumeCaptureRequest`(SDL: F9), `REXBOX_CAPTURE_FRAME`을 더했다.
+* 검증:
+  * Release/Debug 빌드에서 경고가 없다.
+  * 데모 `REXBOX_CAPTURE_FRAME=4650`에서 275개 호출 목록과 BMP가 나왔다.
+  * 보이는 창에 PowerShell `SendKeys`로 보낸 F9는 게임에 닿지 않았다(활성화는 성공). 실제 키보드 확인은 사용자에게 맡긴다.
+
 ## 남은 것
 
 * 사용자 보고를 받아 원인을 정하고, 이 issue에 수정 설계를 이어 쓴다.
@@ -65,6 +74,15 @@ Design: [20261016-i070](../design/20261016-i070-outline-watch.md) · Work order:
 
 * The user's first play log had no watch lines; play does not use the demo's handles.
 * Added `REXBOX_VSH_WATCH=all`. A 150 s Debug demo run printed 19 handles × 4 lines = 76 lines.
+
+## Added: frame capture (design §2.2)
+
+* Second play log: outline shaders `66950913` and `66942593` have `c[97] = (0.08, 0, 0, 1)`, as in the demo and almost black. The white rim is not caused by the outline draw's constants.
+* Added `d3d8_capture.h/.cpp`, the platform's `ConsumeCaptureRequest` (SDL: F9) and `REXBOX_CAPTURE_FRAME`.
+* Verification:
+  * No warnings in the Release and Debug builds.
+  * The demo with `REXBOX_CAPTURE_FRAME=4650` wrote a 275-call list and a BMP.
+  * F9 sent by PowerShell `SendKeys` to the visible window did not reach the game (activation succeeded); checking with a real keyboard is left to the user.
 
 ## Left
 

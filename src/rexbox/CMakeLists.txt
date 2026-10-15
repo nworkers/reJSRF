@@ -86,6 +86,7 @@ target_link_libraries(rexbox_hle_xinput PUBLIC rexbox_runtime)
 add_library(rexbox_hle_d3d8 STATIC
     hle/d3d8/d3d8_adapter.cpp
     hle/d3d8/d3d8_caps.cpp
+    hle/d3d8/d3d8_capture.cpp
     hle/d3d8/d3d8_device.cpp
     hle/d3d8/d3d8_ff_shader.cpp
     hle/d3d8/d3d8_fvf.cpp

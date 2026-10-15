@@ -11,6 +11,7 @@
 // draw set (docs/design/20261013-i040-draw-performance.md). The immediate-mode
 // Begin/End path is reported once and not drawn yet.
 
+#include "d3d8_capture.h"
 #include "d3d8_draw_watch.h"
 #include "d3d8_ff_shader.h"
 #include "d3d8_fvf.h"
@@ -703,6 +704,10 @@ void Draw(const char* name, uint32_t primitive, uint32_t count, IndexSource indi
     if (!state.display_created || count == 0)
     {
         return;
+    }
+    if (CaptureActive())
+    {
+        CaptureDraw(name, primitive, count);
     }
     const PipelineState& pipeline = Pipeline();
     const bool is_program = (pipeline.vertex_shader & fvf::kProgramHandle) != 0;

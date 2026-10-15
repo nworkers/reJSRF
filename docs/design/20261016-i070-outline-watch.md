@@ -34,6 +34,15 @@
 * 사용자 플레이(첫 시도)에서는 `[vsh watch]` 줄이 하나도 나오지 않았다. 데모의 세 핸들이 플레이에서는 쓰이지 않는다(**확인됨**). 플레이는 셰이더를 따로 만든다.
 * `all`이면 모든 프로그램 핸들을 기본 범위로 감시하되, 핸들마다 4줄까지만 쓴다. `REXBOX_SHADER_DUMP=1`과 함께 실행하면 핸들을 마이크로코드와 맞출 수 있다.
 
+### 2.2 추가: 프레임 캡처 (F9)
+
+* 두 번째 플레이 로그(`all`)에서 플레이의 윤곽선 셰이더는 `66950913`, `66942593`이었고, 색은 `c[97] = (0.08, 0, 0, 1)`로 데모와 같았다(**확인됨**). 윤곽선 그리기의 상수는 원인이 아니다.
+* 흰 테두리를 그리는 그리기를 찾아야 한다. 그래서 프레임 하나의 모든 Clear·그리기와 상태를 남기는 캡처를 둔다.
+  * 창에서 **F9**를 누르면 다음 프레임을 캡처한다. 플랫폼 계약은 `ConsumeCaptureRequest()` 하나만 더한다.
+  * 결과: `capture_<프레임>.txt`(호출 순서, 셰이더, 렌더 타깃, 컬링, 깊이, 블렌드, 알파 테스트, 스텐실, 색 쓰기, 텍스처 팩터, 포그, 조명, 스테이지·텍스처·형식, 프로그램이면 `c[97..98]`), `capture_<프레임>.bmp`. 위치는 `REXBOX_FRAME_DUMP_DIR`이다.
+  * `REXBOX_CAPTURE_FRAME=<n>`은 키 없이 n번째 프레임을 캡처한다(창 없는 실행, 검증용).
+  * 위치: `d3d8_capture.h/.cpp`. 꺼져 있으면 그리기마다 bool 하나다.
+
 ## 3. 검증
 
 | 검증 | 기대 |
@@ -75,6 +84,15 @@
 
 * The user's first play run printed no `[vsh watch]` line: the demo's three handles are not used in play (**confirmed**), which creates its own shaders.
 * `all` watches every program handle with the default range, at most 4 lines each. Run with `REXBOX_SHADER_DUMP=1` to match handles to their microcode.
+
+### 2.2 Added: frame capture (F9)
+
+* The second play log (`all`) showed play's outline shaders are `66950913` and `66942593`, with `c[97] = (0.08, 0, 0, 1)` as in the demo (**confirmed**). The outline draw's constants are not the cause.
+* The draw that paints the white rim has to be found, so a capture records every Clear and draw of one frame with its state.
+  * Pressing **F9** in the window captures the next frame. The platform contract gains only `ConsumeCaptureRequest()`.
+  * Output: `capture_<frame>.txt` (call order, shaders, render target, culling, depth, blending, alpha test, stencil, color writes, texture factor, fog, lighting, stages with textures and formats, and `c[97..98]` for programs) and `capture_<frame>.bmp`, in `REXBOX_FRAME_DUMP_DIR`.
+  * `REXBOX_CAPTURE_FRAME=<n>` captures frame n without the key (windowless runs, verification).
+  * Location: `d3d8_capture.h/.cpp`; when off, one bool per draw.
 
 ## 3. Verification
 

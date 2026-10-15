@@ -78,6 +78,10 @@ void* GetGlProcAddress(const char* name);
 // to close the window (the caller decides what that means).
 void PumpDisplayEvents(bool* close_requested);
 
+// True once after the user pressed F9 (a diagnostic capture request; the
+// caller decides what to capture). Seen by PumpDisplayEvents.
+bool ConsumeCaptureRequest();
+
 // Swaps the back buffer to the window (no vertical sync; the caller paces) and
 // counts the present for the title's FPS.
 void PresentDisplay();

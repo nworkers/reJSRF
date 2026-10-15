@@ -11,6 +11,7 @@
 
 #include <SDL3/SDL.h>
 
+#include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <mutex>
@@ -37,6 +38,7 @@ struct SdlDisplay
 
 std::mutex g_mutex;
 SdlDisplay g_display;
+std::atomic<bool> g_capture_requested{false};
 std::string g_title;  // SetDisplayTitle; outlives the display
 
 void SetError(std::string* error, const char* what)
@@ -274,6 +276,10 @@ void PumpDisplayEvents(bool* close_requested)
                 break;
             }
         }
+        else if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat && event.key.key == SDLK_F9)
+        {
+            g_capture_requested.store(true);
+        }
         else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN && event.button.button == SDL_BUTTON_LEFT &&
                  event.button.clicks == 2)
         {
@@ -289,6 +295,11 @@ void PumpDisplayEvents(bool* close_requested)
     {
         *close_requested = close;
     }
+}
+
+bool ConsumeCaptureRequest()
+{
+    return g_capture_requested.exchange(false);
 }
 
 void PresentDisplay()
