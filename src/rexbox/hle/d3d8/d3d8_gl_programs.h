@@ -56,6 +56,17 @@ struct FixedFunctionProgram
     int world_view = -1;
     int normal_matrix = -1;
     int tex_matrix[kFixedFunctionStages] = {-1, -1, -1, -1};
+    // Lighting.
+    int material = -1;
+    int material_power = -1;
+    int ambient = -1;
+    int light_diffuse = -1;
+    int light_specular = -1;
+    int light_ambient = -1;
+    int light_position = -1;
+    int light_direction = -1;
+    int light_attenuation = -1;
+    int light_cone = -1;
     mutable UniformCache uniforms;
 };
 

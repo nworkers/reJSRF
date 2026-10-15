@@ -245,18 +245,75 @@ void D3DDevice_SetScreenSpaceOffset()
     call.Return(kD3dOk, 2);
 }
 
-// Setters whose arguments describe fixed-function lighting or material; the
-// values are accepted (lit draws are logged and drawn unlit, d3d8_draw).
-void AcceptOne()
+Light* LightAt(uint32_t index)
 {
-    HleCall call;
-    call.Return(kD3dOk, 1);
+    if (index >= kMaxLights)
+    {
+        ReportOncePer("light index", 0, [index] { return Format("light index %u is beyond the lights kept", index); });
+        return nullptr;
+    }
+    if (index >= g_pipeline.lights.size())
+    {
+        g_pipeline.lights.resize(index + 1);
+    }
+    return &g_pipeline.lights[index];
 }
 
-void AcceptTwo()
+void ReadFloats(GuestAddress address, float* out, uint32_t count)
+{
+    std::memcpy(out, Memory().Translate(address), 4u * count);
+}
+
+// HRESULT D3DDevice_SetLight(DWORD Index, const D3DLIGHT8* pLight)
+void D3DDevice_SetLight()
 {
     HleCall call;
+    const GuestAddress source = call.Arg(1);
+    Light* light = LightAt(call.Arg(0));
+    if (light != nullptr && source != 0 && Memory().IsValid(source, 104))
+    {
+        light->type = Memory().Read32(source);
+        ReadFloats(source + 4, light->diffuse, 4);
+        ReadFloats(source + 20, light->specular, 4);
+        ReadFloats(source + 36, light->ambient, 4);
+        ReadFloats(source + 52, light->position, 3);
+        ReadFloats(source + 64, light->direction, 3);
+        ReadFloats(source + 76, &light->range, 1);
+        ReadFloats(source + 80, &light->falloff, 1);
+        ReadFloats(source + 84, light->attenuation, 3);
+        ReadFloats(source + 96, &light->theta, 1);
+        ReadFloats(source + 100, &light->phi, 1);
+    }
     call.Return(kD3dOk, 2);
+}
+
+// HRESULT D3DDevice_LightEnable(DWORD Index, BOOL bEnable)
+void D3DDevice_LightEnable()
+{
+    HleCall call;
+    Light* light = LightAt(call.Arg(0));
+    if (light != nullptr)
+    {
+        light->enabled = call.Arg(1) != 0;
+    }
+    call.Return(kD3dOk, 2);
+}
+
+// HRESULT D3DDevice_SetMaterial(const D3DMATERIAL8* pMaterial)
+void D3DDevice_SetMaterial()
+{
+    HleCall call;
+    const GuestAddress source = call.Arg(0);
+    if (source != 0 && Memory().IsValid(source, 68))
+    {
+        Material& material = g_pipeline.material;
+        ReadFloats(source, material.diffuse, 4);
+        ReadFloats(source + 16, material.ambient, 4);
+        ReadFloats(source + 32, material.specular, 4);
+        ReadFloats(source + 48, material.emissive, 4);
+        ReadFloats(source + 64, &material.power, 1);
+    }
+    call.Return(kD3dOk, 1);
 }
 
 void AcceptThree()
@@ -330,8 +387,9 @@ void RegisterStateExports(runtime::HleRegistry& registry)
     registry.AddExport("d3d8", "D3DDevice_SetPixelShader", &D3DDevice_SetPixelShader);
     registry.AddExport("d3d8", "D3DDevice_SetShaderConstantMode", &D3DDevice_SetShaderConstantMode);
     registry.AddExport("d3d8", "D3DDevice_SetScreenSpaceOffset", &D3DDevice_SetScreenSpaceOffset);
-    registry.AddExport("d3d8", "D3DDevice_SetMaterial", &AcceptOne);
-    registry.AddExport("d3d8", "D3DDevice_SetLight", &AcceptTwo);
+    registry.AddExport("d3d8", "D3DDevice_SetMaterial", &D3DDevice_SetMaterial);
+    registry.AddExport("d3d8", "D3DDevice_SetLight", &D3DDevice_SetLight);
+    registry.AddExport("d3d8", "D3DDevice_LightEnable", &D3DDevice_LightEnable);
     registry.AddExport("d3d8", "D3DDevice_SetScissors", &AcceptThree);
 }
 

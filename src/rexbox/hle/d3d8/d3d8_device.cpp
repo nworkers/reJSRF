@@ -764,7 +764,6 @@ void RegisterDeviceExports(runtime::HleRegistry& registry)
     registry.AddExport("d3d8", "D3DDevice_GetTexture2", &D3DDevice_GetTexture2);
     registry.AddExport("d3d8", "D3DDevice_SetTile", &D3DDevice_SetTile);
     registry.AddExport("d3d8", "D3DDevice_GetTile", &D3DDevice_GetTile);
-    registry.AddExport("d3d8", "D3DDevice_LightEnable", &AcceptTwoArguments);
     registry.AddExport("d3d8", "D3D_SetPushBufferSize", &AcceptTwoArguments);
     registry.AddExport("d3d8", "D3D_SetFence", &D3D_SetFence);
     registry.AddExport("d3d8", "D3D_BlockOnResource", &AcceptOneArgument);
