@@ -11,6 +11,7 @@
 // draw set (docs/design/20261013-i040-draw-performance.md). The immediate-mode
 // Begin/End path is reported once and not drawn yet.
 
+#include "d3d8_draw_watch.h"
 #include "d3d8_ff_shader.h"
 #include "d3d8_fvf.h"
 #include "d3d8_gl.h"
@@ -888,6 +889,10 @@ void Draw(const char* name, uint32_t primitive, uint32_t count, IndexSource indi
         UseProgram(vertex_program->program);
         uniforms = &vertex_program->uniforms;
         uniforms->SetArray4(vertex_program->constants, VertexShaderConstants(), VertexShaderConstantsVersion());
+        if (DrawWatchEnabled())
+        {
+            WatchProgramDraw(pipeline.vertex_shader, key);
+        }
         if (pixel_shader != nullptr)
         {
             SetPixelShaderUniforms(*uniforms, *pixel_shader, vertex_program->combiner);
