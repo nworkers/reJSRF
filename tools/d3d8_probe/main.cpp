@@ -706,9 +706,15 @@ void CheckPixelShaders()
     bump[psh::word::kTextureModes] = 0x000000C1;  // stage 1: BUMPENVMAP
     key.definition = bump;
     key.samplers[1] = SamplerKind::k2D;
-    psh::GenerateFragmentShader(key, false, &unsupported);
-    Expect(Contains(unsupported, "texture mode 6"), "bump environment mapping is reported");
+    key.bump_source_argb[0] = true;
+    const std::string bumped = psh::GenerateFragmentShader(key, false, &unsupported);
+    Expect(!Contains(unsupported, "texture mode 6"), "bump environment mapping is drawn");
+    Expect(Contains(bumped, "vec3 uvl1 = t0.bgr;") && Contains(bumped, "psh_signed(uvl1.xy)") &&
+               Contains(bumped, "dot(u_bump_mat[1].xz, dsdt1)") && Contains(bumped, "texture(u_tex1, bumped1)"),
+           "stage 1 offsets its coordinates by stage 0's signed U, V through its bump matrix");
     Expect(psh::TextureMode(bump, 1) == psh::texmode::kBumpEnvMap, "texture mode of stage 1");
+    key.bump_source_argb[0] = false;
+    key.samplers[1] = SamplerKind::kNone;
 
     // A pixel shader with fixed-function vertex processing: the draw builds
     // the key with every stage active, so the vertex shader writes each

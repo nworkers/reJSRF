@@ -187,6 +187,7 @@ bool Upload(GuestAddress header, CachedTexture* cached)
     gl.TexParameteri(target, kGlTextureBaseLevel, 0);
     gl.TexParameteri(target, kGlTextureMaxLevel, static_cast<GLint>(uploaded - 1));
     cached->bound.levels = uploaded;
+    cached->bound.format = format;
     cached->bound.kind = target == kGlTexture3D ? SamplerKind::k3D : SamplerKind::k2D;
     cached->bound.unnormalized = linear;
     TraceOnce(Format("upload %02X %u %u", format, cached->bound.width, cached->bound.height),

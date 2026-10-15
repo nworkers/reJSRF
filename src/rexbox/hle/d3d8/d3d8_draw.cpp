@@ -649,6 +649,14 @@ void SetLightingUniforms(const FixedFunctionProgram& program, const FixedFunctio
     uniforms.Set4fv(program.light_cone, count, &cone[0][0]);
 }
 
+// Formats laid out like A8R8G8B8 (blue in the low byte), whose bump aliases
+// (X8L8V8U8, ...) keep U in blue and V in green.
+bool IsArgbFamily(uint32_t format)
+{
+    return (format >= 0x02 && format <= 0x07) || (format >= 0x10 && format <= 0x12) ||
+           (format >= 0x1C && format <= 0x1E);
+}
+
 // The register-combiner constants of `definition` (stage and final
 // combiner, fog color) for a program linked with its fragment shader.
 void SetPixelShaderUniforms(UniformCache& uniforms, const psh::Definition& definition,
@@ -666,6 +674,24 @@ void SetPixelShaderUniforms(UniformCache& uniforms, const psh::Definition& defin
     float fog[4];
     ColorToFloats(RenderStateValue(rs::kFogColor), fog);
     uniforms.Set4fv(locations.fog_color, 1, fog);
+    if (locations.bump_mat >= 0 || locations.bump_lum >= 0)
+    {
+        // Each stage's own bump-environment states (Xbox: set on the stage
+        // that is perturbed; inferred).
+        float matrix[kFixedFunctionStages][4];
+        float luminance[kFixedFunctionStages][4] = {};
+        for (uint32_t s = 0; s < kFixedFunctionStages; ++s)
+        {
+            for (uint32_t i = 0; i < 4; ++i)
+            {
+                matrix[s][i] = FloatBits(TextureStateValue(s, tss::kBumpEnvMat00 + i));
+            }
+            luminance[s][0] = FloatBits(TextureStateValue(s, tss::kBumpEnvLScale));
+            luminance[s][1] = FloatBits(TextureStateValue(s, tss::kBumpEnvLOffset));
+        }
+        uniforms.Set4fv(locations.bump_mat, static_cast<int>(kFixedFunctionStages), &matrix[0][0]);
+        uniforms.Set4fv(locations.bump_lum, static_cast<int>(kFixedFunctionStages), &luminance[0][0]);
+    }
 }
 
 // One draw of `count` vertices or indices; vertex numbers are relative to
@@ -778,6 +804,14 @@ void Draw(const char* name, uint32_t primitive, uint32_t count, IndexSource indi
                 textures[s] = ResolveTexture(pipeline.textures[s]);
             }
             pixel_key.samplers[s] = textures[s].kind;
+            if (s + 1 < kFixedFunctionStages)
+            {
+                const uint32_t next = psh::TextureMode(*pixel_shader, s + 1);
+                if (next == psh::texmode::kBumpEnvMap || next == psh::texmode::kBumpEnvMapLum)
+                {
+                    pixel_key.bump_source_argb[s] = IsArgbFamily(textures[s].format);
+                }
+            }
             pixel_key.unnormalized[s] = textures[s].unnormalized;
             sampled[s] = textures[s].kind != SamplerKind::kNone;
         }

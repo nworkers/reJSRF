@@ -47,12 +47,23 @@ flowchart LR
 * X8 형식 타깃의 알파를 1로 읽게 하는 것. 필요해 보이면 사본에 swizzle을 둔다.
 * 텍스처 헤더와 타깃의 크기·형식이 다른 경우(일부만 보는 헤더 등). 보이면 보고를 보고 다룬다.
 
+
+### 2.4 추가(사용자 확인 뒤): BUMPENVMAP
+
+* 사용자 확인: 블러는 보이지만 어색하다. 로그에 `pixel shader drawn approximately: texture mode 6 (stage 1) sampled as 2D`가 있다(**확인됨**).
+* 픽셀 셰이더 10의 텍스처 모드는 `0xC1`이다. 0번 스테이지는 2D, 1번 스테이지는 BUMPENVMAP이다(**확인됨**, 정의 덤프). 부스트 효과는 0번 텍스처로 1번(화면 사본)의 좌표를 흔드는 왜곡으로 본다(**추정**).
+* 구현(D3D8 BUMPENVMAP 의미):
+  * 앞 스테이지 텍셀의 U, V를 부호 있는 바이트(−1..1)로 읽는다. 행렬 M(00, 01, 10, 11)로 돌려 이 스테이지의 좌표에 더한다: `u' = u + M00·du + M10·dv`, `v' = v + M01·du + M11·dv`.
+  * 휘도형(모드 7)은 결과에 `L·LSCALE + LOFFSET`(0..1로 자름)을 곱한다.
+* Xbox의 부호 있는 형식은 부호 없는 형식 코드를 같이 쓴다(X8L8V8U8 = X8R8G8B8, Q8W8V8U8 = A8B8G8R8; **추정**). 그래서 앞 스테이지 텍스처가 A8R8G8B8 계열이면 U, V, L을 파랑, 초록, 빨강에서, 그 밖이면 빨강, 초록, 파랑에서 읽는다(키 `bump_source_argb`).
+* 행렬은 흔들리는 스테이지(1번)의 텍스처 스테이지 상태에서 읽는다(**추정**).
+
 ## 3. 검증
 
 | 검증 | 기대 |
 |---|---|
 | Release/Debug 빌드, 회귀 도구 | 경고 0, 통과 |
-| `rexbox_d3d8_probe` | 기존 검사 통과(키 생성 변경) |
+| `rexbox_d3d8_probe` | 기존 검사 통과(키 생성 변경), BUMPENVMAP 조각 셰이더 검사 |
 | 데모 실행 | 화면과 프레임 시간이 이전과 같음 |
 | 사용자 플레이(부스트 대시) | 화면이 흐려짐. `samples render target` 보고 한 줄 |
 
@@ -101,11 +112,22 @@ The diagram above shows the flow: `ResolveTexture` sends a header whose data is 
 * Reading alpha as 1 from X8-format targets. If it turns out to matter, the copy gets a swizzle.
 * Headers whose size or format differs from the target's (a header over part of it, say). The report will show them.
 
+
+### 2.4 Added (after the user's check): BUMPENVMAP
+
+* The user's check: the blur shows but looks off. The log has `pixel shader drawn approximately: texture mode 6 (stage 1) sampled as 2D` (**confirmed**).
+* Pixel shader 10's texture modes are `0xC1`: stage 0 2D, stage 1 BUMPENVMAP (**confirmed**, definition dump). The boost effect is taken to be a distortion in which texture 0 shifts the coordinates of stage 1 (the screen copy) (**inferred**).
+* Implementation (D3D8 BUMPENVMAP semantics):
+  * The previous stage's U and V are read as signed bytes (−1..1), turned by the matrix M (00, 01, 10, 11) and added to this stage's coordinates: `u' = u + M00·du + M10·dv`, `v' = v + M01·du + M11·dv`.
+  * The luminance form (mode 7) also multiplies by `L·LSCALE + LOFFSET` (clamped to 0..1).
+* Xbox signed formats share codes with unsigned ones (X8L8V8U8 = X8R8G8B8, Q8W8V8U8 = A8B8G8R8; **inferred**). So when the previous stage's texture is of the A8R8G8B8 family, U, V and L come from blue, green and red, otherwise from red, green and blue (key `bump_source_argb`).
+* The matrix is read from the texture-stage states of the perturbed stage (1) (**inferred**).
+
 ## 3. Verification
 
 | Check | Expected |
 |---|---|
 | Release/Debug builds, regression tools | no warnings; pass |
-| `rexbox_d3d8_probe` | existing checks pass (key building changed) |
+| `rexbox_d3d8_probe` | existing checks pass (key building changed); a BUMPENVMAP fragment-shader check |
 | Demo run | picture and frame time as before |
 | User play (boost dash) | the screen blurs; one `samples render target` line |

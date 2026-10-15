@@ -54,6 +54,8 @@ struct CombinerLocations
     int final_c0 = -1;
     int final_c1 = -1;
     int fog_color = -1;
+    int bump_mat = -1;  // vec4[4]: BUMPENVMAT00, 01, 10, 11 per stage
+    int bump_lum = -1;  // vec4[4]: BUMPENVLSCALE, BUMPENVLOFFSET per stage
 };
 
 struct FixedFunctionProgram

@@ -25,6 +25,15 @@
 | 데모 95초(hidden, 오디오 끔) | 새 보고 없음. 60 fps. 프레임 4650 BMP가 변경 전과 바이트 단위로 같음 |
 | 사용자 플레이(부스트 대시) | 미검증. 데모는 오프스크린 타깃도, 픽셀 셰이더 + 고정 기능 그리기도 쓰지 않는다. 확인할 것: 화면이 흐려지는지, `samples render target` 줄, 셰이더 컴파일·링크 오류가 없는지 |
 
+## 추가: BUMPENVMAP (사용자 확인 뒤, 설계 §2.4)
+
+* 사용자 확인: 멈춤과 검은 화면은 해결됐다. 블러는 보이지만 어색하다. 로그에 픽셀 셰이더 10의 1번 스테이지 모드 6이 2D로 근사됐다는 보고가 있다.
+* `psh::GenerateFragmentShader`: BUMPENVMAP과 휘도형을 그린다. `u_bump_mat[4]`, `u_bump_lum[4]`, `psh_signed`를 쓴다. 키에 `bump_source_argb`, `BoundTexture`에 `format`을 더했다.
+* 그리기: 두 픽셀 셰이더 경로가 스테이지마다 bump 상태를 uniform으로 보낸다.
+* 검증: Debug 빌드 경고 없음. `rexbox_d3d8_probe` 160 check 0 failure(기존 "mode 6 보고" 검사를 "그림" 검사로 바꿈).
+  * Release 링크는 사용자 게임이 실행 중이라 이 시점에 하지 못했다.
+  * 실제 장면 확인은 사용자 플레이가 필요하다.
+
 ## 남은 것
 
 * X8 형식 타깃의 알파, 헤더와 타깃 크기가 다른 경우(설계 §2.3).
@@ -58,6 +67,15 @@ Design: [20261016-i069](../design/20261016-i069-render-target-sampling.md) · Wo
 | `rexbox_d3d8_probe` / `rejsrf_d3d8_check` / `rejsrf_decomp_check` | 159 checks, 0 failures / 14018 cases, 0 differences / 6 cases, 0 differences |
 | Demo, 95 s (hidden, audio off) | no new reports; 60 fps; the frame 4650 BMP is byte-identical to before |
 | User play (boost dash) | not verified. The demo uses neither off-screen targets nor pixel shaders with fixed-function draws. To check: the screen blurs; a `samples render target` line; no shader compile or link errors |
+
+## Added: BUMPENVMAP (after the user's check, design §2.4)
+
+* The user's check: the hang and the black screen are fixed; the blur shows but looks off. The log reports pixel shader 10's stage-1 mode 6 approximated as 2D.
+* `psh::GenerateFragmentShader` draws BUMPENVMAP and its luminance form with `u_bump_mat[4]`, `u_bump_lum[4]` and `psh_signed`. The key gained `bump_source_argb`, and `BoundTexture` gained `format`.
+* Draws: both pixel-shader paths send each stage's bump states as uniforms.
+* Verification: no Debug warnings; `rexbox_d3d8_probe` 160 checks, 0 failures (the "mode 6 is reported" check became "it is drawn").
+  * The Release link could not run at this point because the user's game was running.
+  * Checking the real scene needs the user's play.
 
 ## Left
 

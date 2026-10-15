@@ -26,6 +26,7 @@ struct BoundTexture
     uint32_t width = 0;
     uint32_t height = 0;
     uint32_t levels = 1;
+    uint32_t format = 0xFFFFFFFF;  // D3DFORMAT of the header; unknown for render targets
 };
 
 // The GL texture for the header bound to a stage (uploaded as needed).

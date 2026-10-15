@@ -72,6 +72,8 @@ CombinerLocations CombinerUniforms(GLuint program)
     locations.final_c0 = gl.GetUniformLocation(program, "u_final_c0");
     locations.final_c1 = gl.GetUniformLocation(program, "u_final_c1");
     locations.fog_color = gl.GetUniformLocation(program, "u_fog_color");
+    locations.bump_mat = gl.GetUniformLocation(program, "u_bump_mat");
+    locations.bump_lum = gl.GetUniformLocation(program, "u_bump_lum");
     return locations;
 }
 

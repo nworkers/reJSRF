@@ -62,6 +62,10 @@ struct Key
     Definition definition = {};
     SamplerKind samplers[4] = {SamplerKind::kNone, SamplerKind::kNone, SamplerKind::kNone, SamplerKind::kNone};
     bool unnormalized[4] = {};
+    // A stage whose texture feeds the next stage's BUMPENVMAP: true when its
+    // format is of the A8R8G8B8 family, where U, V and L sit in blue, green
+    // and red (X8L8V8U8); otherwise U, V, L are red, green, blue (Q8W8V8U8).
+    bool bump_source_argb[4] = {};
     uint32_t alpha_func = 0;  // 0: alpha test off; else 0x200 NEVER .. 0x207 ALWAYS
 
     std::string Serialize() const;
