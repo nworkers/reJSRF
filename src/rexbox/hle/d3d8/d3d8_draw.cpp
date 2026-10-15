@@ -5,10 +5,14 @@
 // (docs/design/20261012-i023-d3d8-fixed-function-draw.md section 3).
 // Vertex-shader programs are translated to GLSL (d3d8_vsh.h) and paired with
 // the fixed-function fragment stage or a register-combiner pixel shader
-// (d3d8_psh.h). GL state is sent only when it differs from what the previous
+// (d3d8_psh.h); a pixel shader with fixed-function vertex processing pairs the
+// fixed-function vertex stage with it (docs/design/20261016-i069-render-target-sampling.md).
+// GL state is sent only when it differs from what the previous
 // draw set (docs/design/20261013-i040-draw-performance.md). The immediate-mode
 // Begin/End path is reported once and not drawn yet.
 
+#include "d3d8_capture.h"
+#include "d3d8_draw_watch.h"
 #include "d3d8_ff_shader.h"
 #include "d3d8_fvf.h"
 #include "d3d8_gl.h"
@@ -145,7 +149,8 @@ bool GlPrimitive(uint32_t primitive, GLenum* mode)
 
 // Builds the fixed-function key from the vertex layout and the stage state;
 // binds each active stage's texture. Reports what this batch leaves out.
-FixedFunctionKey BuildKey(const VertexLayout& layout, BoundTexture textures[kFixedFunctionStages], bool program)
+FixedFunctionKey BuildKey(const VertexLayout& layout, BoundTexture textures[kFixedFunctionStages], bool program,
+                          bool pixel_shader)
 {
     const PipelineState& pipeline = Pipeline();
     FixedFunctionKey key;
@@ -164,20 +169,30 @@ FixedFunctionKey BuildKey(const VertexLayout& layout, BoundTexture textures[kFix
     for (uint32_t s = 0; s < kFixedFunctionStages; ++s)
     {
         FixedFunctionKey::Stage& stage = key.stages[s];
-        const uint32_t color_op = TextureStateValue(s, tss::kColorOp);
-        stage.color_op = color_op == 0 ? top::kDisable : color_op;
-        if (stage.color_op == top::kDisable)
+        if (pixel_shader)
         {
-            break;
+            // The pixel shader replaces the stage operations, but every
+            // stage's coordinates still come from vertex processing; a fixed
+            // operation keeps all four stages active in the vertex shader.
+            stage.color_op = top::kSelectArg1;
         }
-        stage.color_arg[0] = TextureStateValue(s, tss::kColorArg0);
-        stage.color_arg[1] = TextureStateValue(s, tss::kColorArg1);
-        stage.color_arg[2] = TextureStateValue(s, tss::kColorArg2);
-        stage.alpha_op = TextureStateValue(s, tss::kAlphaOp);
-        stage.alpha_arg[0] = TextureStateValue(s, tss::kAlphaArg0);
-        stage.alpha_arg[1] = TextureStateValue(s, tss::kAlphaArg1);
-        stage.alpha_arg[2] = TextureStateValue(s, tss::kAlphaArg2);
-        stage.result_arg = TextureStateValue(s, tss::kResultArg);
+        else
+        {
+            const uint32_t color_op = TextureStateValue(s, tss::kColorOp);
+            stage.color_op = color_op == 0 ? top::kDisable : color_op;
+            if (stage.color_op == top::kDisable)
+            {
+                break;
+            }
+            stage.color_arg[0] = TextureStateValue(s, tss::kColorArg0);
+            stage.color_arg[1] = TextureStateValue(s, tss::kColorArg1);
+            stage.color_arg[2] = TextureStateValue(s, tss::kColorArg2);
+            stage.alpha_op = TextureStateValue(s, tss::kAlphaOp);
+            stage.alpha_arg[0] = TextureStateValue(s, tss::kAlphaArg0);
+            stage.alpha_arg[1] = TextureStateValue(s, tss::kAlphaArg1);
+            stage.alpha_arg[2] = TextureStateValue(s, tss::kAlphaArg2);
+            stage.result_arg = TextureStateValue(s, tss::kResultArg);
+        }
         const uint32_t tex_coord_index = TextureStateValue(s, tss::kTexCoordIndex);
         stage.tex_coord_index = static_cast<uint8_t>(tex_coord_index & 0xFFFF);
         const uint32_t generation = tex_coord_index >> 16;
@@ -229,7 +244,7 @@ FixedFunctionKey BuildKey(const VertexLayout& layout, BoundTexture textures[kFix
         stage.unnormalized = textures[s].unnormalized;
     }
     key.specular_enable = RenderStateValue(rs::kSpecularEnable) != 0;
-    if (RenderStateValue(rs::kAlphaTestEnable) != 0)
+    if (!pixel_shader && RenderStateValue(rs::kAlphaTestEnable) != 0)
     {
         key.alpha_func = RenderStateValue(rs::kAlphaFunc);
     }
@@ -635,6 +650,51 @@ void SetLightingUniforms(const FixedFunctionProgram& program, const FixedFunctio
     uniforms.Set4fv(program.light_cone, count, &cone[0][0]);
 }
 
+// Formats laid out like A8R8G8B8 (blue in the low byte), whose bump aliases
+// (X8L8V8U8, ...) keep U in blue and V in green.
+bool IsArgbFamily(uint32_t format)
+{
+    return (format >= 0x02 && format <= 0x07) || (format >= 0x10 && format <= 0x12) ||
+           (format >= 0x1C && format <= 0x1E);
+}
+
+// The register-combiner constants of `definition` (stage and final
+// combiner, fog color) for a program linked with its fragment shader.
+void SetPixelShaderUniforms(UniformCache& uniforms, const psh::Definition& definition,
+                            const CombinerLocations& locations)
+{
+    float c0[psh::kStages][4];
+    float c1[psh::kStages][4];
+    float final_c0[4];
+    float final_c1[4];
+    psh::StageConstants(definition, PixelShaderConstants(), c0, c1, final_c0, final_c1);
+    uniforms.Set4fv(locations.stage_c0, static_cast<int>(psh::kStages), &c0[0][0]);
+    uniforms.Set4fv(locations.stage_c1, static_cast<int>(psh::kStages), &c1[0][0]);
+    uniforms.Set4fv(locations.final_c0, 1, final_c0);
+    uniforms.Set4fv(locations.final_c1, 1, final_c1);
+    float fog[4];
+    ColorToFloats(RenderStateValue(rs::kFogColor), fog);
+    uniforms.Set4fv(locations.fog_color, 1, fog);
+    if (locations.bump_mat >= 0 || locations.bump_lum >= 0)
+    {
+        // Each stage's own bump-environment states (Xbox: set on the stage
+        // that is perturbed; inferred).
+        float matrix[kFixedFunctionStages][4];
+        float luminance[kFixedFunctionStages][4] = {};
+        for (uint32_t s = 0; s < kFixedFunctionStages; ++s)
+        {
+            for (uint32_t i = 0; i < 4; ++i)
+            {
+                matrix[s][i] = FloatBits(TextureStateValue(s, tss::kBumpEnvMat00 + i));
+            }
+            luminance[s][0] = FloatBits(TextureStateValue(s, tss::kBumpEnvLScale));
+            luminance[s][1] = FloatBits(TextureStateValue(s, tss::kBumpEnvLOffset));
+        }
+        uniforms.Set4fv(locations.bump_mat, static_cast<int>(kFixedFunctionStages), &matrix[0][0]);
+        uniforms.Set4fv(locations.bump_lum, static_cast<int>(kFixedFunctionStages), &luminance[0][0]);
+    }
+}
+
 // One draw of `count` vertices or indices; vertex numbers are relative to
 // `source.base`.
 void Draw(const char* name, uint32_t primitive, uint32_t count, IndexSource indices, VertexSource source)
@@ -645,17 +705,21 @@ void Draw(const char* name, uint32_t primitive, uint32_t count, IndexSource indi
     {
         return;
     }
+    if (CaptureActive())
+    {
+        CaptureDraw(name, primitive, count, source.immediate != nullptr ? 0 : source.base, source.stride,
+                    indices.address, indices.base);
+    }
     const PipelineState& pipeline = Pipeline();
     const bool is_program = (pipeline.vertex_shader & fvf::kProgramHandle) != 0;
     const psh::Definition* pixel_shader = nullptr;
     if (pipeline.pixel_shader != 0)
     {
         pixel_shader = FindPixelShader(pipeline.pixel_shader);
-        if (!is_program || pixel_shader == nullptr)
+        if (pixel_shader == nullptr)
         {
             ReportOncePer("pixel shader", 0, [&] {
-                return Format("%s with pixel shader %08X and %s is not drawn yet", name, pipeline.pixel_shader,
-                              is_program ? "an unknown handle" : "fixed-function vertex processing");
+                return Format("%s with unknown pixel shader %08X is not drawn", name, pipeline.pixel_shader);
             });
             return;
         }
@@ -727,7 +791,13 @@ void Draw(const char* name, uint32_t primitive, uint32_t count, IndexSource indi
     if (pixel_shader != nullptr)
     {
         // With a pixel shader the texture-stage operations do not apply; the
-        // shader's texture modes say which stages sample.
+        // shader's texture modes say which stages sample. Fixed-function
+        // vertex processing still writes every stage's coordinates (and
+        // resolves the textures on the way).
+        if (!is_program)
+        {
+            key = BuildKey(layout, textures, false, true);
+        }
         pixel_key.definition = *pixel_shader;
         for (uint32_t s = 0; s < kFixedFunctionStages; ++s)
         {
@@ -735,8 +805,19 @@ void Draw(const char* name, uint32_t primitive, uint32_t count, IndexSource indi
             {
                 continue;
             }
-            textures[s] = ResolveTexture(pipeline.textures[s]);
+            if (is_program)
+            {
+                textures[s] = ResolveTexture(pipeline.textures[s]);
+            }
             pixel_key.samplers[s] = textures[s].kind;
+            if (s + 1 < kFixedFunctionStages)
+            {
+                const uint32_t next = psh::TextureMode(*pixel_shader, s + 1);
+                if (next == psh::texmode::kBumpEnvMap || next == psh::texmode::kBumpEnvMapLum)
+                {
+                    pixel_key.bump_source_argb[s] = IsArgbFamily(textures[s].format);
+                }
+            }
             pixel_key.unnormalized[s] = textures[s].unnormalized;
             sampled[s] = textures[s].kind != SamplerKind::kNone;
         }
@@ -747,7 +828,7 @@ void Draw(const char* name, uint32_t primitive, uint32_t count, IndexSource indi
     }
     else
     {
-        key = BuildKey(layout, textures, is_program);
+        key = BuildKey(layout, textures, is_program, false);
         for (uint32_t s = 0; s < kFixedFunctionStages; ++s)
         {
             sampled[s] = key.stages[s].sampler != SamplerKind::kNone;
@@ -765,7 +846,7 @@ void Draw(const char* name, uint32_t primitive, uint32_t count, IndexSource indi
     }
     else
     {
-        program = GetFixedFunctionProgram(key);
+        program = pixel_shader != nullptr ? GetFixedFunctionPixelProgram(key, pixel_key) : GetFixedFunctionProgram(key);
         if (program == nullptr)
         {
             return;
@@ -848,20 +929,13 @@ void Draw(const char* name, uint32_t primitive, uint32_t count, IndexSource indi
         UseProgram(vertex_program->program);
         uniforms = &vertex_program->uniforms;
         uniforms->SetArray4(vertex_program->constants, VertexShaderConstants(), VertexShaderConstantsVersion());
+        if (DrawWatchEnabled())
+        {
+            WatchProgramDraw(pipeline.vertex_shader, key);
+        }
         if (pixel_shader != nullptr)
         {
-            float c0[psh::kStages][4];
-            float c1[psh::kStages][4];
-            float final_c0[4];
-            float final_c1[4];
-            psh::StageConstants(*pixel_shader, PixelShaderConstants(), c0, c1, final_c0, final_c1);
-            uniforms->Set4fv(vertex_program->stage_c0, static_cast<int>(psh::kStages), &c0[0][0]);
-            uniforms->Set4fv(vertex_program->stage_c1, static_cast<int>(psh::kStages), &c1[0][0]);
-            uniforms->Set4fv(vertex_program->final_c0, 1, final_c0);
-            uniforms->Set4fv(vertex_program->final_c1, 1, final_c1);
-            float fog[4];
-            ColorToFloats(RenderStateValue(rs::kFogColor), fog);
-            uniforms->Set4fv(vertex_program->fog_color, 1, fog);
+            SetPixelShaderUniforms(*uniforms, *pixel_shader, vertex_program->combiner);
         }
         tex_scale = vertex_program->tex_scale;
         tfactor_location = vertex_program->tfactor;
@@ -889,6 +963,10 @@ void Draw(const char* name, uint32_t primitive, uint32_t count, IndexSource indi
         if (key.lighting)
         {
             SetLightingUniforms(*program, key, pipeline);
+        }
+        if (pixel_shader != nullptr)
+        {
+            SetPixelShaderUniforms(*uniforms, *pixel_shader, program->combiner);
         }
         tex_scale = program->tex_scale;
         tfactor_location = program->tfactor;
@@ -927,6 +1005,10 @@ void Draw(const char* name, uint32_t primitive, uint32_t count, IndexSource indi
                         reinterpret_cast<const void*>(index_data.offset));
     }
     lap.Mark(profile::Phase::kDraw);
+    if (CaptureActive())
+    {
+        CaptureAfterCall();
+    }
     profile::CountDraw(is_program);
 }
 

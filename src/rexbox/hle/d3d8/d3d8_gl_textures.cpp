@@ -1,6 +1,7 @@
 #include "d3d8_gl_textures.h"
 
 #include "d3d8_gl.h"
+#include "d3d8_gl_targets.h"
 #include "d3d8_globals.h"
 #include "d3d8_internal.h"
 #include "d3d8_render_state.h"
@@ -186,6 +187,7 @@ bool Upload(GuestAddress header, CachedTexture* cached)
     gl.TexParameteri(target, kGlTextureBaseLevel, 0);
     gl.TexParameteri(target, kGlTextureMaxLevel, static_cast<GLint>(uploaded - 1));
     cached->bound.levels = uploaded;
+    cached->bound.format = format;
     cached->bound.kind = target == kGlTexture3D ? SamplerKind::k3D : SamplerKind::k2D;
     cached->bound.unnormalized = linear;
     TraceOnce(Format("upload %02X %u %u", format, cached->bound.width, cached->bound.height),
@@ -219,10 +221,25 @@ BoundTexture ResolveTexture(GuestAddress header)
         return {};
     }
     runtime::GuestMemory& memory = Memory();
-    CachedTexture& cached = g_textures[header];
     const uint32_t format_field = memory.Read32(header + header::kFormat);
     const uint32_t size_field = memory.Read32(header + header::kSize);
     const uint32_t data = memory.Read32(header + header::kData);
+    // Pixels a render target holds live on the GPU, not in guest memory.
+    GuestAddress surface = 0;
+    BoundTexture target;
+    target.texture = SampleRenderTarget(data, &surface, &target.width, &target.height);
+    if (target.texture != 0)
+    {
+        if (FirstReport("rt sample", header))
+        {
+            ReportOnce(Format("rt sample %08X", header), Format("texture %08X samples render target %08X (%ux%u)",
+                                                                 header, surface, target.width, target.height));
+        }
+        target.kind = SamplerKind::k2D;
+        target.unnormalized = size_field != 0;
+        return target;
+    }
+    CachedTexture& cached = g_textures[header];
     bool upload = cached.bound.texture == 0 || cached.written || format_field != cached.format_field ||
                   size_field != cached.size_field || data != cached.data;
     // Writes without a lock: compare a sampled hash once per frame.

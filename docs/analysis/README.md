@@ -29,6 +29,8 @@ flowchart LR
 * [프레임 시간: 오프닝 3D 데모의 한 프레임 구성, CPU 작업의 내역, 측정 시 주의점](frame-time.md)
 * [lift되지 않은 명령: 남은 종류, 실제로 실행되는 것, MXCSR 검사](unlifted-instructions.md)
 * [미해결 스텁: 실행 중 보고, 되찾은 함수, 남은 스텁의 분류](unresolved-stubs.md)
+* [CRI 미들웨어: ADXM 스레드, SVM 잠금, 단일 코어 우선순위에 기댄 상호 배제](cri-middleware.md)
+* [캐릭터 윤곽선: 윤곽선 정점 셰이더, 색과 두께를 정하는 상수, 데모에서 본 값](outlines.md)
 
 ---
 
@@ -52,3 +54,5 @@ Labels:
 * [Frame time: what a frame of the opening 3D demo is made of, the CPU work, what to watch when measuring](frame-time.md)
 * [Unlifted instructions: the remaining kinds, the ones that run, the MXCSR check](unlifted-instructions.md)
 * [Unresolved stubs: reporting at run time, recovered functions, the remaining stubs](unresolved-stubs.md)
+* [CRI middleware: ADXM threads, the SVM lock, exclusion that relies on single-core priorities](cri-middleware.md)
+* [Character outlines: the outline vertex shaders, the constants that set color and thickness, values seen in the demo](outlines.md)

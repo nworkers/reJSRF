@@ -154,11 +154,13 @@ bool LoadGlFunctions(GlFunctions* functions, std::string* missing)
     need(Load<__LINE__>(&f.SamplerParameteri, "glSamplerParameteri", &first_missing));
     need(Load<__LINE__>(&f.SamplerParameterf, "glSamplerParameterf", &first_missing));
     need(Load<__LINE__>(&f.GenFramebuffers, "glGenFramebuffers", &first_missing));
+    need(Load<__LINE__>(&f.DeleteFramebuffers, "glDeleteFramebuffers", &first_missing));
     need(Load<__LINE__>(&f.BindFramebuffer, "glBindFramebuffer", &first_missing));
     need(Load<__LINE__>(&f.FramebufferTexture2D, "glFramebufferTexture2D", &first_missing));
     need(Load<__LINE__>(&f.FramebufferRenderbuffer, "glFramebufferRenderbuffer", &first_missing));
     need(Load<__LINE__>(&f.CheckFramebufferStatus, "glCheckFramebufferStatus", &first_missing));
     need(Load<__LINE__>(&f.GenRenderbuffers, "glGenRenderbuffers", &first_missing));
+    need(Load<__LINE__>(&f.DeleteRenderbuffers, "glDeleteRenderbuffers", &first_missing));
     need(Load<__LINE__>(&f.BindRenderbuffer, "glBindRenderbuffer", &first_missing));
     need(Load<__LINE__>(&f.RenderbufferStorage, "glRenderbufferStorage", &first_missing));
     need(Load<__LINE__>(&f.BlitFramebuffer, "glBlitFramebuffer", &first_missing));

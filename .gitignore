@@ -38,3 +38,7 @@ rejsrf_*.txt
 *.obj
 __pycache__/
 *.pyc
+
+# Diagnostic captures and frame dumps (pictures of the game)
+capture_*
+frame_*.bmp

@@ -45,6 +45,38 @@ struct PairKeyHash
 
 std::unordered_map<FixedFunctionKey, FixedFunctionProgram, FixedFunctionKeyHash> g_programs;
 
+// A fixed-function vertex stage paired with a register-combiner pixel shader.
+struct FixedPixelKey
+{
+    FixedFunctionKey vertex;
+    psh::Key pixel;
+    bool operator==(const FixedPixelKey&) const = default;
+};
+
+struct FixedPixelKeyHash
+{
+    size_t operator()(const FixedPixelKey& key) const
+    {
+        return static_cast<size_t>(HashMix(key.vertex.Hash(), key.pixel.Hash()));
+    }
+};
+
+std::unordered_map<FixedPixelKey, FixedFunctionProgram, FixedPixelKeyHash> g_fixed_pixel_programs;
+
+CombinerLocations CombinerUniforms(GLuint program)
+{
+    GlFunctions& gl = Gl();
+    CombinerLocations locations;
+    locations.stage_c0 = gl.GetUniformLocation(program, "u_c0");
+    locations.stage_c1 = gl.GetUniformLocation(program, "u_c1");
+    locations.final_c0 = gl.GetUniformLocation(program, "u_final_c0");
+    locations.final_c1 = gl.GetUniformLocation(program, "u_final_c1");
+    locations.fog_color = gl.GetUniformLocation(program, "u_fog_color");
+    locations.bump_mat = gl.GetUniformLocation(program, "u_bump_mat");
+    locations.bump_lum = gl.GetUniformLocation(program, "u_bump_lum");
+    return locations;
+}
+
 std::string ShaderLog(GLuint shader)
 {
     GLint length = 0;
@@ -283,23 +315,14 @@ void UniformCache::SetArray4(const std::vector<int>& locations, const float* val
     flush();
 }
 
-const FixedFunctionProgram* GetFixedFunctionProgram(const FixedFunctionKey& key)
+namespace
 {
-    const auto it = g_programs.find(key);
-    if (it != g_programs.end())
-    {
-        return it->second.program != 0 ? &it->second : nullptr;
-    }
-    const std::string id = key.Serialize();
+
+// The fixed-function vertex stage's uniform locations, and the samplers.
+void FillFixedFunctionUniforms(GLuint program, FixedFunctionProgram* out)
+{
     GlFunctions& gl = Gl();
-    FixedFunctionProgram& entry = g_programs[key];
-    const bool es = GlIsEs();
-    const GLuint program =
-        Link(GenerateFixedFunctionVertexShader(key, es), GenerateFixedFunctionFragmentShader(key, es), id);
-    if (program == 0)
-    {
-        return nullptr;
-    }
+    FixedFunctionProgram& entry = *out;
     entry.program = program;
     entry.transform = gl.GetUniformLocation(program, "u_transform");
     entry.target = gl.GetUniformLocation(program, "u_target");
@@ -322,7 +345,57 @@ const FixedFunctionProgram* GetFixedFunctionProgram(const FixedFunctionKey& key)
     entry.light_attenuation = gl.GetUniformLocation(program, "u_light_attenuation");
     entry.light_cone = gl.GetUniformLocation(program, "u_light_cone");
     BindSamplers(program, entry.tex_scale);
+}
+
+}  // namespace
+
+const FixedFunctionProgram* GetFixedFunctionProgram(const FixedFunctionKey& key)
+{
+    const auto it = g_programs.find(key);
+    if (it != g_programs.end())
+    {
+        return it->second.program != 0 ? &it->second : nullptr;
+    }
+    const std::string id = key.Serialize();
+    FixedFunctionProgram& entry = g_programs[key];
+    const bool es = GlIsEs();
+    const GLuint program =
+        Link(GenerateFixedFunctionVertexShader(key, es), GenerateFixedFunctionFragmentShader(key, es), id);
+    if (program == 0)
+    {
+        return nullptr;
+    }
+    FillFixedFunctionUniforms(program, &entry);
     TraceOnce("program " + id, Format("program %u built for key %s", program, id.c_str()));
+    return &entry;
+}
+
+const FixedFunctionProgram* GetFixedFunctionPixelProgram(const FixedFunctionKey& key, const psh::Key& pixel_key)
+{
+    const FixedPixelKey pair{key, pixel_key};
+    const auto it = g_fixed_pixel_programs.find(pair);
+    if (it != g_fixed_pixel_programs.end())
+    {
+        return it->second.program != 0 ? &it->second : nullptr;
+    }
+    const std::string id = key.Serialize() + "|" + pixel_key.Serialize();
+    FixedFunctionProgram& entry = g_fixed_pixel_programs[pair];
+    const bool es = GlIsEs();
+    std::string unsupported;
+    const std::string fragment = psh::GenerateFragmentShader(pixel_key, es, &unsupported);
+    if (!unsupported.empty())
+    {
+        ReportOnce("psh " + id, Format("pixel shader drawn approximately: %s", unsupported.c_str()));
+    }
+    const GLuint program = Link(GenerateFixedFunctionVertexShader(key, es), fragment, id);
+    if (program == 0)
+    {
+        return nullptr;
+    }
+    FillFixedFunctionUniforms(program, &entry);
+    entry.combiner = CombinerUniforms(program);
+    TraceOnce("program " + id, Format("program %u built for fixed-function vertices and pixel shader %s", program,
+                                      id.c_str()));
     return &entry;
 }
 
@@ -388,11 +461,7 @@ const VertexProgramGl* GetVertexPixelProgram(const ProgramShader& shader, const 
     entry.used_inputs = used_inputs;
     entry.constants = ConstantLocations(program);
     entry.alpha_ref = gl.GetUniformLocation(program, "u_alpha_ref");
-    entry.stage_c0 = gl.GetUniformLocation(program, "u_c0");
-    entry.stage_c1 = gl.GetUniformLocation(program, "u_c1");
-    entry.final_c0 = gl.GetUniformLocation(program, "u_final_c0");
-    entry.final_c1 = gl.GetUniformLocation(program, "u_final_c1");
-    entry.fog_color = gl.GetUniformLocation(program, "u_fog_color");
+    entry.combiner = CombinerUniforms(program);
     BindSamplers(program, entry.tex_scale);
     TraceOnce("program " + id, Format("program %u built for vertex program and pixel shader %s", program, id.c_str()));
     return &entry;

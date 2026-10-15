@@ -22,6 +22,16 @@ struct ColorTarget
     GLuint texture = 0;
     uint32_t width = 0;
     uint32_t height = 0;
+    // For sampling (SampleRenderTarget): a copy in D3D's row order, the
+    // framebuffer that writes it, and whether the target was bound since the
+    // copy was made.
+    GLuint copy = 0;
+    GLuint copy_framebuffer = 0;
+    bool bound_since_copy = true;
+    // The surface's pixel memory when last bound (physical); a texture over
+    // it samples this target until the memory is freed.
+    bool has_data = false;
+    uint32_t data = 0;
 };
 
 struct DepthTarget
@@ -42,7 +52,7 @@ uint32_t g_width = 0;
 uint32_t g_height = 0;
 
 // The pair BindRenderTarget resolved last, so a run of draws to one target
-// skips the map lookups. The maps only grow, so a resolved entry stays valid.
+// skips the map lookups. DropIfResized clears it when it removes entries.
 struct ResolvedTarget
 {
     bool valid = false;
@@ -59,6 +69,69 @@ void SurfaceSize(GuestAddress surface, uint32_t* width, uint32_t* height)
     const LevelLayout layout = HeaderLevelLayout(surface, 0);
     *width = layout.width;
     *height = layout.height;
+}
+
+// A header can be set up again for a surface of another size (the title
+// reuses them); GL objects made for the old size are dropped and remade.
+// Returns true when anything was dropped.
+bool DropIfResized(GuestAddress color, GuestAddress depth)
+{
+    bool dropped = false;
+    uint32_t width = 0;
+    uint32_t height = 0;
+    GlFunctions& gl = Gl();
+    if (color != 0)
+    {
+        const auto it = g_colors.find(color);
+        if (it != g_colors.end())
+        {
+            SurfaceSize(color, &width, &height);
+            if (width != it->second.width || height != it->second.height)
+            {
+                ColorTarget& old = it->second;
+                gl.DeleteTextures(1, &old.texture);
+                if (old.copy != 0)
+                {
+                    gl.DeleteTextures(1, &old.copy);
+                    gl.DeleteFramebuffers(1, &old.copy_framebuffer);
+                }
+                g_colors.erase(it);
+                dropped = true;
+            }
+        }
+    }
+    if (depth != 0)
+    {
+        const auto it = g_depths.find(depth);
+        if (it != g_depths.end())
+        {
+            SurfaceSize(depth, &width, &height);
+            if (width != it->second.width || height != it->second.height)
+            {
+                gl.DeleteRenderbuffers(1, &it->second.renderbuffer);
+                g_depths.erase(it);
+                dropped = true;
+            }
+        }
+    }
+    if (dropped)
+    {
+        for (auto it = g_framebuffers.begin(); it != g_framebuffers.end();)
+        {
+            if ((color != 0 && it->first.first == color) || (depth != 0 && it->first.second == depth))
+            {
+                gl.DeleteFramebuffers(1, &it->second);
+                it = g_framebuffers.erase(it);
+            }
+            else
+            {
+                ++it;
+            }
+        }
+        g_resolved_target.valid = false;
+        InvalidateGlStateCache();
+    }
+    return dropped;
 }
 
 const ColorTarget& Color(GuestAddress surface)
@@ -83,8 +156,8 @@ const ColorTarget& Color(GuestAddress surface)
     if (host == nullptr || (host->kind != ResourceKind::kBackBuffer))
     {
         ReportOnce(Format("target %08X", surface),
-                   Format("render target %08X (%ux%u) is not a back buffer: drawn into its own GL texture, not yet "
-                          "visible to texture sampling",
+                   Format("render target %08X (%ux%u) is not a back buffer: drawn into its own GL texture, "
+                          "sampled through a copy",
                           surface, target.width, target.height));
     }
     return g_colors.emplace(surface, target).first->second;
@@ -261,6 +334,7 @@ void WriteLittleEndian(std::vector<uint8_t>* out, uint32_t value, int bytes)
 bool BindRenderTarget(GuestAddress color, GuestAddress depth)
 {
     ResolvedTarget& resolved = g_resolved_target;
+    DropIfResized(color, depth);
     if (!resolved.valid || resolved.color != color || resolved.depth != depth)
     {
         resolved.framebuffer = Framebuffer(color, depth);
@@ -280,6 +354,13 @@ bool BindRenderTarget(GuestAddress color, GuestAddress depth)
             resolved.height = Depth(depth).height;
         }
         resolved.valid = color != 0 || depth != 0;
+        if (color != 0)
+        {
+            ColorTarget& target = g_colors.find(color)->second;  // made by Framebuffer() above
+            target.bound_since_copy = true;
+            target.has_data = true;
+            target.data = Memory().Read32(color + header::kData) & kPhysicalMask;
+        }
     }
     // Other paths that bind framebuffers (present, dumps, creation)
     // invalidate the GL state cache.
@@ -304,6 +385,66 @@ uint32_t RenderTargetWidth()
 uint32_t RenderTargetHeight()
 {
     return g_height;
+}
+
+GLuint SampleRenderTarget(GuestAddress data, GuestAddress* surface, uint32_t* width, uint32_t* height)
+{
+    data &= kPhysicalMask;
+    for (auto& [address, target] : g_colors)
+    {
+        if (target.texture == 0 || !target.has_data || target.data != data)
+        {
+            continue;
+        }
+        GlFunctions& gl = Gl();
+        if (target.copy == 0)
+        {
+            InvalidateGlStateCache();  // binds a texture and a framebuffer
+            gl.GenTextures(1, &target.copy);
+            gl.BindTexture(kGlTexture2D, target.copy);
+            gl.TexImage2D(kGlTexture2D, 0, static_cast<GLint>(kGlRgba8), static_cast<GLsizei>(target.width),
+                          static_cast<GLsizei>(target.height), 0, kGlRgba, kGlUnsignedByte, nullptr);
+            gl.TexParameteri(kGlTexture2D, kGlTextureMaxLevel, 0);
+            gl.GenFramebuffers(1, &target.copy_framebuffer);
+            gl.BindFramebuffer(kGlFramebuffer, target.copy_framebuffer);
+            gl.FramebufferTexture2D(kGlFramebuffer, kGlColorAttachment0, kGlTexture2D, target.copy, 0);
+            gl.BindFramebuffer(kGlFramebuffer, Framebuffer(g_bound_color, g_bound_depth));
+            target.bound_since_copy = true;
+        }
+        // Draws and clears write only the bound target.
+        if (target.bound_since_copy)
+        {
+            const GLint w = static_cast<GLint>(target.width);
+            const GLint h = static_cast<GLint>(target.height);
+            gl.BindFramebuffer(kGlReadFramebuffer, Framebuffer(address, 0));
+            gl.BindFramebuffer(kGlDrawFramebuffer, target.copy_framebuffer);
+            gl.Disable(kGlScissorTest);
+            gl.ColorMask(1, 1, 1, 1);
+            // GL keeps D3D's top row at the top; textures have it at row 0.
+            gl.BlitFramebuffer(0, 0, w, h, 0, h, w, 0, kGlColorBufferBit, kGlNearest);
+            gl.BindFramebuffer(kGlFramebuffer, Framebuffer(g_bound_color, g_bound_depth));
+            InvalidateGlStateCache();
+            // Still bound: later draws go to it, so copy again next time.
+            target.bound_since_copy = address == g_bound_color;
+        }
+        *surface = address;
+        *width = target.width;
+        *height = target.height;
+        return target.copy;
+    }
+    return 0;
+}
+
+void ForgetRenderTargetMemory(GuestAddress data)
+{
+    data &= kPhysicalMask;
+    for (auto& [address, target] : g_colors)
+    {
+        if (target.has_data && target.data == data)
+        {
+            target.has_data = false;
+        }
+    }
 }
 
 uint32_t RenderTargetTexture(GuestAddress color)
@@ -348,23 +489,36 @@ void PresentRenderTarget(GuestAddress color, const GammaRamp& ramp)
     InvalidateGlStateCache();
 }
 
-bool DumpRenderTarget(GuestAddress color, const std::string& path, const GammaRamp& ramp)
+void ReadRenderTarget(GuestAddress color, std::vector<uint8_t>* rgba, uint32_t* width, uint32_t* height)
 {
     GlFunctions& gl = Gl();
     const ColorTarget& source = Color(color);
-    std::vector<uint8_t> rgba(static_cast<size_t>(source.width) * source.height * 4);
+    rgba->resize(static_cast<size_t>(source.width) * source.height * 4);
     gl.BindFramebuffer(kGlReadFramebuffer, Framebuffer(color, 0));
     gl.PixelStorei(kGlPackAlignment, 1);
     gl.ReadPixels(0, 0, static_cast<GLsizei>(source.width), static_cast<GLsizei>(source.height), kGlRgba,
-                  kGlUnsignedByte, rgba.data());
+                  kGlUnsignedByte, rgba->data());
     gl.BindFramebuffer(kGlFramebuffer, Framebuffer(g_bound_color, g_bound_depth));
     InvalidateGlStateCache();
+    *width = source.width;
+    *height = source.height;
+}
 
-    ApplyGammaRamp(ramp, rgba.data(), static_cast<size_t>(source.width) * source.height);
+bool DumpRenderTarget(GuestAddress color, const std::string& path, const GammaRamp& ramp)
+{
+    std::vector<uint8_t> rgba;
+    uint32_t width = 0;
+    uint32_t height = 0;
+    ReadRenderTarget(color, &rgba, &width, &height);
+    ApplyGammaRamp(ramp, rgba.data(), static_cast<size_t>(width) * height);
+    return WriteBmp(path, rgba.data(), width, height);
+}
 
+bool WriteBmp(const std::string& path, const uint8_t* rgba, uint32_t width, uint32_t height)
+{
     // 24-bit BMP rows are stored bottom-up like GL's, padded to 4 bytes, as B, G, R.
-    const uint32_t row_bytes = (source.width * 3 + 3) & ~3u;
-    const uint32_t image_bytes = row_bytes * source.height;
+    const uint32_t row_bytes = (width * 3 + 3) & ~3u;
+    const uint32_t image_bytes = row_bytes * height;
     std::vector<uint8_t> file;
     file.push_back('B');
     file.push_back('M');
@@ -372,8 +526,8 @@ bool DumpRenderTarget(GuestAddress color, const std::string& path, const GammaRa
     WriteLittleEndian(&file, 0, 4);
     WriteLittleEndian(&file, 54, 4);
     WriteLittleEndian(&file, 40, 4);
-    WriteLittleEndian(&file, source.width, 4);
-    WriteLittleEndian(&file, source.height, 4);
+    WriteLittleEndian(&file, width, 4);
+    WriteLittleEndian(&file, height, 4);
     WriteLittleEndian(&file, 1, 2);
     WriteLittleEndian(&file, 24, 2);
     WriteLittleEndian(&file, 0, 4);
@@ -382,16 +536,16 @@ bool DumpRenderTarget(GuestAddress color, const std::string& path, const GammaRa
     WriteLittleEndian(&file, 2835, 4);
     WriteLittleEndian(&file, 0, 4);
     WriteLittleEndian(&file, 0, 4);
-    for (uint32_t y = 0; y < source.height; ++y)
+    for (uint32_t y = 0; y < height; ++y)
     {
-        const uint8_t* row = rgba.data() + static_cast<size_t>(y) * source.width * 4;
-        for (uint32_t x = 0; x < source.width; ++x)
+        const uint8_t* row = rgba + static_cast<size_t>(y) * width * 4;
+        for (uint32_t x = 0; x < width; ++x)
         {
             file.push_back(row[x * 4 + 2]);
             file.push_back(row[x * 4 + 1]);
             file.push_back(row[x * 4 + 0]);
         }
-        for (uint32_t pad = source.width * 3; pad < row_bytes; ++pad)
+        for (uint32_t pad = width * 3; pad < row_bytes; ++pad)
         {
             file.push_back(0);
         }

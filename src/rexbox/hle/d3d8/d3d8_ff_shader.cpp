@@ -153,6 +153,20 @@ std::string Argument(uint32_t arg, uint32_t stage)
 
 // The expression of one operation over channel selection `swizzle` (".rgb"
 // or ".a").
+// Whether `op` reads the stage's texture (an argument it uses selects
+// D3DTA_TEXTURE, or the operation blends by the texture's alpha).
+bool ReadsTexture(uint32_t op, const uint32_t args[3])
+{
+    if (op == top::kBlendTextureAlpha || op == top::kBlendTextureAlphaPm)
+    {
+        return true;
+    }
+    const auto texture = [](uint32_t arg) { return (arg & ta::kSelectMask) == ta::kTexture; };
+    const bool uses_arg0 = op == top::kMultiplyAdd || op == top::kLerp;
+    return (op != top::kSelectArg2 && texture(args[1])) || (op != top::kSelectArg1 && texture(args[2])) ||
+           (uses_arg0 && texture(args[0]));
+}
+
 std::string Operation(uint32_t op, const uint32_t args[3], uint32_t stage, const char* swizzle)
 {
     const std::string s = swizzle;
@@ -563,7 +577,15 @@ std::string GenerateFixedFunctionFragmentShader(const FixedFunctionKey& key, boo
             }
             text += "    vec4 " + t + " = texture(u_tex" + Number(s) + ", " + lookup + ");\n";
         }
-        const std::string color = Operation(stage.color_op, stage.color_arg, s, ".rgb");
+        // A color operation on a stage without a texture that reads the
+        // texture leaves the current color as it is; alpha still reads the
+        // unbound texture as 1 (inferred from two cases, issue #70: a play
+        // outline left with SELECTARG1(TEXTURE) is black in the original, and
+        // the demo's characters stay opaque).
+        const bool unbound = stage.sampler == SamplerKind::kNone;
+        const std::string color = unbound && ReadsTexture(stage.color_op, stage.color_arg)
+                                      ? std::string("current.rgb")
+                                      : Operation(stage.color_op, stage.color_arg, s, ".rgb");
         const std::string alpha = stage.alpha_op == top::kDisable
                                       ? std::string("current.a")
                                       : Operation(stage.alpha_op, stage.alpha_arg, s, ".a");

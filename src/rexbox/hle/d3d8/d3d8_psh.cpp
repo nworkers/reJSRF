@@ -291,10 +291,12 @@ std::string Key::Serialize() const
         text += Hex(w);
     }
     char buffer[48];
-    std::snprintf(buffer, sizeof(buffer), "|%u%u%u%u|%d%d%d%d|%X", static_cast<unsigned>(samplers[0]),
+    std::snprintf(buffer, sizeof(buffer), "|%u%u%u%u|%d%d%d%d|%d%d%d%d|%X", static_cast<unsigned>(samplers[0]),
                   static_cast<unsigned>(samplers[1]), static_cast<unsigned>(samplers[2]),
                   static_cast<unsigned>(samplers[3]), unnormalized[0] ? 1 : 0, unnormalized[1] ? 1 : 0,
-                  unnormalized[2] ? 1 : 0, unnormalized[3] ? 1 : 0, alpha_func);
+                  unnormalized[2] ? 1 : 0, unnormalized[3] ? 1 : 0, bump_source_argb[0] ? 1 : 0,
+                  bump_source_argb[1] ? 1 : 0, bump_source_argb[2] ? 1 : 0, bump_source_argb[3] ? 1 : 0,
+                  alpha_func);
     return text + buffer;
 }
 
@@ -307,7 +309,8 @@ uint64_t Key::Hash() const
     }
     for (uint32_t s = 0; s < 4; ++s)
     {
-        hash = HashMix(hash, static_cast<uint64_t>(samplers[s]) | (unnormalized[s] ? 0x100u : 0u));
+        hash = HashMix(hash, static_cast<uint64_t>(samplers[s]) | (unnormalized[s] ? 0x100u : 0u) |
+                                 (bump_source_argb[s] ? 0x200u : 0u));
     }
     return HashMix(hash, alpha_func);
 }
@@ -345,7 +348,17 @@ std::string GenerateFragmentShader(const Key& key, bool gles, std::string* unsup
             "uniform vec4 u_final_c1;\n"
             "uniform vec4 u_fog_color;\n"
             "uniform float u_alpha_ref;\n"
+            // BUMPENVMAP, per stage: the matrix (00, 01, 10, 11) and the
+            // luminance scale and offset (x, y).
+            "uniform vec4 u_bump_mat[4];\n"
+            "uniform vec4 u_bump_lum[4];\n"
             "out vec4 o_color;\n"
+            // A signed byte read through an unsigned format, as -1..1.
+            "vec2 psh_signed(vec2 v)\n{\n"
+            "    vec2 b = floor(v * 255.0 + 0.5);\n"
+            "    b -= 256.0 * step(128.0, b);\n"
+            "    return max(b / 127.0, vec2(-1.0));\n"
+            "}\n"
             "void main()\n{\n"
             "    vec4 v0 = v_diffuse;\n"
             "    vec4 v1 = v_specular;\n"
@@ -371,6 +384,33 @@ std::string GenerateFragmentShader(const Key& key, bool gles, std::string* unsup
         else if (sampler == SamplerKind::kNone)
         {
             value = "vec4(1.0)";  // unbound: opaque white, as the fixed-function path
+        }
+        else if ((mode == texmode::kBumpEnvMap || mode == texmode::kBumpEnvMapLum) && s > 0 &&
+                 sampler == SamplerKind::k2D)
+        {
+            // The previous stage's texel is a signed (du, dv) offset, turned
+            // by the stage's bump matrix and added to this stage's projected
+            // coordinates (without the division the boost effect showed the
+            // screen copy at twice its size, issue #69); the luminance form
+            // also scales the result by L * scale + offset.
+            const std::string n = Number(s);
+            const std::string source = "t" + Number(s - 1) + (key.bump_source_argb[s - 1] ? ".bgr" : ".rgb");
+            const std::string projected = "(" + coord + ".w != 0.0 ? " + coord + " / " + coord + ".w : " + coord + ")";
+            text += "    vec3 uvl" + n + " = " + source + ";\n"
+                    "    vec2 dsdt" + n + " = psh_signed(uvl" + n + ".xy);\n"
+                    "    vec2 bumped" + n + " = " + projected + ".xy + vec2(dot(u_bump_mat[" + n + "].xz, dsdt" + n +
+                    "), dot(u_bump_mat[" + n + "].yw, dsdt" + n + "));\n";
+            std::string uv = "bumped" + n;
+            if (key.unnormalized[s])
+            {
+                uv = "(" + uv + " * u_tex_scale" + n + ")";
+            }
+            value = "texture(u_tex" + n + ", " + uv + ")";
+            if (mode == texmode::kBumpEnvMapLum)
+            {
+                value = "(" + value + " * vec4(vec3(clamp(uvl" + n + ".z * u_bump_lum[" + n + "].x + u_bump_lum[" +
+                        n + "].y, 0.0, 1.0)), 1.0))";
+            }
         }
         else
         {

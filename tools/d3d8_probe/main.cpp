@@ -316,6 +316,15 @@ void CheckFixedFunctionShader()
     Expect(Contains(fs, "(t0).rgb * (v_diffuse).rgb"), "stage 0 modulates texture and diffuse");
     Expect(Contains(fs, "vec4 t1 = vec4(1.0)"), "unbound stage 1 reads white");
     Expect(!Contains(fs, "u_tex1"), "unbound stage declares no sampler");
+    Expect(Contains(fs, "current = clamp(vec4(current.rgb, "),
+           "unbound stage 1's MODULATE(TEXTURE, CURRENT) leaves the current color as it is");
+    FixedFunctionKey select = key;
+    select.stages[1].color_op = top::kSelectArg1;  // the play outline's leftover stage 1 (issue #70)
+    select.stages[1].alpha_op = top::kSelectArg1;
+    select.stages[1].alpha_arg[1] = ta::kTexture;
+    const std::string fs_select = GenerateFixedFunctionFragmentShader(select, false);
+    Expect(Contains(fs_select, "current = clamp(vec4(current.rgb, ") && Contains(fs_select, "vec4 t1 = vec4(1.0)"),
+           "unbound SELECTARG1(TEXTURE) keeps the current color; its alpha reads 1");
     Expect(!Contains(fs, "discard"), "no alpha test without alpha_func");
 
     FixedFunctionKey tested = key;
@@ -706,9 +715,42 @@ void CheckPixelShaders()
     bump[psh::word::kTextureModes] = 0x000000C1;  // stage 1: BUMPENVMAP
     key.definition = bump;
     key.samplers[1] = SamplerKind::k2D;
-    psh::GenerateFragmentShader(key, false, &unsupported);
-    Expect(Contains(unsupported, "texture mode 6"), "bump environment mapping is reported");
+    key.bump_source_argb[0] = true;
+    const std::string bumped = psh::GenerateFragmentShader(key, false, &unsupported);
+    Expect(!Contains(unsupported, "texture mode 6"), "bump environment mapping is drawn");
+    Expect(Contains(bumped, "vec3 uvl1 = t0.bgr;") && Contains(bumped, "psh_signed(uvl1.xy)") &&
+               Contains(bumped, "dot(u_bump_mat[1].xz, dsdt1)") && Contains(bumped, "texture(u_tex1, bumped1)") &&
+               Contains(bumped, "vec2 bumped1 = (v_tex1.w != 0.0 ? v_tex1 / v_tex1.w : v_tex1).xy"),
+           "stage 1 offsets its projected coordinates by stage 0's signed U, V through its bump matrix");
     Expect(psh::TextureMode(bump, 1) == psh::texmode::kBumpEnvMap, "texture mode of stage 1");
+    key.bump_source_argb[0] = false;
+    key.samplers[1] = SamplerKind::kNone;
+
+    // A pixel shader with fixed-function vertex processing: the draw builds
+    // the key with every stage active, so the vertex shader writes each
+    // input the combiner fragment shader reads.
+    FixedFunctionKey vertex_key;
+    vertex_key.pretransformed = true;
+    vertex_key.has_diffuse = true;
+    vertex_key.tex_coords = 1;
+    vertex_key.tex_components[0] = 2;
+    vertex_key.stage_coords = true;
+    for (FixedFunctionKey::Stage& stage : vertex_key.stages)
+    {
+        stage.color_op = top::kSelectArg1;
+    }
+    key.definition = def;
+    const std::string vs = GenerateFixedFunctionVertexShader(vertex_key, false);
+    const std::string fs_inputs = psh::GenerateFragmentShader(key, false, &unsupported);
+    bool matched = true;
+    for (const char* name : {"v_diffuse", "v_specular", "v_tex0", "v_tex1", "v_tex2", "v_tex3"})
+    {
+        if (Contains(fs_inputs, std::string("in vec4 ") + name + ";"))
+        {
+            matched &= Contains(vs, std::string("out vec4 ") + name + ";");
+        }
+    }
+    Expect(matched, "fixed-function vertex shader writes every combiner input");
 }
 
 }  // namespace

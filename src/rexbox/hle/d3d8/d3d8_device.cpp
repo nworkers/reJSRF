@@ -2,6 +2,7 @@
 // HLE opens the host display), its back-buffer and depth surfaces, render
 // targets, viewport, Clear and Swap.
 
+#include "d3d8_capture.h"
 #include "d3d8_gl.h"
 #include "d3d8_gl_targets.h"
 #include "d3d8_globals.h"
@@ -397,6 +398,10 @@ void D3DDevice_Clear()
     float z = 1.0f;
     std::memcpy(&z, &z_bits, 4);
     const uint32_t stencil = call.Arg(5);
+    if (CaptureActive())
+    {
+        CaptureClear(flags, color, z, stencil);
+    }
     if (!HaveGl())
     {
         call.Return(kD3dOk, 6);
@@ -451,6 +456,10 @@ void D3DDevice_Clear()
             gl.Clear(mask);
         }
         gl.Disable(kGlScissorTest);
+    }
+    if (CaptureActive())
+    {
+        CaptureAfterCall();
     }
     call.Return(kD3dOk, 6);
 }
@@ -519,6 +528,7 @@ void D3DDevice_Swap()
         PresentRenderTarget(shown, state.gamma_ramp);
         presented = true;
         PumpEvents();
+        CaptureAtPresent(state.frame_count, shown);
     }
     if (!presented)
     {

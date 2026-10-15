@@ -12,6 +12,7 @@ target_include_directories(rexbox_xbe PUBLIC "${PROJECT_SOURCE_DIR}/include")
 add_library(rexbox_runtime STATIC
     runtime/environment.cpp
     runtime/guest_heap.cpp
+    runtime/guest_lock.cpp
     runtime/guest_memory.cpp
     runtime/hle_call.cpp
     runtime/hle_registry.cpp
@@ -85,6 +86,7 @@ target_link_libraries(rexbox_hle_xinput PUBLIC rexbox_runtime)
 add_library(rexbox_hle_d3d8 STATIC
     hle/d3d8/d3d8_adapter.cpp
     hle/d3d8/d3d8_caps.cpp
+    hle/d3d8/d3d8_capture.cpp
     hle/d3d8/d3d8_device.cpp
     hle/d3d8/d3d8_ff_shader.cpp
     hle/d3d8/d3d8_fvf.cpp
@@ -109,6 +111,7 @@ add_library(rexbox_hle_d3d8 STATIC
     hle/d3d8/d3d8_create.cpp
     hle/d3d8/d3d8_shader.cpp
     hle/d3d8/d3d8_draw.cpp
+    hle/d3d8/d3d8_draw_watch.cpp
 )
 target_link_libraries(rexbox_hle_d3d8 PUBLIC rexbox_runtime)
 
