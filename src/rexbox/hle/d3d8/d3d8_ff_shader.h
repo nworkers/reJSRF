@@ -5,9 +5,11 @@
 // texture factor, alpha reference) are uniforms.
 //
 // Texture-stage semantics follow D3D8's (D3DTOP_*, D3DTA_*; the Xbox keeps
-// the PC numbering, docs/kb/xbox-d3d8-api.md section 10). A stage whose
-// texture is unbound samples opaque white (inferred), so the Xbox default of
-// MODULATE on every stage leaves untextured stages without effect.
+// the PC numbering, docs/kb/xbox-d3d8-api.md section 10). On a stage whose
+// texture is unbound, a color operation that reads the texture leaves the
+// current color unchanged, and alpha reads the texture as 1 (inferred, issue
+// #70): MODULATE on untextured stages has no effect, and SELECTARG1(TEXTURE)
+// does not turn the result white.
 
 #ifndef REXBOX_HLE_D3D8_D3D8_FF_SHADER_H
 #define REXBOX_HLE_D3D8_D3D8_FF_SHADER_H

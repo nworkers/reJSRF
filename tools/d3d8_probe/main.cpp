@@ -316,6 +316,15 @@ void CheckFixedFunctionShader()
     Expect(Contains(fs, "(t0).rgb * (v_diffuse).rgb"), "stage 0 modulates texture and diffuse");
     Expect(Contains(fs, "vec4 t1 = vec4(1.0)"), "unbound stage 1 reads white");
     Expect(!Contains(fs, "u_tex1"), "unbound stage declares no sampler");
+    Expect(Contains(fs, "current = clamp(vec4(current.rgb, "),
+           "unbound stage 1's MODULATE(TEXTURE, CURRENT) leaves the current color as it is");
+    FixedFunctionKey select = key;
+    select.stages[1].color_op = top::kSelectArg1;  // the play outline's leftover stage 1 (issue #70)
+    select.stages[1].alpha_op = top::kSelectArg1;
+    select.stages[1].alpha_arg[1] = ta::kTexture;
+    const std::string fs_select = GenerateFixedFunctionFragmentShader(select, false);
+    Expect(Contains(fs_select, "current = clamp(vec4(current.rgb, ") && Contains(fs_select, "vec4 t1 = vec4(1.0)"),
+           "unbound SELECTARG1(TEXTURE) keeps the current color; its alpha reads 1");
     Expect(!Contains(fs, "discard"), "no alpha test without alpha_func");
 
     FixedFunctionKey tested = key;

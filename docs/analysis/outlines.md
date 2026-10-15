@@ -16,7 +16,16 @@ JSRF의 셀 셰이딩 윤곽선은 모델을 한 번 더 그려서 만든다. �
 * 데모 값(**확인됨**, `REXBOX_VSH_WATCH`): `c[97] = (0.08, 0, 0, 1)`(거의 검정), `c[98] = (0 또는 −0.05, 0.3, 0, 0)`. 블렌드 SRCALPHA/INVSRCALPHA, 0번 스테이지 MODULATE(텍스처, diffuse), 텍스처 없음.
 * 다른 셰이더 대부분은 `c[97] = (1, 1, 1, 1)`을 쓴다.
 
-## 2. 흰 윤곽선 (미확정)
+## 2. 흰 윤곽선: 원인 (**확인됨**, 수정은 **추정** 규칙)
+
+* 사용자 캡처 10055의 소유 지도: 윤곽선 픽셀을 흰색(255)으로 칠한 것은 윤곽선 그리기 자신(#139, #151, `vs 03FD9741`)이다. 그 뒤 그림자 칠하기가 절반으로 어둡게 해서 (128,128,128)이 된다.
+* 그 그리기의 0번 스테이지 결과는 diffuse(거의 검정)다. 흰색은 뒤 스테이지가 텍스처를 고른 결과다. 직전 몸 그리기는 1번 스테이지를 `SELECTARG1(TEXTURE)`로 둔다(**확인됨**). 윤곽선은 1번 텍스처 없이 그린다. 우리는 텍스처 없는 스테이지를 불투명 흰색으로 읽었다.
+* 새 규칙: 텍스처 없는 스테이지의 **색 연산 중 텍스처를 읽는 것은 건너뛴다**(current 유지). **알파는 텍스처를 1로** 읽는다.
+  * "텍스처 없음 = 검정"은 데모의 로고까지 검게 만들어 틀렸다.
+  * 알파까지 건너뛰면 데모 캐릭터가 반투명해진다.
+  * 새 규칙에서 데모 프레임 600·2400·3200·6000은 전과 같다. 4650은 아래쪽 흰 조각 545픽셀만 어두워졌다.
+
+## 2.1 이전 기록 (미확정이던 때)
 
 * `66949121`에서 `c[101].x`는 색이자 `sge` 기준값이다. 1에 가까우면 희고 가늘어진다. 플레이에서 그 값을 아직 보지 못했다.
 * 배제한 것(**확인됨**): 게임 코드는 상수를 push buffer에 직접 쓰지 않는다. `LoadVertexShader`/`SelectVertexShader`도 부르지 않는다.
@@ -42,7 +51,16 @@ Handles are the decimal numbers `REXBOX_SHADER_DUMP` prints; they were the same 
 * Demo values (**confirmed**, `REXBOX_VSH_WATCH`): `c[97] = (0.08, 0, 0, 1)` (almost black) and `c[98] = (0 or −0.05, 0.3, 0, 0)`; blending SRCALPHA/INVSRCALPHA; stage 0 MODULATE(texture, diffuse) with no texture.
 * Most other shaders use `c[97] = (1, 1, 1, 1)`.
 
-## 2. White outlines (unresolved)
+## 2. White outlines: the cause (**confirmed**; the fix is an **inferred** rule)
+
+* The owner map of the user's capture 10055: the outline draws themselves (#139, #151, `vs 03FD9741`) paint the outline pixels white (255). The shadow fill then halves them to (128,128,128).
+* Stage 0 of those draws gives the diffuse color (almost black), so the white comes from a later stage selecting the texture. The body draw just before leaves stage 1 at `SELECTARG1(TEXTURE)` (**confirmed**), and the outline draws without a stage-1 texture, which we read as opaque white.
+* New rule: on a stage without a texture, **a color operation that reads the texture is skipped** (current kept), and **alpha reads the texture as 1**.
+  * Reading an unbound texture as black turned even the demo's logo black.
+  * Skipping alpha as well made the demo's characters translucent.
+  * With the new rule, demo frames 600, 2400, 3200 and 6000 are unchanged; in 4650 only 545 pixels of white fragments at the bottom darkened.
+
+## 2.1 Earlier notes (while unresolved)
 
 * In `66949121`, `c[101].x` is both the color and the `sge` threshold; near 1 the outline is white and thin. Its value in play has not been seen yet.
 * Ruled out (**confirmed**): the game code writes no constants straight into the push buffer, and it never calls `LoadVertexShader`/`SelectVertexShader`.

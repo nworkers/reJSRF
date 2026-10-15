@@ -50,6 +50,18 @@
 * 데모 캡처의 소유 지도: 윤곽선 그리기는 정상적으로 (20,0,0)을 칠한다(**확인됨**).
 * 칠하기 전의 작성자를 보려고, 픽셀마다 최근 세 호출과 그 직후 색을 남긴다(`_owner2.bmp`, `_owner3.bmp`, `_color2.bmp`, `_color3.bmp`). 데모 캡처로 확인했다.
 
+## 추가: 원인과 수정 (텍스처 없는 스테이지)
+
+* 사용자 캡처 9753·10055(3단 소유 지도):
+  * 윤곽선을 흰색으로 칠한 것은 윤곽선 그리기 자신이다(10055의 #139·#151). 그 뒤 그림자 칠하기가 128로 만든다.
+  * 9753의 흰 픽셀은 트럭 아래 흰 덩어리다(#139, `vs 03FD75C1`).
+* 원인과 규칙: [outlines §2](../analysis/outlines.md). `d3d8_ff_shader.cpp`의 `ReadsTexture`를 더했다. 텍스처 없는 스테이지에서 텍스처를 읽는 색 연산은 current를 유지하고, 알파는 이전대로 1을 읽는다.
+* 검증:
+  * `rexbox_d3d8_probe` 162/0(새 검사 2개).
+  * 데모 프레임 비교: 600·2400·3200·6000은 같다. 4650은 아래쪽 흰 조각 545픽셀만 달라졌다.
+  * 거쳐 간 두 가설("검정", "알파도 건너뜀")은 데모 화면이 깨져서 버렸다.
+* 실제 플레이 확인은 사용자에게 필요하다.
+
 ## 남은 것
 
 * 사용자 보고를 받아 원인을 정하고, 이 issue에 수정 설계를 이어 쓴다.
@@ -107,6 +119,18 @@ Design: [20261016-i070](../design/20261016-i070-outline-watch.md) · Work order:
 * In the user's capture 7499 the outline pixels are exactly (128,128,128), and their last writer in the owner map is the stencil shadow fill (#253, which halves the whole picture). So they were white (255) before the fill.
 * The demo capture's owner map shows the outline draws painting (20,0,0) as they should (**confirmed**).
 * To see the writer before the fill, each pixel now keeps its last three calls and the color right after each (`_owner2.bmp`, `_owner3.bmp`, `_color2.bmp`, `_color3.bmp`), checked with a demo capture.
+
+## Added: the cause and the fix (stages without a texture)
+
+* The user's captures 9753 and 10055 (three-deep owner maps):
+  * The outline draws themselves paint the outline white (#139 and #151 in 10055); the shadow fill then makes it 128.
+  * The white pixels in 9753 are the white patch under the truck (#139, `vs 03FD75C1`).
+* Cause and rule: [outlines §2](../analysis/outlines.md). Added `ReadsTexture` in `d3d8_ff_shader.cpp`: on a stage without a texture, a color operation that reads the texture keeps the current color, and alpha still reads 1.
+* Verification:
+  * `rexbox_d3d8_probe` 162/0 (two new checks).
+  * Demo frame comparison: 600, 2400, 3200 and 6000 are unchanged; in 4650 only 545 pixels of white fragments at the bottom changed.
+  * Two rules tried on the way (black, and skipping alpha too) broke the demo picture and were dropped.
+* Real play still needs the user.
 
 ## Left
 
