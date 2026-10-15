@@ -53,7 +53,7 @@
 ## 남은 것
 
 * X8 형식 타깃의 알파, 헤더와 타깃 크기가 다른 경우(설계 §2.3).
-* 실제 장면에서 블러가 원본과 다르게 보이면, 그때의 보고와 화면을 이 issue에 남긴다.
+* 사용자 확인(v0.0.30 머지 전): 검은 화면은 해결됐지만 블러 모양은 아직 원본과 다르다. 후속은 [#71](https://github.com/nworkers/reJSRF/issues/71)에서 다룬다.
 
 ---
 
@@ -112,4 +112,4 @@ Design: [20261016-i069](../design/20261016-i069-render-target-sampling.md) · Wo
 ## Left
 
 * Alpha of X8-format targets, and headers whose size differs from the target's (design §2.3).
-* If the blur looks different from the original in the real scene, record the reports and a screenshot in this issue.
+* The user's check (before the v0.0.30 merge): the black screen is fixed, but the blur still looks different from the original. Follow-up in [#71](https://github.com/nworkers/reJSRF/issues/71).
