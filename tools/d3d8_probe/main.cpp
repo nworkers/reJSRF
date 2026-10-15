@@ -421,6 +421,68 @@ struct Encoder
     }
 };
 
+void CheckTextureCoordinates()
+{
+    // The demo's cases: a camera-space normal through a COUNT2 matrix, and a
+    // 2D set scrolled by the matrix's third row.
+    FixedFunctionKey key;
+    key.stage_coords = true;
+    key.has_normal = true;
+    key.normalize_normals = true;
+    key.tex_coords = 1;
+    key.tex_components[0] = 2;
+    key.stages[0].color_op = top::kModulate;
+    key.stages[0].sampler = SamplerKind::k2D;
+    key.stages[0].tex_gen = texgen::kCameraSpaceNormal;
+    key.stages[0].tex_transform = 2;
+    key.stages[1].color_op = top::kModulate;
+    key.stages[1].sampler = SamplerKind::k2D;
+    key.stages[1].tex_transform = 2;
+    key.stages[2].color_op = top::kModulate;
+    key.stages[2].sampler = SamplerKind::k2D;
+    key.stages[2].tex_transform = 3 | ttff::kProjected;
+    const std::string vs = GenerateFixedFunctionVertexShader(key, false);
+    const std::string fs = GenerateFixedFunctionFragmentShader(key, false);
+    Expect(Contains(vs, "in vec3 a_normal;") && Contains(vs, "uniform mat4 u_normal_matrix;"),
+           "texgen VS reads the normal and the normal matrix");
+    Expect(Contains(vs, "vec3 eye_normal = normalize(mat3(u_normal_matrix) * a_normal);"),
+           "camera-space normal, normalized under NORMALIZENORMALS");
+    Expect(Contains(vs, "v_tex0 = u_tex_matrix0 * vec4(eye_normal, 1.0);"), "stage 0: normal through its matrix");
+    Expect(Contains(vs, "v_tex1 = u_tex_matrix1 * vec4(a_tex0.xy, 1.0, 0.0);"),
+           "stage 1: a 2D set padded (u, v, 1, 0) before its matrix");
+    Expect(Contains(vs, "v_tex2.w = v_tex2.z;") && Contains(fs, "(v_tex2.xy / v_tex2.w)"),
+           "COUNT3 | PROJECTED divides by the third output");
+    Expect(!Contains(vs, "u_world_view"), "no world-view uniform without a position input");
+    Expect(Contains(fs, "texture(u_tex1, v_tex1.xy)"), "stage coordinates are read per stage");
+
+    FixedFunctionKey reflection = key;
+    reflection.stages[0].tex_gen = texgen::kCameraSpaceReflection;
+    reflection.stages[0].tex_transform = 0;
+    Expect(Contains(GenerateFixedFunctionVertexShader(reflection, false),
+                    "v_tex0 = vec4(reflect(normalize(eye_position), eye_normal), 1.0);"),
+           "reflection vector from the camera-space position and normal");
+
+    // Without a transform a set passes through unpadded, as before.
+    FixedFunctionKey plain;
+    plain.stage_coords = true;
+    plain.tex_coords = 1;
+    plain.tex_components[0] = 2;
+    plain.stages[0].color_op = top::kModulate;
+    plain.stages[0].sampler = SamplerKind::k2D;
+    Expect(Contains(GenerateFixedFunctionVertexShader(plain, false), "v_tex0 = a_tex0;"), "untransformed set");
+    Expect(plain.Serialize() != key.Serialize() && !(plain == key), "generation and transforms are in the key");
+
+    // Normal matrix: the inverse transpose of the upper 3x3.
+    std::array<float, 16> scale = {2, 0, 0, 0, 0, 4, 0, 0, 0, 0, 8, 0, 5, 6, 7, 1};
+    const std::array<float, 16> n = NormalMatrix(scale);
+    Expect(n[0] == 0.5f && n[5] == 0.25f && n[10] == 0.125f && n[12] == 0.0f && n[15] == 1.0f,
+           "normal matrix of a scale drops the translation and inverts the scale");
+    std::array<float, 16> shear = {1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+    const std::array<float, 16> t = NormalMatrix(shear);
+    // inverse([[1,0,0],[1,1,0],[0,0,1]]) = [[1,0,0],[-1,1,0],[0,0,1]]; transposed.
+    Expect(t[0] == 1.0f && t[1] == -1.0f && t[4] == 0.0f && t[5] == 1.0f, "normal matrix of a shear");
+}
+
 void CheckVertexPrograms()
 {
     // dp4 R0.x, v0, c[107]
@@ -615,6 +677,7 @@ int main()
     CheckFvf();
     CheckImmediate();
     CheckFixedFunctionShader();
+    CheckTextureCoordinates();
     CheckVertexPrograms();
     CheckPixelShaders();
     std::printf("%d check(s), %d failure(s)\n", g_checks, g_failures);

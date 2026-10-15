@@ -93,7 +93,7 @@ flowchart BT
 | `d3d8_fvf.h/.cpp` | FVF → 정점 배치(순수) |
 | `d3d8_immediate.h/.cpp` | 즉시 모드: `SetVertexData*` 레지스터 값 유지, `D3DVSDE_VERTEX`로 정점 확정, FVF·선언 배치로 묶기(순수) |
 | `d3d8_texture_format.h/.cpp` | 텍스처 포맷 → RGBA8: Morton 스위즐 해제, 16·32비트, DXT1/3/5(순수) |
-| `d3d8_ff_shader.h/.cpp` | 고정 기능 키와 GLSL 생성(XYZRHW·XYZ 정점, 텍스처 스테이지, 알파 테스트)(순수) |
+| `d3d8_ff_shader.h/.cpp` | 고정 기능 키와 GLSL 생성(XYZRHW·XYZ 정점, 스테이지별 텍스처 좌표의 생성·변환(설계 i064), 텍스처 스테이지, 알파 테스트), 법선 행렬(순수) |
 | `d3d8_trace.h/.cpp` | `REXBOX_D3D8_TRACE`와 미구현 경로의 한 번 보고 |
 | `d3d8_vblank.h/.cpp` | 가상 vblank 시계(디스플레이 refresh, 기본 60 Hz) |
 | `d3d8_gamma.h/.cpp` | 감마 램프(Xbox `D3DGAMMARAMP` 768바이트), CPU 적용, present용 GLSL(순수) |

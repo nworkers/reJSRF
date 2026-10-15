@@ -156,6 +156,10 @@ FixedFunctionKey BuildKey(const VertexLayout& layout, BoundTexture textures[kFix
     {
         key.tex_components[i] = static_cast<uint8_t>(layout.tex_components[i]);
     }
+    // Generation and transforms belong to fixed-function vertex processing;
+    // a vertex program writes the coordinates itself.
+    key.stage_coords = !program;
+    bool reads_normal = false;
     for (uint32_t s = 0; s < kFixedFunctionStages; ++s)
     {
         FixedFunctionKey::Stage& stage = key.stages[s];
@@ -175,19 +179,42 @@ FixedFunctionKey BuildKey(const VertexLayout& layout, BoundTexture textures[kFix
         stage.result_arg = TextureStateValue(s, tss::kResultArg);
         const uint32_t tex_coord_index = TextureStateValue(s, tss::kTexCoordIndex);
         stage.tex_coord_index = static_cast<uint8_t>(tex_coord_index & 0xFFFF);
-        if ((tex_coord_index & 0xFFFF0000u) != 0)
+        const uint32_t generation = tex_coord_index >> 16;
+        const uint32_t transform = TextureStateValue(s, tss::kTextureTransformFlags);
+        if (!program && layout.pretransformed && (generation != 0 || transform != 0))
         {
-            ReportOncePer("texgen", tex_coord_index >> 16, [&] {
-                return Format("texture coordinate generation %08X is not implemented yet (stage %u)",
-                              tex_coord_index, s);
+            ReportOncePer("pretransformed texgen", (generation << 16) | transform, [&] {
+                return Format("texture coordinate generation %08X or transform %08X with pretransformed vertices "
+                              "is not applied (stage %u)",
+                              tex_coord_index, transform, s);
             });
         }
-        if (TextureStateValue(s, tss::kTextureTransformFlags) != 0)
+        else if (!program)
         {
-            ReportOncePer("texture transform", 0, [&] {
-                return Format("texture transforms (stage %u flags %08X) are not applied yet", s,
-                              TextureStateValue(s, tss::kTextureTransformFlags));
-            });
+            if (generation <= texgen::kCameraSpaceReflection)
+            {
+                stage.tex_gen = static_cast<uint8_t>(generation);
+                reads_normal |= generation == texgen::kCameraSpaceNormal ||
+                                generation == texgen::kCameraSpaceReflection;
+            }
+            else
+            {
+                ReportOncePer("texgen", generation, [&] {
+                    return Format("texture coordinate generation %08X is not implemented yet (stage %u)",
+                                  tex_coord_index, s);
+                });
+            }
+            const uint32_t count = transform & ttff::kCountMask;
+            if (count <= 4 && (transform & ~(ttff::kCountMask | ttff::kProjected)) == 0)
+            {
+                stage.tex_transform = static_cast<uint16_t>(count != 0 ? transform : 0);
+            }
+            else
+            {
+                ReportOncePer("texture transform", transform, [&] {
+                    return Format("texture transform flags %08X are not understood (stage %u)", transform, s);
+                });
+            }
         }
         for (const uint32_t op : {stage.color_op, stage.alpha_op})
         {
@@ -204,6 +231,17 @@ FixedFunctionKey BuildKey(const VertexLayout& layout, BoundTexture textures[kFix
     if (RenderStateValue(rs::kAlphaTestEnable) != 0)
     {
         key.alpha_func = RenderStateValue(rs::kAlphaFunc);
+    }
+    if (reads_normal)
+    {
+        key.has_normal = layout.normal != kAbsent;
+        key.normalize_normals = key.has_normal && RenderStateValue(rs::kNormalizeNormals) != 0;
+        if (!key.has_normal)
+        {
+            ReportOncePer("texgen without normal", 0, [] {
+                return std::string("texture coordinate generation reads normals the vertex format lacks; zero is used");
+            });
+        }
     }
     if (RenderStateValue(rs::kFogEnable) != 0)
     {
@@ -433,6 +471,7 @@ void SetVertexAttributes(const VertexLayout& layout, uint32_t stride, size_t bas
     attribute(attr::kPosition, 0, static_cast<GLint>(layout.position_components), kGlFloat, false);
     attribute(attr::kDiffuse, layout.diffuse, 4, kGlUnsignedByte, true);
     attribute(attr::kSpecular, layout.specular, 4, kGlUnsignedByte, true);
+    attribute(attr::kNormal, layout.normal, 3, kGlFloat, false);
     for (uint32_t i = 0; i < kMaxTexCoords; ++i)
     {
         attribute(attr::kTexCoord0 + i, layout.tex_offset[i], static_cast<GLint>(layout.tex_components[i]), kGlFloat,
@@ -715,10 +754,19 @@ void Draw(const char* name, uint32_t primitive, uint32_t count, IndexSource indi
         uniforms = &program->uniforms;
         uniforms->Set4f(program->target, static_cast<float>(width), static_cast<float>(height),
                         pipeline.screen_space_offset_x, pipeline.screen_space_offset_y);
-        const std::array<float, 16> transform =
-            Multiply(Multiply(pipeline.transforms[ts::kWorld], pipeline.transforms[ts::kView]),
-                     pipeline.transforms[ts::kProjection]);
+        const std::array<float, 16> world_view =
+            Multiply(pipeline.transforms[ts::kWorld], pipeline.transforms[ts::kView]);
+        const std::array<float, 16> transform = Multiply(world_view, pipeline.transforms[ts::kProjection]);
         uniforms->SetMatrix4(program->transform, transform.data());
+        uniforms->SetMatrix4(program->world_view, world_view.data());
+        if (program->normal_matrix >= 0)
+        {
+            uniforms->SetMatrix4(program->normal_matrix, NormalMatrix(world_view).data());
+        }
+        for (uint32_t s = 0; s < kFixedFunctionStages; ++s)
+        {
+            uniforms->SetMatrix4(program->tex_matrix[s], pipeline.transforms[ts::kTexture0 + s].data());
+        }
         tex_scale = program->tex_scale;
         tfactor_location = program->tfactor;
         alpha_ref_location = program->alpha_ref;

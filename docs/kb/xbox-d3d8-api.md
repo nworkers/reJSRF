@@ -139,6 +139,19 @@ NV2A 색 포맷이다(추정, xboxrecomp `d3d8_xbox.h`(MIT)의 원래 Xbox 항�
 
 `D3DTOP` (1 `DISABLE` … 26 `BUMPENVMAPLUMINANCE`) and `D3DTA` keep the PC numbers. `D3DTA` is 0 `DIFFUSE`, 1 `CURRENT`, 2 `TEXTURE`, 3 `TFACTOR`, 4 `SPECULAR`, 5 `TEMP`, with the modifiers 0x10 `COMPLEMENT` and 0x20 `ALPHAREPLICATE` (inferred). The title's 4 `MODULATE`, 2 `TEXTURE`, 0 `DIFFUSE` and 1 `CURRENT` are confirmed on screen. The Xbox default is `MODULATE` (`TEXTURE`, `CURRENT`) on every stage, so a stage without a texture is treated as reading white (inferred; the logo screen comes out right that way).
 
+* 텍스처 좌표 생성과 변환(**확인됨**: 게임의 상태 추적, 프레임 2,800·3,100).
+  * `TEXCOORDINDEX`의 상위 16비트는 PC의 `D3DTSS_TCI_*`이다. 게임은 `0x10000` `CAMERASPACENORMAL`을 FVF `0x112`(XYZ|NORMAL|TEX1) 그리기에 쓴다.
+  * `TEXTURETRANSFORMFLAGS`는 PC의 `D3DTTFF_*`이다(`COUNT1..4` 1..4, `PROJECTED` 0x100). 게임은 `COUNT2`를 쓴다.
+  * 행렬은 `SetTransform(D3DTS_TEXTURE0 + s)`, 곧 상태 2..5다.
+  * 법선 생성 행렬: 스테이지 0은 `(0.5, -0.5)` 배율에 넷째 행 `(0.5, 0.5)` 이동이다(환경 맵). 스테이지 1은 u = N·(벡터) + 0.25, v = 0이다(1차원 램프, 셀 셰이딩으로 **추정**).
+  * 좌표를 그대로 쓰는 2D 세트의 스크롤 행렬은 이동량을 **셋째** 행에 둔다. 2D 세트를 `(u, v, 1, 0)`으로 채우는 D3D 규약과 맞는다.
+* Texture coordinate generation and transforms (**confirmed** from a trace of the game's state, frames 2,800 and 3,100).
+  * The high 16 bits of `TEXCOORDINDEX` are the PC `D3DTSS_TCI_*`. The game uses `0x10000` `CAMERASPACENORMAL` on FVF `0x112` (XYZ|NORMAL|TEX1) draws.
+  * `TEXTURETRANSFORMFLAGS` are the PC `D3DTTFF_*` (`COUNT1..4` 1..4, `PROJECTED` 0x100). The game uses `COUNT2`.
+  * The matrices come from `SetTransform(D3DTS_TEXTURE0 + s)`, states 2..5.
+  * Normal-generation matrices: stage 0 scales by `(0.5, -0.5)` and translates by `(0.5, 0.5)` in the fourth row (an environment map). Stage 1 gives u = N·(a vector) + 0.25 and v = 0 (a 1D ramp, **inferred** to be cel shading).
+  * Scrolling matrices for passed-through 2D sets keep the translation in the **third** row, matching D3D's `(u, v, 1, 0)` padding of a 2D set.
+
 ## 11. 감마 램프 / Gamma ramp
 
 * `D3DGAMMARAMP`(Xbox, **확인됨**: lift된 `SetGammaRamp` `0x0018CB60`)는 `BYTE red[256], green[256], blue[256]`, 768바이트다(PC는 WORD). `SetGammaRamp(Flags, pRamp)`는 이 표를 디바이스에 두고, `D3DSGR_IMMEDIATE`(bit 0)이면 RAMDAC 팔레트에 R, G, B 순서로 바로 쓰며, 아니면 다음 vblank에 반영한다. 게임은 로고 페이드를 이 표로 하며, 로고가 다 보이는 동안에는 단위 램프를 매 프레임 다시 설정한다.

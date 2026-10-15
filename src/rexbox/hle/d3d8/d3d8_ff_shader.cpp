@@ -1,5 +1,6 @@
 #include "d3d8_ff_shader.h"
 
+#include <cmath>
 #include <cstdio>
 
 namespace rexbox::hle::d3d8
@@ -16,6 +17,17 @@ std::string Header(bool gles)
 std::string Number(uint32_t value)
 {
     return std::to_string(value);
+}
+
+// Stages up to the first disabled one.
+uint32_t ActiveStages(const FixedFunctionKey& key)
+{
+    uint32_t active = 0;
+    while (active < kFixedFunctionStages && key.stages[active].color_op != top::kDisable)
+    {
+        ++active;
+    }
+    return active;
 }
 
 const char* SamplerType(SamplerKind kind)
@@ -141,9 +153,10 @@ std::string FixedFunctionKey::Serialize() const
 {
     std::string text;
     char buffer[96];
-    std::snprintf(buffer, sizeof(buffer), "v%d%d%d%u:%u%u%u%u;s%d;a%X", pretransformed ? 1 : 0, has_diffuse ? 1 : 0,
-                  has_specular ? 1 : 0, tex_coords, tex_components[0], tex_components[1], tex_components[2],
-                  tex_components[3], specular_enable ? 1 : 0, alpha_func);
+    std::snprintf(buffer, sizeof(buffer), "v%d%d%d%u:%u%u%u%u;c%d%d%d;s%d;a%X", pretransformed ? 1 : 0,
+                  has_diffuse ? 1 : 0, has_specular ? 1 : 0, tex_coords, tex_components[0], tex_components[1],
+                  tex_components[2], tex_components[3], stage_coords ? 1 : 0, has_normal ? 1 : 0,
+                  normalize_normals ? 1 : 0, specular_enable ? 1 : 0, alpha_func);
     text = buffer;
     for (const Stage& stage : stages)
     {
@@ -152,6 +165,11 @@ std::string FixedFunctionKey::Serialize() const
                       stage.alpha_arg[1], stage.alpha_arg[2], stage.result_arg, stage.tex_coord_index,
                       static_cast<unsigned>(stage.sampler), stage.unnormalized ? 'u' : 'n');
         text += buffer;
+        if (stage.tex_gen != texgen::kNone || stage.tex_transform != 0)
+        {
+            std::snprintf(buffer, sizeof(buffer), "g%u,%X", stage.tex_gen, stage.tex_transform);
+            text += buffer;
+        }
         if (stage.color_op == top::kDisable)
         {
             break;  // later stages do not affect the program
@@ -164,7 +182,8 @@ uint64_t FixedFunctionKey::Hash() const
 {
     uint64_t hash = 1469598103934665603ull;
     hash = HashMix(hash, (pretransformed ? 1u : 0u) | (has_diffuse ? 2u : 0u) | (has_specular ? 4u : 0u) |
-                             (specular_enable ? 8u : 0u) | (static_cast<uint64_t>(tex_coords) << 8));
+                             (specular_enable ? 8u : 0u) | (stage_coords ? 16u : 0u) | (has_normal ? 32u : 0u) |
+                             (normalize_normals ? 64u : 0u) | (static_cast<uint64_t>(tex_coords) << 8));
     for (const uint8_t components : tex_components)
     {
         hash = HashMix(hash, components);
@@ -178,9 +197,40 @@ uint64_t FixedFunctionKey::Hash() const
         hash = HashMix(hash, (static_cast<uint64_t>(stage.alpha_arg[0]) << 32) | stage.alpha_arg[1]);
         hash = HashMix(hash, (static_cast<uint64_t>(stage.alpha_arg[2]) << 32) | stage.result_arg);
         hash = HashMix(hash, stage.tex_coord_index | (static_cast<uint64_t>(stage.sampler) << 8) |
-                                 (stage.unnormalized ? 1ull << 16 : 0));
+                                 (stage.unnormalized ? 1ull << 16 : 0) |
+                                 (static_cast<uint64_t>(stage.tex_gen) << 24) |
+                                 (static_cast<uint64_t>(stage.tex_transform) << 32));
     }
     return hash;
+}
+
+std::array<float, 16> NormalMatrix(const std::array<float, 16>& m)
+{
+    // Row-major 3x3 a[r][c] = m[r * 4 + c]. inverse(A)^T = cofactor(A) / det.
+    const auto a = [&m](int r, int c) { return m[r * 4 + c]; };
+    float cof[3][3];
+    for (int r = 0; r < 3; ++r)
+    {
+        for (int c = 0; c < 3; ++c)
+        {
+            const int r0 = (r + 1) % 3;
+            const int r1 = (r + 2) % 3;
+            const int c0 = (c + 1) % 3;
+            const int c1 = (c + 2) % 3;
+            cof[r][c] = a(r0, c0) * a(r1, c1) - a(r0, c1) * a(r1, c0);
+        }
+    }
+    const float det = a(0, 0) * cof[0][0] + a(0, 1) * cof[0][1] + a(0, 2) * cof[0][2];
+    std::array<float, 16> result = {};
+    result[15] = 1.0f;
+    for (int r = 0; r < 3; ++r)
+    {
+        for (int c = 0; c < 3; ++c)
+        {
+            result[r * 4 + c] = std::fabs(det) > 1e-20f ? cof[r][c] / det : a(r, c);
+        }
+    }
+    return result;
 }
 
 std::string GenerateFixedFunctionVertexShader(const FixedFunctionKey& key, bool gles)
@@ -199,13 +249,42 @@ std::string GenerateFixedFunctionVertexShader(const FixedFunctionKey& key, bool 
     {
         text += "layout(location = " + Number(attr::kTexCoord0 + i) + ") in vec4 a_tex" + Number(i) + ";\n";
     }
+    if (key.has_normal)
+    {
+        text += "layout(location = " + Number(attr::kNormal) + ") in vec3 a_normal;\n";
+    }
+    const uint32_t active = ActiveStages(key);
+    bool eye_position = false;
+    bool eye_normal = false;
+    if (key.stage_coords)
+    {
+        for (uint32_t s = 0; s < active; ++s)
+        {
+            const uint8_t gen = key.stages[s].tex_gen;
+            eye_position |= gen == texgen::kCameraSpacePosition || gen == texgen::kCameraSpaceReflection;
+            eye_normal |= gen == texgen::kCameraSpaceNormal || gen == texgen::kCameraSpaceReflection;
+        }
+    }
     text += "uniform mat4 u_transform;\n"
-            "uniform vec4 u_target;\n"
-            "out vec4 v_diffuse;\n"
+            "uniform vec4 u_target;\n";
+    if (eye_position)
+    {
+        text += "uniform mat4 u_world_view;\n";
+    }
+    if (eye_normal && key.has_normal)
+    {
+        text += "uniform mat4 u_normal_matrix;\n";
+    }
+    text += "out vec4 v_diffuse;\n"
             "out vec4 v_specular;\n";
-    for (uint32_t i = 0; i < key.tex_coords; ++i)
+    const uint32_t outputs = key.stage_coords ? active : key.tex_coords;
+    for (uint32_t i = 0; i < outputs; ++i)
     {
         text += "out vec4 v_tex" + Number(i) + ";\n";
+        if (key.stage_coords && (key.stages[i].tex_transform & ttff::kCountMask) != 0)
+        {
+            text += "uniform mat4 u_tex_matrix" + Number(i) + ";\n";
+        }
     }
     text += "void main()\n{\n";
     if (key.pretransformed)
@@ -225,9 +304,87 @@ std::string GenerateFixedFunctionVertexShader(const FixedFunctionKey& key, bool 
     // D3DCOLOR is stored B, G, R, A.
     text += key.has_diffuse ? "    v_diffuse = a_diffuse.bgra;\n" : "    v_diffuse = vec4(1.0);\n";
     text += key.has_specular ? "    v_specular = a_specular.bgra;\n" : "    v_specular = vec4(0.0);\n";
-    for (uint32_t i = 0; i < key.tex_coords; ++i)
+    if (!key.stage_coords)
     {
-        text += "    v_tex" + Number(i) + " = a_tex" + Number(i) + ";\n";
+        for (uint32_t i = 0; i < key.tex_coords; ++i)
+        {
+            text += "    v_tex" + Number(i) + " = a_tex" + Number(i) + ";\n";
+        }
+        text += "}\n";
+        return text;
+    }
+    // Camera space is World*View; normals take its inverse transpose.
+    if (eye_position)
+    {
+        text += "    vec3 eye_position = (u_world_view * vec4(a_position.xyz, 1.0)).xyz;\n";
+    }
+    if (eye_normal)
+    {
+        text += !key.has_normal          ? "    vec3 eye_normal = vec3(0.0);\n"
+                : key.normalize_normals ? "    vec3 eye_normal = normalize(mat3(u_normal_matrix) * a_normal);\n"
+                                        : "    vec3 eye_normal = mat3(u_normal_matrix) * a_normal;\n";
+    }
+    for (uint32_t s = 0; s < active; ++s)
+    {
+        const FixedFunctionKey::Stage& stage = key.stages[s];
+        const uint32_t count = stage.tex_transform & ttff::kCountMask;
+        const std::string out = "v_tex" + Number(s);
+        std::string source;
+        switch (stage.tex_gen)
+        {
+        case texgen::kCameraSpaceNormal:
+            source = "vec4(eye_normal, 1.0)";
+            break;
+        case texgen::kCameraSpacePosition:
+            source = "vec4(eye_position, 1.0)";
+            break;
+        case texgen::kCameraSpaceReflection:
+            source = "vec4(reflect(normalize(eye_position), eye_normal), 1.0)";
+            break;
+        default:
+            if (stage.tex_coord_index >= key.tex_coords)
+            {
+                source = "vec4(0.0, 0.0, 0.0, 1.0)";
+            }
+            else if (count == 0)
+            {
+                source = "a_tex" + Number(stage.tex_coord_index);
+            }
+            else
+            {
+                // D3D pads an n-component set with 1 at component n, then 0
+                // (GL fills in 0, 0, 1), so a 2D set's translation sits in the
+                // matrix's third row.
+                const std::string in = "a_tex" + Number(stage.tex_coord_index);
+                switch (key.tex_components[stage.tex_coord_index])
+                {
+                case 1:
+                    source = "vec4(" + in + ".x, 1.0, 0.0, 0.0)";
+                    break;
+                case 2:
+                    source = "vec4(" + in + ".xy, 1.0, 0.0)";
+                    break;
+                case 3:
+                    source = "vec4(" + in + ".xyz, 1.0)";
+                    break;
+                default:
+                    source = in;
+                    break;
+                }
+            }
+            break;
+        }
+        if (count == 0)
+        {
+            text += "    " + out + " = " + source + ";\n";
+            continue;
+        }
+        text += "    " + out + " = u_tex_matrix" + Number(s) + " * " + source + ";\n";
+        if ((stage.tex_transform & ttff::kProjected) != 0 && count < 4)
+        {
+            // The fragment stage divides by .w: put the last output there.
+            text += "    " + out + ".w = " + out + "." + "xyz"[count - 1] + ";\n";
+        }
     }
     text += "}\n";
     return text;
@@ -238,14 +395,11 @@ std::string GenerateFixedFunctionFragmentShader(const FixedFunctionKey& key, boo
     std::string text = Header(gles);
     text += "in vec4 v_diffuse;\n"
             "in vec4 v_specular;\n";
-    for (uint32_t i = 0; i < key.tex_coords; ++i)
+    const uint32_t active = ActiveStages(key);
+    const uint32_t inputs = key.stage_coords ? active : key.tex_coords;
+    for (uint32_t i = 0; i < inputs; ++i)
     {
         text += "in vec4 v_tex" + Number(i) + ";\n";
-    }
-    uint32_t active = 0;
-    while (active < kFixedFunctionStages && key.stages[active].color_op != top::kDisable)
-    {
-        ++active;
     }
     for (uint32_t s = 0; s < active; ++s)
     {
@@ -274,10 +428,16 @@ std::string GenerateFixedFunctionFragmentShader(const FixedFunctionKey& key, boo
         }
         else
         {
-            const std::string coords = stage.tex_coord_index < key.tex_coords
+            const std::string coords = key.stage_coords ? "v_tex" + Number(s)
+                                       : stage.tex_coord_index < key.tex_coords
                                            ? "v_tex" + Number(stage.tex_coord_index)
                                            : std::string("vec4(0.0, 0.0, 0.0, 1.0)");
             std::string lookup = coords + (stage.sampler == SamplerKind::k2D ? ".xy" : ".xyz");
+            if (key.stage_coords && (stage.tex_transform & ttff::kCountMask) != 0 &&
+                (stage.tex_transform & ttff::kProjected) != 0)
+            {
+                lookup = "(" + lookup + " / " + coords + ".w)";
+            }
             if (stage.unnormalized && stage.sampler == SamplerKind::k2D)
             {
                 lookup = "(" + lookup + " * u_tex_scale" + Number(s) + ")";

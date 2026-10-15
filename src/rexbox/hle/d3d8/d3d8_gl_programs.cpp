@@ -305,6 +305,12 @@ const FixedFunctionProgram* GetFixedFunctionProgram(const FixedFunctionKey& key)
     entry.target = gl.GetUniformLocation(program, "u_target");
     entry.tfactor = gl.GetUniformLocation(program, "u_tfactor");
     entry.alpha_ref = gl.GetUniformLocation(program, "u_alpha_ref");
+    entry.world_view = gl.GetUniformLocation(program, "u_world_view");
+    entry.normal_matrix = gl.GetUniformLocation(program, "u_normal_matrix");
+    for (uint32_t s = 0; s < kFixedFunctionStages; ++s)
+    {
+        entry.tex_matrix[s] = gl.GetUniformLocation(program, ("u_tex_matrix" + std::to_string(s)).c_str());
+    }
     BindSamplers(program, entry.tex_scale);
     TraceOnce("program " + id, Format("program %u built for key %s", program, id.c_str()));
     return &entry;
