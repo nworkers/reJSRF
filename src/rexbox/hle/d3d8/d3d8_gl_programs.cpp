@@ -311,6 +311,16 @@ const FixedFunctionProgram* GetFixedFunctionProgram(const FixedFunctionKey& key)
     {
         entry.tex_matrix[s] = gl.GetUniformLocation(program, ("u_tex_matrix" + std::to_string(s)).c_str());
     }
+    entry.material = gl.GetUniformLocation(program, "u_material");
+    entry.material_power = gl.GetUniformLocation(program, "u_material_power");
+    entry.ambient = gl.GetUniformLocation(program, "u_ambient");
+    entry.light_diffuse = gl.GetUniformLocation(program, "u_light_diffuse");
+    entry.light_specular = gl.GetUniformLocation(program, "u_light_specular");
+    entry.light_ambient = gl.GetUniformLocation(program, "u_light_ambient");
+    entry.light_position = gl.GetUniformLocation(program, "u_light_position");
+    entry.light_direction = gl.GetUniformLocation(program, "u_light_direction");
+    entry.light_attenuation = gl.GetUniformLocation(program, "u_light_attenuation");
+    entry.light_cone = gl.GetUniformLocation(program, "u_light_cone");
     BindSamplers(program, entry.tex_scale);
     TraceOnce("program " + id, Format("program %u built for key %s", program, id.c_str()));
     return &entry;

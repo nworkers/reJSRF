@@ -85,7 +85,7 @@ flowchart BT
 | `d3d8_create.cpp` | `CreateTexture`/`CreateVolumeTexture`/`CreateImageSurface`/`CreateVertexBuffer`/`CreateIndexBuffer`, `D3DResource_Register`, `GetSurfaceLevel`, `Lock*`, 연속 메모리 |
 | `d3d8_globals.h/.cpp` | 라이브러리 전역(`D3D__RenderState`, `D3D__TextureState`, `D3D_g_Stream`, `D3D__IndexData`, `D3D_g_pDevice`)의 위치와 읽기·쓰기 |
 | `d3d8_render_state.h` | Xbox(XDK 4134) 렌더 상태·텍스처 스테이지 상태 번호(근거별 확인됨/추정) |
-| `d3d8_state.cpp` | 상태 setter: 원본과 같은 전역 칸에 씀; 텍스처 바인딩·변환·셰이더 핸들은 `PipelineState` |
+| `d3d8_state.cpp` | 상태 setter: 원본과 같은 전역 칸에 씀; 텍스처 바인딩·변환·셰이더 핸들·광원(`SetLight`/`LightEnable`)·재질은 `PipelineState` |
 | `d3d8_shader.h/.cpp` | 정점 셰이더(선언·마이크로코드를 생성 때 복사·해석)와 픽셀 셰이더(정의 0xF0) 객체, 상수, 뷰포트 상수 `c[58]`/`c[59]`, `REXBOX_SHADER_DUMP` |
 | `d3d8_vsh.h/.cpp` | NV2A 정점 프로그램 디코드·디스어셈블·GLSL 번역(화면 공간 epilogue 되돌리기), `D3DVSD` 선언 해석(순수) |
 | `d3d8_psh.h/.cpp` | 레지스터 컴바이너 `D3DPIXELSHADERDEF` → GLSL, 스테이지 상수 매핑(순수) |
@@ -93,7 +93,7 @@ flowchart BT
 | `d3d8_fvf.h/.cpp` | FVF → 정점 배치(순수) |
 | `d3d8_immediate.h/.cpp` | 즉시 모드: `SetVertexData*` 레지스터 값 유지, `D3DVSDE_VERTEX`로 정점 확정, FVF·선언 배치로 묶기(순수) |
 | `d3d8_texture_format.h/.cpp` | 텍스처 포맷 → RGBA8: Morton 스위즐 해제, 16·32비트, DXT1/3/5(순수) |
-| `d3d8_ff_shader.h/.cpp` | 고정 기능 키와 GLSL 생성(XYZRHW·XYZ 정점, 스테이지별 텍스처 좌표의 생성·변환(설계 i064), 텍스처 스테이지, 알파 테스트), 법선 행렬(순수) |
+| `d3d8_ff_shader.h/.cpp` | 고정 기능 키와 GLSL 생성(XYZRHW·XYZ 정점, 스테이지별 텍스처 좌표의 생성·변환(설계 i064), 정점별 D3D 조명(설계 i066), 텍스처 스테이지, 알파 테스트), 법선 행렬(순수) |
 | `d3d8_trace.h/.cpp` | `REXBOX_D3D8_TRACE`와 미구현 경로의 한 번 보고 |
 | `d3d8_vblank.h/.cpp` | 가상 vblank 시계(디스플레이 refresh, 기본 60 Hz) |
 | `d3d8_gamma.h/.cpp` | 감마 램프(Xbox `D3DGAMMARAMP` 768바이트), CPU 적용, present용 GLSL(순수) |

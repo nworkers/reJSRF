@@ -19,6 +19,75 @@ std::string Number(uint32_t value)
     return std::to_string(value);
 }
 
+// D3D's per-vertex lighting in camera space (eye_position, eye_normal):
+// diffuse = emissive + ambient * Ca + sum(atten * spot * (La * Ca + Ld * Cd *
+// max(N.L, 0))), specular = sum(atten * spot * Ls * Cs * max(N.H, 0)^power)
+// where N.L > 0. The viewer is along -z without LOCALVIEWER (D3D camera
+// space looks down +z).
+std::string Lighting(const FixedFunctionKey& key)
+{
+    std::string text;
+    static const char* const kNames[4] = {"diffuse", "ambient", "specular", "emissive"};
+    for (uint32_t c = 0; c < 4; ++c)
+    {
+        const uint8_t source = key.material_source[c];
+        text += std::string("    vec4 m_") + kNames[c] + " = " +
+                (source == msrc::kDiffuse    ? std::string("a_diffuse.bgra")
+                 : source == msrc::kSpecular ? std::string("a_specular.bgra")
+                                             : "u_material[" + Number(c) + "]") +
+                ";\n";
+    }
+    text += "    vec3 lit = m_emissive.rgb + u_ambient.rgb * m_ambient.rgb;\n"
+            "    vec3 shine = vec3(0.0);\n";
+    if (key.specular_enable)
+    {
+        text += key.local_viewer ? "    vec3 to_viewer = normalize(-eye_position);\n"
+                                 : "    vec3 to_viewer = vec3(0.0, 0.0, -1.0);\n";
+    }
+    for (uint32_t i = 0; i < key.light_count; ++i)
+    {
+        const std::string n = "[" + Number(i) + "]";
+        text += "    {\n";
+        if (key.light_types[i] == light::kDirectional)
+        {
+            text += "        vec3 l = -u_light_direction" + n + ".xyz;\n"
+                    "        float atten = 1.0;\n";
+        }
+        else
+        {
+            text += "        vec3 d = u_light_position" + n + ".xyz - eye_position;\n"
+                    "        float dist = length(d);\n"
+                    "        vec3 l = d / max(dist, 1e-20);\n"
+                    "        vec4 k = u_light_attenuation" + n + ";\n"
+                    "        float atten = dist <= u_light_position" + n +
+                    ".w ? 1.0 / max(k.x + k.y * dist + k.z * dist * dist, 1e-20) : 0.0;\n";
+            if (key.light_types[i] == light::kSpot)
+            {
+                text += "        float rho = dot(-l, u_light_direction" + n + ".xyz);\n"
+                        "        vec2 cone = u_light_cone" + n + ".xy;\n"
+                        "        atten *= rho > cone.x ? 1.0 : rho <= cone.y ? 0.0\n"
+                        "            : pow((rho - cone.y) / max(cone.x - cone.y, 1e-20), k.w);\n";
+            }
+        }
+        text += "        float n_dot_l = dot(eye_normal, l);\n"
+                "        lit += atten * (u_light_ambient" + n + ".rgb * m_ambient.rgb + u_light_diffuse" + n +
+                ".rgb * m_diffuse.rgb * max(n_dot_l, 0.0));\n";
+        if (key.specular_enable)
+        {
+            text += "        if (n_dot_l > 0.0)\n"
+                    "        {\n"
+                    "            float n_dot_h = max(dot(eye_normal, normalize(l + to_viewer)), 0.0);\n"
+                    "            shine += atten * u_light_specular" + n +
+                    ".rgb * m_specular.rgb * pow(n_dot_h, u_material_power);\n"
+                    "        }\n";
+        }
+        text += "    }\n";
+    }
+    text += "    v_diffuse = vec4(clamp(lit, 0.0, 1.0), m_diffuse.a);\n"
+            "    v_specular = vec4(clamp(shine, 0.0, 1.0), m_specular.a);\n";
+    return text;
+}
+
 // Stages up to the first disabled one.
 uint32_t ActiveStages(const FixedFunctionKey& key)
 {
@@ -158,6 +227,16 @@ std::string FixedFunctionKey::Serialize() const
                   tex_components[2], tex_components[3], stage_coords ? 1 : 0, has_normal ? 1 : 0,
                   normalize_normals ? 1 : 0, specular_enable ? 1 : 0, alpha_func);
     text = buffer;
+    if (lighting)
+    {
+        std::snprintf(buffer, sizeof(buffer), ";l%d%u%u%u%u:", local_viewer ? 1 : 0, material_source[0],
+                      material_source[1], material_source[2], material_source[3]);
+        text += buffer;
+        for (uint32_t i = 0; i < light_count; ++i)
+        {
+            text += static_cast<char>('0' + light_types[i]);
+        }
+    }
     for (const Stage& stage : stages)
     {
         std::snprintf(buffer, sizeof(buffer), "|%X,%X,%X,%X/%X,%X,%X,%X/%X/%u/%u%c", stage.color_op,
@@ -189,6 +268,15 @@ uint64_t FixedFunctionKey::Hash() const
         hash = HashMix(hash, components);
     }
     hash = HashMix(hash, alpha_func);
+    hash = HashMix(hash, (lighting ? 1u : 0u) | (local_viewer ? 2u : 0u) | (static_cast<uint64_t>(light_count) << 8) |
+                             (static_cast<uint64_t>(material_source[0]) << 16) |
+                             (static_cast<uint64_t>(material_source[1]) << 20) |
+                             (static_cast<uint64_t>(material_source[2]) << 24) |
+                             (static_cast<uint64_t>(material_source[3]) << 28));
+    for (uint32_t i = 0; i < light_count; ++i)
+    {
+        hash = HashMix(hash, light_types[i]);
+    }
     for (const Stage& stage : stages)
     {
         hash = HashMix(hash, stage.color_op);
@@ -265,6 +353,16 @@ std::string GenerateFixedFunctionVertexShader(const FixedFunctionKey& key, bool 
             eye_normal |= gen == texgen::kCameraSpaceNormal || gen == texgen::kCameraSpaceReflection;
         }
     }
+    const bool lighting = key.stage_coords && key.lighting;
+    if (lighting)
+    {
+        eye_normal = true;
+        eye_position |= key.local_viewer && key.specular_enable;
+        for (uint32_t i = 0; i < key.light_count; ++i)
+        {
+            eye_position |= key.light_types[i] != light::kDirectional;
+        }
+    }
     text += "uniform mat4 u_transform;\n"
             "uniform vec4 u_target;\n";
     if (eye_position)
@@ -274,6 +372,20 @@ std::string GenerateFixedFunctionVertexShader(const FixedFunctionKey& key, bool 
     if (eye_normal && key.has_normal)
     {
         text += "uniform mat4 u_normal_matrix;\n";
+    }
+    if (lighting)
+    {
+        text += "uniform vec4 u_material[4];\n"
+                "uniform float u_material_power;\n"
+                "uniform vec4 u_ambient;\n";
+        if (key.light_count != 0)
+        {
+            const std::string n = "[" + Number(key.light_count) + "];\n";
+            text += "uniform vec4 u_light_diffuse" + n + "uniform vec4 u_light_specular" + n +
+                    "uniform vec4 u_light_ambient" + n + "uniform vec4 u_light_position" + n +
+                    "uniform vec4 u_light_direction" + n + "uniform vec4 u_light_attenuation" + n +
+                    "uniform vec4 u_light_cone" + n;
+        }
     }
     text += "out vec4 v_diffuse;\n"
             "out vec4 v_specular;\n";
@@ -302,8 +414,11 @@ std::string GenerateFixedFunctionVertexShader(const FixedFunctionKey& key, bool 
                 "    gl_Position = vec4(p.x, p.y, p.z * 2.0 - p.w, p.w);\n";
     }
     // D3DCOLOR is stored B, G, R, A.
-    text += key.has_diffuse ? "    v_diffuse = a_diffuse.bgra;\n" : "    v_diffuse = vec4(1.0);\n";
-    text += key.has_specular ? "    v_specular = a_specular.bgra;\n" : "    v_specular = vec4(0.0);\n";
+    if (!lighting)
+    {
+        text += key.has_diffuse ? "    v_diffuse = a_diffuse.bgra;\n" : "    v_diffuse = vec4(1.0);\n";
+        text += key.has_specular ? "    v_specular = a_specular.bgra;\n" : "    v_specular = vec4(0.0);\n";
+    }
     if (!key.stage_coords)
     {
         for (uint32_t i = 0; i < key.tex_coords; ++i)
@@ -323,6 +438,10 @@ std::string GenerateFixedFunctionVertexShader(const FixedFunctionKey& key, bool 
         text += !key.has_normal          ? "    vec3 eye_normal = vec3(0.0);\n"
                 : key.normalize_normals ? "    vec3 eye_normal = normalize(mat3(u_normal_matrix) * a_normal);\n"
                                         : "    vec3 eye_normal = mat3(u_normal_matrix) * a_normal;\n";
+    }
+    if (lighting)
+    {
+        text += Lighting(key);
     }
     for (uint32_t s = 0; s < active; ++s)
     {

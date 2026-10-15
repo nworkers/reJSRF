@@ -79,6 +79,34 @@ constexpr uint32_t kCountMask = 0xFF;  // COUNT1..4: output components; 0 disabl
 constexpr uint32_t kProjected = 0x100;   // divide by the last output component
 }  // namespace ttff
 
+// D3DLIGHTTYPE.
+namespace light
+{
+constexpr uint8_t kPoint = 1;
+constexpr uint8_t kSpot = 2;
+constexpr uint8_t kDirectional = 3;
+}  // namespace light
+
+// Where a lit color comes from (D3DMATERIALCOLORSOURCE, resolved against the
+// vertex format: a missing vertex color falls back to the material).
+namespace msrc
+{
+constexpr uint8_t kMaterial = 0;
+constexpr uint8_t kDiffuse = 1;   // the vertex diffuse color
+constexpr uint8_t kSpecular = 2;  // the vertex specular color
+}  // namespace msrc
+
+// Material colors in FixedFunctionKey::material_source order.
+namespace mcolor
+{
+constexpr uint32_t kDiffuse = 0;
+constexpr uint32_t kAmbient = 1;
+constexpr uint32_t kSpecular = 2;
+constexpr uint32_t kEmissive = 3;
+}  // namespace mcolor
+
+constexpr uint32_t kMaxActiveLights = 8;
+
 enum class SamplerKind : uint8_t
 {
     kNone,  // unbound: reads opaque white
@@ -124,8 +152,18 @@ struct FixedFunctionKey
     // generated and transformed as the stage says; otherwise (a vertex
     // program supplies v_tex0..3) a stage reads v_tex<tex_coord_index>.
     bool stage_coords = false;
-    bool has_normal = false;  // a vertex normal the generation reads
+    bool has_normal = false;  // a vertex normal the generation or lighting reads
     bool normalize_normals = false;
+
+    // Fixed-function lighting (stage_coords draws with D3DRS_LIGHTING): the
+    // enabled lights' types in index order, where each lit color comes
+    // from, and D3DRS_LOCALVIEWER. specular_enable also turns on the
+    // specular term.
+    bool lighting = false;
+    bool local_viewer = false;
+    uint8_t light_count = 0;
+    uint8_t light_types[kMaxActiveLights] = {};
+    uint8_t material_source[4] = {};  // mcolor order: msrc values
 
     bool specular_enable = false;
     uint32_t alpha_func = 0;  // 0: alpha test off; else the comparison (0x200 NEVER .. 0x207 ALWAYS)
@@ -159,8 +197,13 @@ constexpr uint32_t kNormal = 7;
 // u_tex0..3, u_tex_scale0..3 (vec2, 1/size for unnormalized stages),
 // u_tfactor (vec4), u_alpha_ref (float, 0..255); for coordinate generation
 // u_world_view (mat4, World*View) and u_normal_matrix (mat4, NormalMatrix),
-// for transforms u_tex_matrix0..3 (mat4, D3DTS_TEXTURE<s>). Matrices are
-// D3D's row-major arrays as given (row vectors: v * M).
+// for transforms u_tex_matrix0..3 (mat4, D3DTS_TEXTURE<s>); for lighting
+// u_material[4] (mcolor order), u_material_power, u_ambient (D3DRS_AMBIENT),
+// and per light (camera space) u_light_diffuse/specular/ambient[8],
+// u_light_position[8] (xyz, w = range), u_light_direction[8] (xyz, unit,
+// pointing away from the light), u_light_attenuation[8] (att0..2, falloff)
+// and u_light_cone[8] (cos(theta/2), cos(phi/2)). Matrices are D3D's
+// row-major arrays as given (row vectors: v * M).
 std::string GenerateFixedFunctionVertexShader(const FixedFunctionKey& key, bool gles);
 std::string GenerateFixedFunctionFragmentShader(const FixedFunctionKey& key, bool gles);
 

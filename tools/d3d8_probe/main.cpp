@@ -483,6 +483,51 @@ void CheckTextureCoordinates()
     Expect(t[0] == 1.0f && t[1] == -1.0f && t[4] == 0.0f && t[5] == 1.0f, "normal matrix of a shear");
 }
 
+void CheckLighting()
+{
+    // The demo's case: one directional light, diffuse from the material
+    // (the format has no vertex color), no specular.
+    FixedFunctionKey key;
+    key.stage_coords = true;
+    key.has_normal = true;
+    key.lighting = true;
+    key.light_count = 1;
+    key.light_types[0] = light::kDirectional;
+    key.stages[0].color_op = top::kModulate;
+    const std::string vs = GenerateFixedFunctionVertexShader(key, false);
+    Expect(Contains(vs, "vec4 m_diffuse = u_material[0];") && Contains(vs, "vec4 m_emissive = u_material[3];"),
+           "material colors from the material");
+    Expect(Contains(vs, "vec3 lit = m_emissive.rgb + u_ambient.rgb * m_ambient.rgb;"), "emissive and global ambient");
+    Expect(Contains(vs, "vec3 l = -u_light_direction[0].xyz;") && Contains(vs, "max(n_dot_l, 0.0)"),
+           "directional light: diffuse by N.L");
+    Expect(Contains(vs, "v_diffuse = vec4(clamp(lit, 0.0, 1.0), m_diffuse.a);"), "lit diffuse, alpha from the source");
+    Expect(!Contains(vs, "u_world_view") && !Contains(vs, "pow(n_dot_h"),
+           "no camera-space position or specular for a directional light without SPECULARENABLE");
+    Expect(Contains(vs, "uniform vec4 u_light_diffuse[1];"), "light arrays sized by the light count");
+
+    // Point and spot lights with specular, a local viewer and vertex colors.
+    FixedFunctionKey full = key;
+    full.has_diffuse = true;
+    full.has_specular = true;
+    full.specular_enable = true;
+    full.local_viewer = true;
+    full.light_count = 3;
+    full.light_types[1] = light::kPoint;
+    full.light_types[2] = light::kSpot;
+    full.material_source[mcolor::kDiffuse] = msrc::kDiffuse;
+    full.material_source[mcolor::kSpecular] = msrc::kSpecular;
+    const std::string lit = GenerateFixedFunctionVertexShader(full, false);
+    Expect(Contains(lit, "vec4 m_diffuse = a_diffuse.bgra;") && Contains(lit, "vec4 m_specular = a_specular.bgra;"),
+           "COLOR1 and COLOR2 sources read the vertex colors");
+    Expect(Contains(lit, "uniform mat4 u_world_view;") && Contains(lit, "vec3 d = u_light_position[1].xyz - eye_position;"),
+           "point light from the camera-space position");
+    Expect(Contains(lit, "float rho = dot(-l, u_light_direction[2].xyz);"), "spot cone");
+    Expect(Contains(lit, "vec3 to_viewer = normalize(-eye_position);") && Contains(lit, "pow(n_dot_h, u_material_power)"),
+           "specular with a local viewer");
+    Expect(full.Serialize() != key.Serialize() && !(full == key) && full.Hash() != key.Hash(),
+           "lights and sources are in the key");
+}
+
 void CheckVertexPrograms()
 {
     // dp4 R0.x, v0, c[107]
@@ -678,6 +723,7 @@ int main()
     CheckImmediate();
     CheckFixedFunctionShader();
     CheckTextureCoordinates();
+    CheckLighting();
     CheckVertexPrograms();
     CheckPixelShaders();
     std::printf("%d check(s), %d failure(s)\n", g_checks, g_failures);

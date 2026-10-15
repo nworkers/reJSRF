@@ -29,6 +29,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstring>
 #include <vector>
 
@@ -232,26 +233,64 @@ FixedFunctionKey BuildKey(const VertexLayout& layout, BoundTexture textures[kFix
     {
         key.alpha_func = RenderStateValue(rs::kAlphaFunc);
     }
+    if (!program && !layout.pretransformed && RenderStateValue(rs::kLighting) != 0)
+    {
+        key.lighting = true;
+        key.local_viewer = RenderStateValue(rs::kLocalViewer) != 0;
+        uint32_t enabled = 0;
+        for (const Light& light : pipeline.lights)
+        {
+            if (!light.enabled)
+            {
+                continue;
+            }
+            if (light.type < light::kPoint || light.type > light::kDirectional)
+            {
+                ReportOncePer("light type", light.type,
+                              [&light] { return Format("light type %u is not understood; not lit", light.type); });
+                continue;
+            }
+            if (key.light_count < kMaxActiveLights)
+            {
+                key.light_types[key.light_count++] = static_cast<uint8_t>(light.type);
+            }
+            ++enabled;
+        }
+        if (enabled > kMaxActiveLights)
+        {
+            ReportOncePer("lights", 0, [enabled] {
+                return Format("%u lights are enabled; the first %u are used", enabled, kMaxActiveLights);
+            });
+        }
+        // D3DMCS_COLOR1/2 read the vertex colors under COLORVERTEX; a color
+        // the format lacks falls back to the material.
+        const bool color_vertex = RenderStateValue(rs::kColorVertex) != 0;
+        const uint32_t sources[4] = {rs::kDiffuseMaterialSource, rs::kAmbientMaterialSource,
+                                     rs::kSpecularMaterialSource, rs::kEmissiveMaterialSource};
+        for (uint32_t c = 0; c < 4; ++c)
+        {
+            const uint32_t source = color_vertex ? RenderStateValue(sources[c]) : 0;
+            key.material_source[c] = source == 1 && key.has_diffuse    ? msrc::kDiffuse
+                                     : source == 2 && key.has_specular ? msrc::kSpecular
+                                                                       : msrc::kMaterial;
+        }
+        reads_normal = true;
+    }
     if (reads_normal)
     {
         key.has_normal = layout.normal != kAbsent;
         key.normalize_normals = key.has_normal && RenderStateValue(rs::kNormalizeNormals) != 0;
         if (!key.has_normal)
         {
-            ReportOncePer("texgen without normal", 0, [] {
-                return std::string("texture coordinate generation reads normals the vertex format lacks; zero is used");
+            ReportOncePer("normal missing", 0, [] {
+                return std::string("lighting or texture coordinate generation reads normals the vertex format lacks; "
+                                   "zero is used");
             });
         }
     }
     if (RenderStateValue(rs::kFogEnable) != 0)
     {
         ReportOncePer("fog", 0, [] { return std::string("fog is not drawn yet"); });
-    }
-    if (!program && !layout.pretransformed && RenderStateValue(rs::kLighting) != 0)
-    {
-        ReportOncePer("lighting", 0, [] {
-            return std::string("fixed-function lighting is not implemented yet; lit draws use vertex colors");
-        });
     }
     return key;
 }
@@ -516,6 +555,86 @@ void SetProgramAttributes(const vsh::Declaration& declaration, uint32_t stride, 
     FinishAttributes();
 }
 
+// The material, D3DRS_AMBIENT and the enabled lights (in the key's order) in
+// camera space.
+void SetLightingUniforms(const FixedFunctionProgram& program, const FixedFunctionKey& key,
+                         const PipelineState& pipeline)
+{
+    UniformCache& uniforms = program.uniforms;
+    const Material& m = pipeline.material;
+    float material[16];
+    std::memcpy(material, m.diffuse, sizeof(m.diffuse));
+    std::memcpy(material + 4, m.ambient, sizeof(m.ambient));
+    std::memcpy(material + 8, m.specular, sizeof(m.specular));
+    std::memcpy(material + 12, m.emissive, sizeof(m.emissive));
+    uniforms.Set4fv(program.material, 4, material);
+    uniforms.Set1f(program.material_power, m.power);
+    float ambient[4];
+    ColorToFloats(RenderStateValue(rs::kAmbient), ambient);
+    uniforms.Set4fv(program.ambient, 1, ambient);
+    if (key.light_count == 0)
+    {
+        return;
+    }
+    float diffuse[kMaxActiveLights][4];
+    float specular[kMaxActiveLights][4];
+    float light_ambient[kMaxActiveLights][4];
+    float position[kMaxActiveLights][4];
+    float direction[kMaxActiveLights][4];
+    float attenuation[kMaxActiveLights][4];
+    float cone[kMaxActiveLights][4];
+    const std::array<float, 16>& v = pipeline.transforms[ts::kView];
+    uint32_t i = 0;
+    for (const Light& light : pipeline.lights)
+    {
+        if (i == key.light_count)
+        {
+            break;
+        }
+        if (!light.enabled || light.type < light::kPoint || light.type > light::kDirectional)
+        {
+            continue;
+        }
+        std::memcpy(diffuse[i], light.diffuse, sizeof(light.diffuse));
+        std::memcpy(specular[i], light.specular, sizeof(light.specular));
+        std::memcpy(light_ambient[i], light.ambient, sizeof(light.ambient));
+        // Row vectors: p * View, the direction without the translation.
+        const float* p = light.position;
+        const float* d = light.direction;
+        float eye_direction[3];
+        for (int c = 0; c < 3; ++c)
+        {
+            position[i][c] = p[0] * v[c] + p[1] * v[4 + c] + p[2] * v[8 + c] + v[12 + c];
+            eye_direction[c] = d[0] * v[c] + d[1] * v[4 + c] + d[2] * v[8 + c];
+        }
+        const float length = std::sqrt(eye_direction[0] * eye_direction[0] + eye_direction[1] * eye_direction[1] +
+                                       eye_direction[2] * eye_direction[2]);
+        for (int c = 0; c < 3; ++c)
+        {
+            direction[i][c] = length > 0.0f ? eye_direction[c] / length : 0.0f;
+        }
+        position[i][3] = light.range;
+        direction[i][3] = 0.0f;
+        attenuation[i][0] = light.attenuation[0];
+        attenuation[i][1] = light.attenuation[1];
+        attenuation[i][2] = light.attenuation[2];
+        attenuation[i][3] = light.falloff;
+        cone[i][0] = std::cos(light.theta * 0.5f);
+        cone[i][1] = std::cos(light.phi * 0.5f);
+        cone[i][2] = 0.0f;
+        cone[i][3] = 0.0f;
+        ++i;
+    }
+    const int count = static_cast<int>(key.light_count);
+    uniforms.Set4fv(program.light_diffuse, count, &diffuse[0][0]);
+    uniforms.Set4fv(program.light_specular, count, &specular[0][0]);
+    uniforms.Set4fv(program.light_ambient, count, &light_ambient[0][0]);
+    uniforms.Set4fv(program.light_position, count, &position[0][0]);
+    uniforms.Set4fv(program.light_direction, count, &direction[0][0]);
+    uniforms.Set4fv(program.light_attenuation, count, &attenuation[0][0]);
+    uniforms.Set4fv(program.light_cone, count, &cone[0][0]);
+}
+
 // One draw of `count` vertices or indices; vertex numbers are relative to
 // `source.base`.
 void Draw(const char* name, uint32_t primitive, uint32_t count, IndexSource indices, VertexSource source)
@@ -766,6 +885,10 @@ void Draw(const char* name, uint32_t primitive, uint32_t count, IndexSource indi
         for (uint32_t s = 0; s < kFixedFunctionStages; ++s)
         {
             uniforms->SetMatrix4(program->tex_matrix[s], pipeline.transforms[ts::kTexture0 + s].data());
+        }
+        if (key.lighting)
+        {
+            SetLightingUniforms(*program, key, pipeline);
         }
         tex_scale = program->tex_scale;
         tfactor_location = program->tfactor;
