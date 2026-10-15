@@ -37,6 +37,7 @@ void NoteHleEntry(const char* name, uint32_t esp);
 
 // The calling thread starts or ends a wait in `what` (static storage) on
 // `count` objects, all of them or any; `timeout_ms` < 0 means no timeout.
+// For its length the thread's guest locks are put down (guest_lock.h).
 void NoteWaitBegin(const char* what, const GuestAddress* objects, size_t count, bool all, int64_t timeout_ms);
 void NoteWaitEnd();
 

@@ -1,6 +1,7 @@
 #include "rexbox/runtime/thread_activity.h"
 
 #include "rexbox/runtime/environment.h"
+#include "rexbox/runtime/guest_lock.h"
 #include "rexbox/runtime/guest_memory.h"
 
 #include <array>
@@ -320,11 +321,13 @@ void NoteWaitBegin(const char* what, const GuestAddress* objects, size_t count, 
     record.wait_timeout_ms.store(timeout_ms, std::memory_order_relaxed);
     record.wait_since_ns.store(NowNs(), std::memory_order_relaxed);
     record.wait_what.store(what, std::memory_order_release);
+    PutDownGuestLocksForWait();
 }
 
 void NoteWaitEnd()
 {
     Self().wait_what.store(nullptr, std::memory_order_release);
+    PickUpGuestLocksAfterWait();
 }
 
 void NotePresent(uint32_t frame)
