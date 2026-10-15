@@ -24,6 +24,11 @@
 | Debug 빌드 | 새 경고 없음 |
 | 사용자 플레이 | 대기. 흰 윤곽선이 보일 때의 `[vsh watch]` 줄이 필요 |
 
+## 추가: `all` 모드 (설계 §2.1)
+
+* 사용자 첫 플레이 로그에 감시 줄이 없었다. 플레이에서는 데모 핸들이 쓰이지 않는다.
+* `REXBOX_VSH_WATCH=all`을 더했다. Debug 데모 150초에서 19개 핸들 × 4줄 = 76줄이 나왔다.
+
 ## 남은 것
 
 * 사용자 보고를 받아 원인을 정하고, 이 issue에 수정 설계를 이어 쓴다.
@@ -55,6 +60,11 @@ Design: [20261016-i070](../design/20261016-i070-outline-watch.md) · Work order:
 | Demo, 60 s, no variable | no output |
 | Debug build | no new warnings |
 | User play | waiting: needs the `[vsh watch]` lines from when white outlines show |
+
+## Added: the `all` mode (design §2.1)
+
+* The user's first play log had no watch lines; play does not use the demo's handles.
+* Added `REXBOX_VSH_WATCH=all`. A 150 s Debug demo run printed 19 handles × 4 lines = 76 lines.
 
 ## Left
 

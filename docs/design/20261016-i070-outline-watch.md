@@ -29,6 +29,11 @@
 * 위치: `d3d8_draw_watch.h/.cpp`. 그리기 경로는 프로그램 그리기에서 한 번 부른다. 꺼져 있으면 비용은 bool 하나다.
 * 사용자가 플레이에서 `REXBOX_VSH_WATCH=66949121:96-103,66950977,66942593`으로 실행해 흰 윤곽선이 보일 때의 줄을 보고하면, 다음 단계(수정)를 설계한다.
 
+### 2.1 추가: `REXBOX_VSH_WATCH=all`
+
+* 사용자 플레이(첫 시도)에서는 `[vsh watch]` 줄이 하나도 나오지 않았다. 데모의 세 핸들이 플레이에서는 쓰이지 않는다(**확인됨**). 플레이는 셰이더를 따로 만든다.
+* `all`이면 모든 프로그램 핸들을 기본 범위로 감시하되, 핸들마다 4줄까지만 쓴다. `REXBOX_SHADER_DUMP=1`과 함께 실행하면 핸들을 마이크로코드와 맞출 수 있다.
+
 ## 3. 검증
 
 | 검증 | 기대 |
@@ -65,6 +70,11 @@
 * The same content (hash) is not printed again, and each handle prints at most 64 lines.
 * Location: `d3d8_draw_watch.h/.cpp`, called once from the program draw path. When off it costs one bool.
 * The user runs play with `REXBOX_VSH_WATCH=66949121:96-103,66950977,66942593` and reports the lines from when white outlines show; the fix is designed from those.
+
+### 2.1 Added: `REXBOX_VSH_WATCH=all`
+
+* The user's first play run printed no `[vsh watch]` line: the demo's three handles are not used in play (**confirmed**), which creates its own shaders.
+* `all` watches every program handle with the default range, at most 4 lines each. Run with `REXBOX_SHADER_DUMP=1` to match handles to their microcode.
 
 ## 3. Verification
 

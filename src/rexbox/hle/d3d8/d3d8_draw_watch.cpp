@@ -21,6 +21,7 @@ namespace
 {
 
 constexpr uint32_t kMaxLinesPerHandle = 64;
+constexpr uint32_t kMaxLinesPerHandleAll = 4;  // REXBOX_VSH_WATCH=all
 constexpr uint32_t kConstantRegisters = 192;
 
 struct Watch
@@ -30,12 +31,22 @@ struct Watch
     std::unordered_set<uint64_t> seen;
 };
 
+// REXBOX_VSH_WATCH=all: every program handle, with the default range.
+bool WatchAll()
+{
+    static const bool all = [] {
+        const char* setting = std::getenv("REXBOX_VSH_WATCH");
+        return setting != nullptr && std::strcmp(setting, "all") == 0;
+    }();
+    return all;
+}
+
 std::unordered_map<uint32_t, Watch>& Watches()
 {
     static std::unordered_map<uint32_t, Watch> watches = [] {
         std::unordered_map<uint32_t, Watch> parsed;
         const char* setting = std::getenv("REXBOX_VSH_WATCH");
-        if (setting == nullptr)
+        if (setting == nullptr || WatchAll())
         {
             return parsed;
         }
@@ -80,7 +91,7 @@ std::unordered_map<uint32_t, Watch>& Watches()
 
 bool DrawWatchEnabled()
 {
-    static const bool enabled = !Watches().empty();
+    static const bool enabled = WatchAll() || !Watches().empty();
     return enabled;
 }
 
@@ -89,10 +100,14 @@ void WatchProgramDraw(uint32_t vertex_shader, const FixedFunctionKey& fragment_k
     auto it = Watches().find(vertex_shader);
     if (it == Watches().end())
     {
-        return;
+        if (!WatchAll())
+        {
+            return;
+        }
+        it = Watches().emplace(vertex_shader, Watch{}).first;
     }
     Watch& watch = it->second;
-    if (watch.seen.size() >= kMaxLinesPerHandle)
+    if (watch.seen.size() >= (WatchAll() ? kMaxLinesPerHandleAll : kMaxLinesPerHandle))
     {
         return;
     }

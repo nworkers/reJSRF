@@ -5,7 +5,9 @@
 // (decimal as in REXBOX_SHADER_DUMP, or 0x hexadecimal) and the raw c[]
 // range to print (default 96-103). A draw with a watched handle prints one
 // line to stderr when its constants or state differ from every line printed
-// for that handle before, at most 64 lines per handle.
+// for that handle before, at most 64 lines per handle. REXBOX_VSH_WATCH=all
+// watches every program handle with the default range, at most 4 lines each
+// (run with REXBOX_SHADER_DUMP=1 to match handles to their microcode).
 
 #ifndef REXBOX_HLE_D3D8_D3D8_DRAW_WATCH_H
 #define REXBOX_HLE_D3D8_D3D8_DRAW_WATCH_H
