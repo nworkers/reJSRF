@@ -53,6 +53,9 @@ struct FixedFunctionProgram
     int tfactor = -1;
     int alpha_ref = -1;
     int tex_scale[kFixedFunctionStages] = {-1, -1, -1, -1};
+    int world_view = -1;
+    int normal_matrix = -1;
+    int tex_matrix[kFixedFunctionStages] = {-1, -1, -1, -1};
     mutable UniformCache uniforms;
 };
 

@@ -12,6 +12,7 @@
 #ifndef REXBOX_HLE_D3D8_D3D8_FF_SHADER_H
 #define REXBOX_HLE_D3D8_D3D8_FF_SHADER_H
 
+#include <array>
 #include <cstdint>
 #include <string>
 
@@ -61,6 +62,23 @@ constexpr uint32_t kComplement = 0x10;
 constexpr uint32_t kAlphaReplicate = 0x20;
 }  // namespace ta
 
+// Texture coordinate generation: the high 16 bits of D3DTSS_TEXCOORDINDEX
+// (D3DTSS_TCI_*, PC values).
+namespace texgen
+{
+constexpr uint8_t kNone = 0;  // the vertex set named by the low 16 bits
+constexpr uint8_t kCameraSpaceNormal = 1;
+constexpr uint8_t kCameraSpacePosition = 2;
+constexpr uint8_t kCameraSpaceReflection = 3;
+}  // namespace texgen
+
+// D3DTSS_TEXTURETRANSFORMFLAGS (D3DTTFF_*, PC values).
+namespace ttff
+{
+constexpr uint32_t kCountMask = 0xFF;  // COUNT1..4: output components; 0 disables
+constexpr uint32_t kProjected = 0x100;   // divide by the last output component
+}  // namespace ttff
+
 enum class SamplerKind : uint8_t
 {
     kNone,  // unbound: reads opaque white
@@ -88,6 +106,11 @@ struct FixedFunctionKey
         uint32_t alpha_arg[3] = {ta::kCurrent, ta::kTexture, ta::kCurrent};
         uint32_t result_arg = ta::kCurrent;
         uint8_t tex_coord_index = 0;  // which vertex texture-coordinate set
+        // Fixed-function vertex processing only (stage_coords): the generated
+        // input (texgen::*) and the transform flags (ttff count and
+        // projected bit, 0 when the transform is off).
+        uint8_t tex_gen = texgen::kNone;
+        uint16_t tex_transform = 0;
         SamplerKind sampler = SamplerKind::kNone;
         // Linear (unswizzled) textures are sampled with texel coordinates on
         // the NV2A (inferred); the shader scales them by u_tex_scale<stage>.
@@ -96,6 +119,13 @@ struct FixedFunctionKey
         bool operator==(const Stage&) const = default;
     };
     Stage stages[kFixedFunctionStages];
+
+    // The vertex shader writes one coordinate per active stage (v_tex<s>),
+    // generated and transformed as the stage says; otherwise (a vertex
+    // program supplies v_tex0..3) a stage reads v_tex<tex_coord_index>.
+    bool stage_coords = false;
+    bool has_normal = false;  // a vertex normal the generation reads
+    bool normalize_normals = false;
 
     bool specular_enable = false;
     uint32_t alpha_func = 0;  // 0: alpha test off; else the comparison (0x200 NEVER .. 0x207 ALWAYS)
@@ -120,15 +150,24 @@ constexpr uint32_t kPosition = 0;
 constexpr uint32_t kDiffuse = 1;
 constexpr uint32_t kSpecular = 2;
 constexpr uint32_t kTexCoord0 = 3;  // .. kTexCoord0 + 3
+constexpr uint32_t kNormal = 7;
 }  // namespace attr
 
 // GLSL sources for `key`. `gles` selects "#version 300 es" over "330 core".
 // Uniforms: u_transform (mat4, World*View*Projection, row-vector convention),
 // u_target (vec4: render-target width, height, screen-space offset x, y),
 // u_tex0..3, u_tex_scale0..3 (vec2, 1/size for unnormalized stages),
-// u_tfactor (vec4), u_alpha_ref (float, 0..255).
+// u_tfactor (vec4), u_alpha_ref (float, 0..255); for coordinate generation
+// u_world_view (mat4, World*View) and u_normal_matrix (mat4, NormalMatrix),
+// for transforms u_tex_matrix0..3 (mat4, D3DTS_TEXTURE<s>). Matrices are
+// D3D's row-major arrays as given (row vectors: v * M).
 std::string GenerateFixedFunctionVertexShader(const FixedFunctionKey& key, bool gles);
 std::string GenerateFixedFunctionFragmentShader(const FixedFunctionKey& key, bool gles);
+
+// The matrix that takes object-space normals to camera space for the
+// row-major `world_view`: the inverse transpose of its upper 3x3, padded to
+// 4x4 (the 3x3 itself when it is singular).
+std::array<float, 16> NormalMatrix(const std::array<float, 16>& world_view);
 
 }  // namespace rexbox::hle::d3d8
 
