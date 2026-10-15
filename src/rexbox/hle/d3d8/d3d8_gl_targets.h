@@ -38,6 +38,15 @@ void PresentRenderTarget(GuestAddress color, const GammaRamp& ramp);
 // BMP file. Returns false on failure.
 bool DumpRenderTarget(GuestAddress color, const std::string& path, const GammaRamp& ramp);
 
+// For a texture whose data address is that of a color surface when it was
+// last bound as a render target: a GL texture with the target's current pixels in D3D's row
+// order (refreshed when the target was bound since), with the surface and its
+// size; 0 when no target matches (docs/design/20261016-i069-render-target-sampling.md).
+uint32_t SampleRenderTarget(GuestAddress data, GuestAddress* surface, uint32_t* width, uint32_t* height);
+
+// Pixel memory at `data` was freed: textures there no longer sample a target.
+void ForgetRenderTargetMemory(GuestAddress data);
+
 // The GL texture behind a color surface used as a render target, or 0.
 uint32_t RenderTargetTexture(GuestAddress color);
 

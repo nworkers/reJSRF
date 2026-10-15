@@ -1,0 +1,65 @@
+# 작업 로그: 렌더 타깃 샘플링, 픽셀 셰이더와 고정 기능 정점 처리 (issue #69)
+
+설계: [20261016-i069](../design/20261016-i069-render-target-sampling.md) · 작업 지시: [20261016-i069](../work-orders/20261016-i069-render-target-sampling.md)
+
+## 한 일
+
+1. `d3d8_gl_targets`
+   * `ColorTarget`에 샘플링용 사본(텍스처와 FBO), "마지막 복사 뒤 묶였는가" 표시, 묶을 때 읽은 데이터 주소를 더했다.
+   * `SampleRenderTarget`은 데이터 주소로 타깃을 찾는다. 필요할 때 `glBlitFramebuffer`로 상하를 뒤집어 복사한다. 지금 묶인 타깃이면 다음에도 다시 복사한다.
+   * `ForgetRenderTargetMemory`: 그 메모리가 해제되면(`DestroyResource`) 더는 그 타깃을 샘플링하지 않는다. 해제된 메모리를 새 텍스처가 받아도 옛 타깃을 읽지 않게 하기 위해서다.
+   * 오프스크린 타깃 보고 문구를 "sampled through a copy"로 바꿨다.
+2. `d3d8_gl_textures`: `ResolveTexture`가 먼저 렌더 타깃을 찾는다. 처음 한 번 `texture X samples render target Y (WxH)`를 보고한다. 선형 헤더는 텍셀 좌표로 샘플링한다.
+3. `d3d8_draw`
+   * `BuildKey(..., pixel_shader)`: 픽셀 셰이더 모드에서는 네 스테이지 모두 `SELECTARG1`로 활성이다. 좌표 선택·생성·변환은 그대로 읽고, 스테이지 연산과 알파 테스트는 키에 넣지 않는다.
+   * 픽셀 셰이더 + 고정 기능 경로를 그린다. 조합기 상수 설정은 `SetPixelShaderUniforms`로 묶어 두 경로가 함께 쓴다.
+4. `d3d8_gl_programs`: `GetFixedFunctionPixelProgram`(고정 기능 정점 + 조합기 조각), `CombinerLocations`.
+5. `rexbox_d3d8_probe`: 픽셀 셰이더 모드 키의 정점 셰이더가 조합기 조각 셰이더의 입력을 모두 쓰는지 검사(158 → 159).
+
+## 검증
+
+| 검증 | 결과 |
+|---|---|
+| Release, Debug 빌드 | 새 경고 없음 |
+| `rexbox_d3d8_probe` / `rejsrf_d3d8_check` / `rejsrf_decomp_check` | 159 check 0 failure / 14018 case 0 difference / 6 case 0 difference |
+| 데모 95초(hidden, 오디오 끔) | 새 보고 없음. 60 fps. 프레임 4650 BMP가 변경 전과 바이트 단위로 같음 |
+| 사용자 플레이(부스트 대시) | 미검증. 데모는 오프스크린 타깃도, 픽셀 셰이더 + 고정 기능 그리기도 쓰지 않는다. 확인할 것: 화면이 흐려지는지, `samples render target` 줄, 셰이더 컴파일·링크 오류가 없는지 |
+
+## 남은 것
+
+* X8 형식 타깃의 알파, 헤더와 타깃 크기가 다른 경우(설계 §2.3).
+* 실제 장면에서 블러가 원본과 다르게 보이면, 그때의 보고와 화면을 이 issue에 남긴다.
+
+---
+
+# Work log: render-target sampling; pixel shaders with fixed-function vertex processing (issue #69)
+
+Design: [20261016-i069](../design/20261016-i069-render-target-sampling.md) · Work order: [20261016-i069](../work-orders/20261016-i069-render-target-sampling.md)
+
+## Done
+
+1. `d3d8_gl_targets`
+   * `ColorTarget` gained a sampling copy (texture and FBO), a "bound since the last copy" flag, and the data address read when it is bound.
+   * `SampleRenderTarget` finds a target by data address and, when needed, copies it flipped vertically with `glBlitFramebuffer`. A target that is still bound is copied again next time.
+   * `ForgetRenderTargetMemory`: once that memory is freed (`DestroyResource`), the target is no longer sampled there, so a new texture in freed memory does not read an old target.
+   * The off-screen target report now says "sampled through a copy".
+2. `d3d8_gl_textures`: `ResolveTexture` looks for a render target first and reports `texture X samples render target Y (WxH)` once. Linear headers are sampled with texel coordinates.
+3. `d3d8_draw`
+   * `BuildKey(..., pixel_shader)`: in pixel-shader mode all four stages are active with `SELECTARG1`. Coordinate selection, generation and transforms are read as before; stage operations and the alpha test stay out of the key.
+   * The pixel shader with fixed-function path draws. Setting the combiner constants moved into `SetPixelShaderUniforms`, which both paths use.
+4. `d3d8_gl_programs`: `GetFixedFunctionPixelProgram` (fixed-function vertices with a combiner fragment stage) and `CombinerLocations`.
+5. `rexbox_d3d8_probe`: checks that the vertex shader for a pixel-shader-mode key writes every input of the combiner fragment shader (158 → 159).
+
+## Verification
+
+| Check | Result |
+|---|---|
+| Release and Debug builds | no new warnings |
+| `rexbox_d3d8_probe` / `rejsrf_d3d8_check` / `rejsrf_decomp_check` | 159 checks, 0 failures / 14018 cases, 0 differences / 6 cases, 0 differences |
+| Demo, 95 s (hidden, audio off) | no new reports; 60 fps; the frame 4650 BMP is byte-identical to before |
+| User play (boost dash) | not verified. The demo uses neither off-screen targets nor pixel shaders with fixed-function draws. To check: the screen blurs; a `samples render target` line; no shader compile or link errors |
+
+## Left
+
+* Alpha of X8-format targets, and headers whose size differs from the target's (design §2.3).
+* If the blur looks different from the original in the real scene, record the reports and a screenshot in this issue.

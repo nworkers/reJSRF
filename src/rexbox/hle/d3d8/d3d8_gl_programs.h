@@ -45,6 +45,17 @@ private:
     uint64_t array_version_ = 0;
 };
 
+// Uniform locations of a register-combiner fragment shader (d3d8_psh.h),
+// -1 when unused or when the program has none.
+struct CombinerLocations
+{
+    int stage_c0 = -1;
+    int stage_c1 = -1;
+    int final_c0 = -1;
+    int final_c1 = -1;
+    int fog_color = -1;
+};
+
 struct FixedFunctionProgram
 {
     uint32_t program = 0;
@@ -67,11 +78,17 @@ struct FixedFunctionProgram
     int light_direction = -1;
     int light_attenuation = -1;
     int light_cone = -1;
+    // GetFixedFunctionPixelProgram only.
+    CombinerLocations combiner;
     mutable UniformCache uniforms;
 };
 
 // nullptr when the program for `key` cannot be built.
 const FixedFunctionProgram* GetFixedFunctionProgram(const FixedFunctionKey& key);
+
+// The fixed-function vertex shader for `key` (built with every stage active,
+// so it writes v_tex0..3) linked with a register-combiner pixel shader.
+const FixedFunctionProgram* GetFixedFunctionPixelProgram(const FixedFunctionKey& key, const psh::Key& pixel_key);
 
 // A vertex-shader program (d3d8_vsh.h) linked with the fixed-function
 // fragment stage for `fragment_key` (its vertex inputs unused).
@@ -84,11 +101,7 @@ struct VertexProgramGl
     int alpha_ref = -1;
     int tex_scale[kFixedFunctionStages] = {-1, -1, -1, -1};
     // Register-combiner fragment stage (GetVertexPixelProgram) only.
-    int stage_c0 = -1;
-    int stage_c1 = -1;
-    int final_c0 = -1;
-    int final_c1 = -1;
-    int fog_color = -1;
+    CombinerLocations combiner;
     mutable UniformCache uniforms;
 };
 

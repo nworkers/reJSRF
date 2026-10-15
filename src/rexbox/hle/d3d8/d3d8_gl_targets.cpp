@@ -22,6 +22,16 @@ struct ColorTarget
     GLuint texture = 0;
     uint32_t width = 0;
     uint32_t height = 0;
+    // For sampling (SampleRenderTarget): a copy in D3D's row order, the
+    // framebuffer that writes it, and whether the target was bound since the
+    // copy was made.
+    GLuint copy = 0;
+    GLuint copy_framebuffer = 0;
+    bool bound_since_copy = true;
+    // The surface's pixel memory when last bound (physical); a texture over
+    // it samples this target until the memory is freed.
+    bool has_data = false;
+    uint32_t data = 0;
 };
 
 struct DepthTarget
@@ -83,8 +93,8 @@ const ColorTarget& Color(GuestAddress surface)
     if (host == nullptr || (host->kind != ResourceKind::kBackBuffer))
     {
         ReportOnce(Format("target %08X", surface),
-                   Format("render target %08X (%ux%u) is not a back buffer: drawn into its own GL texture, not yet "
-                          "visible to texture sampling",
+                   Format("render target %08X (%ux%u) is not a back buffer: drawn into its own GL texture, "
+                          "sampled through a copy",
                           surface, target.width, target.height));
     }
     return g_colors.emplace(surface, target).first->second;
@@ -280,6 +290,13 @@ bool BindRenderTarget(GuestAddress color, GuestAddress depth)
             resolved.height = Depth(depth).height;
         }
         resolved.valid = color != 0 || depth != 0;
+        if (color != 0)
+        {
+            ColorTarget& target = g_colors.find(color)->second;  // made by Framebuffer() above
+            target.bound_since_copy = true;
+            target.has_data = true;
+            target.data = Memory().Read32(color + header::kData) & kPhysicalMask;
+        }
     }
     // Other paths that bind framebuffers (present, dumps, creation)
     // invalidate the GL state cache.
@@ -304,6 +321,66 @@ uint32_t RenderTargetWidth()
 uint32_t RenderTargetHeight()
 {
     return g_height;
+}
+
+GLuint SampleRenderTarget(GuestAddress data, GuestAddress* surface, uint32_t* width, uint32_t* height)
+{
+    data &= kPhysicalMask;
+    for (auto& [address, target] : g_colors)
+    {
+        if (target.texture == 0 || !target.has_data || target.data != data)
+        {
+            continue;
+        }
+        GlFunctions& gl = Gl();
+        if (target.copy == 0)
+        {
+            InvalidateGlStateCache();  // binds a texture and a framebuffer
+            gl.GenTextures(1, &target.copy);
+            gl.BindTexture(kGlTexture2D, target.copy);
+            gl.TexImage2D(kGlTexture2D, 0, static_cast<GLint>(kGlRgba8), static_cast<GLsizei>(target.width),
+                          static_cast<GLsizei>(target.height), 0, kGlRgba, kGlUnsignedByte, nullptr);
+            gl.TexParameteri(kGlTexture2D, kGlTextureMaxLevel, 0);
+            gl.GenFramebuffers(1, &target.copy_framebuffer);
+            gl.BindFramebuffer(kGlFramebuffer, target.copy_framebuffer);
+            gl.FramebufferTexture2D(kGlFramebuffer, kGlColorAttachment0, kGlTexture2D, target.copy, 0);
+            gl.BindFramebuffer(kGlFramebuffer, Framebuffer(g_bound_color, g_bound_depth));
+            target.bound_since_copy = true;
+        }
+        // Draws and clears write only the bound target.
+        if (target.bound_since_copy)
+        {
+            const GLint w = static_cast<GLint>(target.width);
+            const GLint h = static_cast<GLint>(target.height);
+            gl.BindFramebuffer(kGlReadFramebuffer, Framebuffer(address, 0));
+            gl.BindFramebuffer(kGlDrawFramebuffer, target.copy_framebuffer);
+            gl.Disable(kGlScissorTest);
+            gl.ColorMask(1, 1, 1, 1);
+            // GL keeps D3D's top row at the top; textures have it at row 0.
+            gl.BlitFramebuffer(0, 0, w, h, 0, h, w, 0, kGlColorBufferBit, kGlNearest);
+            gl.BindFramebuffer(kGlFramebuffer, Framebuffer(g_bound_color, g_bound_depth));
+            InvalidateGlStateCache();
+            // Still bound: later draws go to it, so copy again next time.
+            target.bound_since_copy = address == g_bound_color;
+        }
+        *surface = address;
+        *width = target.width;
+        *height = target.height;
+        return target.copy;
+    }
+    return 0;
+}
+
+void ForgetRenderTargetMemory(GuestAddress data)
+{
+    data &= kPhysicalMask;
+    for (auto& [address, target] : g_colors)
+    {
+        if (target.has_data && target.data == data)
+        {
+            target.has_data = false;
+        }
+    }
 }
 
 uint32_t RenderTargetTexture(GuestAddress color)

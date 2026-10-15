@@ -709,6 +709,32 @@ void CheckPixelShaders()
     psh::GenerateFragmentShader(key, false, &unsupported);
     Expect(Contains(unsupported, "texture mode 6"), "bump environment mapping is reported");
     Expect(psh::TextureMode(bump, 1) == psh::texmode::kBumpEnvMap, "texture mode of stage 1");
+
+    // A pixel shader with fixed-function vertex processing: the draw builds
+    // the key with every stage active, so the vertex shader writes each
+    // input the combiner fragment shader reads.
+    FixedFunctionKey vertex_key;
+    vertex_key.pretransformed = true;
+    vertex_key.has_diffuse = true;
+    vertex_key.tex_coords = 1;
+    vertex_key.tex_components[0] = 2;
+    vertex_key.stage_coords = true;
+    for (FixedFunctionKey::Stage& stage : vertex_key.stages)
+    {
+        stage.color_op = top::kSelectArg1;
+    }
+    key.definition = def;
+    const std::string vs = GenerateFixedFunctionVertexShader(vertex_key, false);
+    const std::string fs_inputs = psh::GenerateFragmentShader(key, false, &unsupported);
+    bool matched = true;
+    for (const char* name : {"v_diffuse", "v_specular", "v_tex0", "v_tex1", "v_tex2", "v_tex3"})
+    {
+        if (Contains(fs_inputs, std::string("in vec4 ") + name + ";"))
+        {
+            matched &= Contains(vs, std::string("out vec4 ") + name + ";");
+        }
+    }
+    Expect(matched, "fixed-function vertex shader writes every combiner input");
 }
 
 }  // namespace

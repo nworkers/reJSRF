@@ -1,5 +1,6 @@
 #include "d3d8_resource.h"
 
+#include "d3d8_gl_targets.h"
 #include "d3d8_gl_textures.h"
 #include "d3d8_internal.h"
 
@@ -54,6 +55,7 @@ void DestroyResource(GuestAddress resource)
         const GuestAddress data = Memory().Read32(resource + header::kData);
         if (data != 0)
         {
+            ForgetRenderTargetMemory(data);
             Heap().Free(data);
         }
     }
