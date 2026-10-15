@@ -44,6 +44,12 @@
 * 캡처에 소유 지도(`_owner.bmp`), 뷰포트, 원시 헤더 필드, 작은 그리기의 정점을 더했다. `d3d8_gl_targets`는 `ReadRenderTarget`, `WriteBmp`로 나눴다.
 * 검증: Release 빌드 경고 없음. 데모 `REXBOX_CAPTURE_FRAME=4650`에서 282개 호출, `_owner.bmp`, 정점 줄을 확인했다.
 
+## 추가: 픽셀마다 최근 세 번의 기록
+
+* 사용자 캡처 7499에서 윤곽선 픽셀은 정확히 (128,128,128)이다. 그런데 소유 지도의 마지막 호출은 스텐실 그림자 칠하기(#253, 화면 전체를 절반 어둡게 함)다. 칠하기 전에는 흰색(255)이었다는 뜻이다.
+* 데모 캡처의 소유 지도: 윤곽선 그리기는 정상적으로 (20,0,0)을 칠한다(**확인됨**).
+* 칠하기 전의 작성자를 보려고, 픽셀마다 최근 세 호출과 그 직후 색을 남긴다(`_owner2.bmp`, `_owner3.bmp`, `_color2.bmp`, `_color3.bmp`). 데모 캡처로 확인했다.
+
 ## 남은 것
 
 * 사용자 보고를 받아 원인을 정하고, 이 issue에 수정 설계를 이어 쓴다.
@@ -95,6 +101,12 @@ Design: [20261016-i070](../design/20261016-i070-outline-watch.md) · Work order:
 * The user's captures: the outlines in 7459 and 7171 are light grey, while the outline draws' state (`c[97]` almost black, MODULATE, no texture) says black.
 * The capture gained the owner map (`_owner.bmp`), the viewport, the raw header fields and the vertices of small draws; `d3d8_gl_targets` split out `ReadRenderTarget` and `WriteBmp`.
 * Verification: no Release warnings; the demo with `REXBOX_CAPTURE_FRAME=4650` gave 282 calls, `_owner.bmp` and vertex lists.
+
+## Added: the last three writers of each pixel
+
+* In the user's capture 7499 the outline pixels are exactly (128,128,128), and their last writer in the owner map is the stencil shadow fill (#253, which halves the whole picture). So they were white (255) before the fill.
+* The demo capture's owner map shows the outline draws painting (20,0,0) as they should (**confirmed**).
+* To see the writer before the fill, each pixel now keeps its last three calls and the color right after each (`_owner2.bmp`, `_owner3.bmp`, `_color2.bmp`, `_color3.bmp`), checked with a demo capture.
 
 ## Left
 

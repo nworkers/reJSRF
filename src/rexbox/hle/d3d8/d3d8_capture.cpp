@@ -33,12 +33,17 @@ uint32_t g_capture_frame = 0;  // the frame being captured, 0 when none
 FILE* g_file = nullptr;
 uint32_t g_index = 0;
 
+// How many of the latest writers each pixel remembers.
+constexpr uint32_t kOwnerDepth = 3;
+
 // Per render target written in the captured frame: its pixels after the last
-// call, and per pixel the call (index + 1) that last changed it.
+// call, and per pixel the calls (index + 1) that changed it last, latest
+// first, with the color each left.
 struct Ownership
 {
     std::vector<uint8_t> pixels;
-    std::vector<uint32_t> owner;
+    std::vector<uint32_t> owner[kOwnerDepth];
+    std::vector<uint8_t> color[kOwnerDepth];  // RGBA8
     uint32_t width = 0;
     uint32_t height = 0;
 };
@@ -105,13 +110,19 @@ Ownership& Owned(GuestAddress target)
     {
         Ownership fresh;
         ReadRenderTarget(target, &fresh.pixels, &fresh.width, &fresh.height);
-        fresh.owner.assign(static_cast<size_t>(fresh.width) * fresh.height, 0);
+        for (uint32_t k = 0; k < kOwnerDepth; ++k)
+        {
+            fresh.owner[k].assign(static_cast<size_t>(fresh.width) * fresh.height, 0);
+            fresh.color[k].assign(static_cast<size_t>(fresh.width) * fresh.height * 4, 0);
+        }
         it = g_ownership.emplace(target, std::move(fresh)).first;
     }
     return it->second;
 }
 
-void WriteOwnerMap(GuestAddress shown, const std::string& path)
+// capture_<frame>_owner.bmp (latest writer), _owner2.bmp and _owner3.bmp
+// (the ones before), and _color2.bmp, _color3.bmp (what those left).
+void WriteOwnerMaps(GuestAddress shown, uint32_t frame)
 {
     const auto it = g_ownership.find(shown);
     if (it == g_ownership.end())
@@ -119,13 +130,23 @@ void WriteOwnerMap(GuestAddress shown, const std::string& path)
         return;
     }
     const Ownership& owned = it->second;
-    std::vector<uint8_t> rgba(owned.owner.size() * 4, 0);
-    for (size_t p = 0; p < owned.owner.size(); ++p)
+    for (uint32_t k = 0; k < kOwnerDepth; ++k)
     {
-        rgba[p * 4 + 0] = static_cast<uint8_t>(owned.owner[p] & 0xFF);
-        rgba[p * 4 + 1] = static_cast<uint8_t>((owned.owner[p] >> 8) & 0xFF);
+        const std::vector<uint32_t>& owner = owned.owner[k];
+        std::vector<uint8_t> rgba(owner.size() * 4, 0);
+        for (size_t p = 0; p < owner.size(); ++p)
+        {
+            rgba[p * 4 + 0] = static_cast<uint8_t>(owner[p] & 0xFF);
+            rgba[p * 4 + 1] = static_cast<uint8_t>((owner[p] >> 8) & 0xFF);
+        }
+        const std::string n = k == 0 ? std::string() : std::to_string(k + 1);
+        WriteBmp(Path(frame, ("_owner" + n + ".bmp").c_str()), rgba.data(), owned.width, owned.height);
+        if (k != 0)
+        {
+            WriteBmp(Path(frame, ("_color" + n + ".bmp").c_str()), owned.color[k].data(), owned.width,
+                     owned.height);
+        }
     }
-    WriteBmp(path, rgba.data(), owned.width, owned.height);
 }
 
 }  // namespace
@@ -138,7 +159,7 @@ void CaptureAtPresent(uint32_t frame, GuestAddress shown)
         g_file = nullptr;
         const std::string picture = Path(frame, ".bmp");
         const bool written = DumpRenderTarget(shown, picture, State().gamma_ramp);
-        WriteOwnerMap(shown, Path(frame, "_owner.bmp"));
+        WriteOwnerMaps(shown, frame);
         g_ownership.clear();
         std::fprintf(stderr, "[d3d8] capture: frame %u, %u call(s) in %s, picture %s%s\n", frame, g_index,
                      Path(frame, ".txt").c_str(), picture.c_str(), written ? "" : " (not written)");
@@ -241,11 +262,17 @@ void CaptureAfterCall()
     {
         return;
     }
-    for (size_t p = 0; p < owned.owner.size(); ++p)
+    for (size_t p = 0; p < owned.owner[0].size(); ++p)
     {
         if (std::memcmp(&now[p * 4], &owned.pixels[p * 4], 4) != 0)
         {
-            owned.owner[p] = g_index;  // the call just listed, plus one
+            for (uint32_t k = kOwnerDepth - 1; k > 0; --k)
+            {
+                owned.owner[k][p] = owned.owner[k - 1][p];
+                std::memcpy(&owned.color[k][p * 4], &owned.color[k - 1][p * 4], 4);
+            }
+            owned.owner[0][p] = g_index;  // the call just listed, plus one
+            std::memcpy(&owned.color[0][p * 4], &now[p * 4], 4);
         }
     }
     owned.pixels.swap(now);
