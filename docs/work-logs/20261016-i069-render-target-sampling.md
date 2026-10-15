@@ -34,6 +34,12 @@
   * Release 링크는 사용자 게임이 실행 중이라 이 시점에 하지 못했다.
   * 실제 장면 확인은 사용자 플레이가 필요하다.
 
+## 추가: bump 좌표의 투영
+
+* 사용자 확인(BUMPENVMAP 뒤): 부스트 때 화면 사본이 왼쪽 위 1/4에 두 배 크기로 나왔다. 나머지는 회색이었다.
+* bump 경로가 `v_tex.xy`를 `w`로 나누지 않은 탓이다. 이전 2D 경로처럼 나눈 좌표에 bump 오프셋을 더하게 바꿨다. probe 검사도 이 식을 본다.
+* 실제 장면 확인은 사용자 플레이가 필요하다.
+
 ## 남은 것
 
 * X8 형식 타깃의 알파, 헤더와 타깃 크기가 다른 경우(설계 §2.3).
@@ -76,6 +82,12 @@ Design: [20261016-i069](../design/20261016-i069-render-target-sampling.md) · Wo
 * Verification: no Debug warnings; `rexbox_d3d8_probe` 160 checks, 0 failures (the "mode 6 is reported" check became "it is drawn").
   * The Release link could not run at this point because the user's game was running.
   * Checking the real scene needs the user's play.
+
+## Added: projecting bump coordinates
+
+* The user's check (after BUMPENVMAP): during the boost the screen copy filled the top-left quarter at twice its size, with the rest grey.
+* The bump path did not divide `v_tex.xy` by `w`. It now adds the bump offset to the divided coordinates, as the earlier 2D path did, and the probe checks this expression.
+* Checking the real scene needs the user's play.
 
 ## Left
 

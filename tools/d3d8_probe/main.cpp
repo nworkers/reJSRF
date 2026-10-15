@@ -710,8 +710,9 @@ void CheckPixelShaders()
     const std::string bumped = psh::GenerateFragmentShader(key, false, &unsupported);
     Expect(!Contains(unsupported, "texture mode 6"), "bump environment mapping is drawn");
     Expect(Contains(bumped, "vec3 uvl1 = t0.bgr;") && Contains(bumped, "psh_signed(uvl1.xy)") &&
-               Contains(bumped, "dot(u_bump_mat[1].xz, dsdt1)") && Contains(bumped, "texture(u_tex1, bumped1)"),
-           "stage 1 offsets its coordinates by stage 0's signed U, V through its bump matrix");
+               Contains(bumped, "dot(u_bump_mat[1].xz, dsdt1)") && Contains(bumped, "texture(u_tex1, bumped1)") &&
+               Contains(bumped, "vec2 bumped1 = (v_tex1.w != 0.0 ? v_tex1 / v_tex1.w : v_tex1).xy"),
+           "stage 1 offsets its projected coordinates by stage 0's signed U, V through its bump matrix");
     Expect(psh::TextureMode(bump, 1) == psh::texmode::kBumpEnvMap, "texture mode of stage 1");
     key.bump_source_argb[0] = false;
     key.samplers[1] = SamplerKind::kNone;

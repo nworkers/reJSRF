@@ -389,14 +389,16 @@ std::string GenerateFragmentShader(const Key& key, bool gles, std::string* unsup
                  sampler == SamplerKind::k2D)
         {
             // The previous stage's texel is a signed (du, dv) offset, turned
-            // by the stage's bump matrix and added to this stage's
-            // (unprojected) coordinates; the luminance form also scales the
-            // result by L * scale + offset.
+            // by the stage's bump matrix and added to this stage's projected
+            // coordinates (without the division the boost effect showed the
+            // screen copy at twice its size, issue #69); the luminance form
+            // also scales the result by L * scale + offset.
             const std::string n = Number(s);
             const std::string source = "t" + Number(s - 1) + (key.bump_source_argb[s - 1] ? ".bgr" : ".rgb");
+            const std::string projected = "(" + coord + ".w != 0.0 ? " + coord + " / " + coord + ".w : " + coord + ")";
             text += "    vec3 uvl" + n + " = " + source + ";\n"
                     "    vec2 dsdt" + n + " = psh_signed(uvl" + n + ".xy);\n"
-                    "    vec2 bumped" + n + " = " + coord + ".xy + vec2(dot(u_bump_mat[" + n + "].xz, dsdt" + n +
+                    "    vec2 bumped" + n + " = " + projected + ".xy + vec2(dot(u_bump_mat[" + n + "].xz, dsdt" + n +
                     "), dot(u_bump_mat[" + n + "].yw, dsdt" + n + "));\n";
             std::string uv = "bumped" + n;
             if (key.unnormalized[s])
