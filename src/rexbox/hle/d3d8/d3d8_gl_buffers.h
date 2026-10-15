@@ -34,6 +34,10 @@ void FinishAttributes();
 // Returns the data's offset in the bound buffer.
 size_t PrepareVertexData(uint32_t address, size_t bytes, bool cacheable);
 
+// Streams `bytes` host vertex bytes (immediate-mode vertices) the same way
+// and binds the stream as the array buffer; returns their offset in it.
+size_t PrepareHostVertexData(const void* data, size_t bytes);
+
 // Indices ready for glDrawElements in the bound element buffer, rebased so
 // that vertex `first` is 0.
 struct DrawIndices

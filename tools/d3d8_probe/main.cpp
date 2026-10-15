@@ -1,7 +1,8 @@
 // rexbox_d3d8_probe: checks the D3D8 HLE's pure parts without a game or a GPU:
 // texture unswizzling and format decoding, DXT blocks, FVF layouts, the
 // fixed-function GLSL generator (docs/design/20261012-i023-d3d8-fixed-function-draw.md
-// section 7), and the vertex-program and register-combiner translations
+// section 7), immediate-mode vertex packing
+// (docs/design/20261015-i062-immediate-mode.md), and the vertex-program and register-combiner translations
 // (docs/design/20261013-i037-vertex-shader-programs.md). The GL backend itself
 // is verified by booting.
 //
@@ -10,6 +11,7 @@
 #include "d3d8_ff_shader.h"
 #include "d3d8_fvf.h"
 #include "d3d8_gamma.h"
+#include "d3d8_immediate.h"
 #include "d3d8_psh.h"
 #include "d3d8_texture_format.h"
 #include "d3d8_vsh.h"
@@ -201,6 +203,87 @@ void CheckFvf()
     Expect(DecodeFvf(0x00A, &layout) && layout.blend_weights == 3 && layout.stride == 24, "FVF XYZB3");
     Expect(!DecodeFvf(0x00D1F001, &layout), "a program handle is not an FVF");
     Expect(!DecodeFvf(0x040, &layout), "an FVF without a position is rejected");
+}
+
+float FloatAt(const std::vector<uint8_t>& bytes, size_t offset)
+{
+    float value = 0.0f;
+    std::memcpy(&value, bytes.data() + offset, 4);
+    return value;
+}
+
+void CheckImmediate()
+{
+    // The demo's dimming overlay: FVF 1C4, colors set once, a texture
+    // coordinate per vertex, then D3DVSDE_VERTEX.
+    ImmediateBatch batch;
+    Expect(!batch.active(), "no batch before Begin");
+    batch.Begin(5);
+    Expect(batch.Set(vsde::kDiffuse, 0.0f, 0.0f, 0.0f, 0.498f), "diffuse register");
+    Expect(batch.Set(vsde::kSpecular, 1.0f, 0.5f, 0.25f, 0.0f), "specular register");
+    const float corners[4][2] = {{0, 0}, {640, 0}, {0, 480}, {640, 480}};
+    for (uint32_t i = 0; i < 4; ++i)
+    {
+        batch.Set(vsde::kTexCoord0, static_cast<float>(i & 1), static_cast<float>(i >> 1), 0.0f, 1.0f);
+        batch.Set(vsde::kVertex, corners[i][0], corners[i][1], 0.5f, 0.5f);
+    }
+    batch.End();
+    Expect(!batch.active() && batch.primitive() == 5, "End keeps the primitive");
+    ExpectEqual(static_cast<uint32_t>(batch.vertices().size()), 4, "four vertices completed");
+    Expect(!batch.Set(16, 0, 0, 0, 0), "register 16 is out of range");
+    batch.Set(vsde::kVertex, 0, 0, 0, 1);
+    ExpectEqual(static_cast<uint32_t>(batch.vertices().size()), 4, "no vertex completed outside a batch");
+
+    VertexLayout layout;
+    DecodeFvf(0x1C4, &layout);
+    const std::vector<uint8_t> bytes = PackFvfVertices(layout, batch.vertices());
+    ExpectEqual(static_cast<uint32_t>(bytes.size()), 4 * 32, "FVF 1C4 packs 32 bytes a vertex");
+    Expect(FloatAt(bytes, 32 * 3) == 640.0f && FloatAt(bytes, 32 * 3 + 4) == 480.0f &&
+               FloatAt(bytes, 32 * 3 + 8) == 0.5f && FloatAt(bytes, 32 * 3 + 12) == 0.5f,
+           "XYZRHW position of the last vertex");
+    Expect(bytes[16] == 0 && bytes[17] == 0 && bytes[18] == 0 && bytes[19] == 127, "diffuse as D3DCOLOR B, G, R, A");
+    Expect(bytes[20] == 64 && bytes[21] == 128 && bytes[22] == 255 && bytes[23] == 0, "specular as B, G, R, A");
+    Expect(FloatAt(bytes, 32 * 1 + 24) == 1.0f && FloatAt(bytes, 32 * 1 + 28) == 0.0f &&
+               FloatAt(bytes, 32 * 2 + 24) == 0.0f && FloatAt(bytes, 32 * 2 + 28) == 1.0f,
+           "texture coordinates per vertex");
+
+    // Registers keep their value into the next batch; Begin drops vertices.
+    batch.Begin(4);
+    ExpectEqual(static_cast<uint32_t>(batch.vertices().size()), 0, "Begin starts empty");
+    batch.Set(vsde::kVertex, 1, 2, 3, 1);
+    Expect(batch.vertices()[0].reg[vsde::kDiffuse][3] == 0.498f, "diffuse kept across batches");
+    Expect(batch.vertices()[0].reg[vsde::kNormal][3] == 1.0f && batch.vertices()[0].reg[vsde::kNormal][0] == 0.0f,
+           "an unset register is (0, 0, 0, 1)");
+
+    // A program declaration: v0 float3, v3 D3DCOLOR, v9 normalized shorts.
+    vsh::Declaration declaration;
+    vsh::VertexElement position;
+    position.reg = 0;
+    position.kind = vsh::ElementKind::kFloat;
+    position.components = 3;
+    vsh::VertexElement color;
+    color.reg = 3;
+    color.kind = vsh::ElementKind::kD3dColor;
+    color.components = 4;
+    color.offset = 12;
+    vsh::VertexElement tex;
+    tex.reg = 9;
+    tex.kind = vsh::ElementKind::kNormShort;
+    tex.components = 2;
+    tex.offset = 16;
+    declaration.elements = {position, color, tex};
+    ImmediateBatch program;
+    program.Begin(5);
+    program.Set(3, 1.0f, 0.0f, 0.0f, 1.0f);
+    program.Set(9, 1.0f, -1.0f, 0.0f, 1.0f);
+    program.Set(vsde::kVertex, 7.0f, 8.0f, 9.0f, 1.0f);
+    const std::vector<uint8_t> packed = PackDeclarationVertices(declaration, 20, program.vertices());
+    ExpectEqual(static_cast<uint32_t>(packed.size()), 20, "declaration packs its stride");
+    Expect(FloatAt(packed, 0) == 7.0f && FloatAt(packed, 8) == 9.0f, "program position in v0");
+    Expect(packed[12] == 0 && packed[14] == 255 && packed[15] == 255, "program D3DCOLOR input");
+    int16_t shorts[2] = {};
+    std::memcpy(shorts, packed.data() + 16, 4);
+    Expect(shorts[0] == 32767 && shorts[1] == -32767, "program normalized shorts");
 }
 
 bool Contains(const std::string& text, const std::string& part)
@@ -530,6 +613,7 @@ int main()
     CheckPixelFormats();
     CheckDxt();
     CheckFvf();
+    CheckImmediate();
     CheckFixedFunctionShader();
     CheckVertexPrograms();
     CheckPixelShaders();

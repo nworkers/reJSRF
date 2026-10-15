@@ -320,6 +320,12 @@ size_t PrepareVertexData(uint32_t address, size_t bytes, bool cacheable)
     return 0;
 }
 
+size_t PrepareHostVertexData(const void* data, size_t bytes)
+{
+    profile::CountUpload(bytes, 0);
+    return g_vertex_stream.Append(data, bytes);
+}
+
 bool PrepareGuestIndices(uint32_t address, uint32_t count, uint32_t base, bool quads, bool cacheable,
                          DrawIndices* out)
 {
