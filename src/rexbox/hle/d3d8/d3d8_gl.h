@@ -233,6 +233,7 @@ struct GlFunctions
 
     // Framebuffers.
     void(REXBOX_GL_APIENTRY* GenFramebuffers)(GLsizei n, GLuint* framebuffers) = nullptr;
+    void(REXBOX_GL_APIENTRY* DeleteFramebuffers)(GLsizei n, const GLuint* framebuffers) = nullptr;
     void(REXBOX_GL_APIENTRY* BindFramebuffer)(GLenum target, GLuint framebuffer) = nullptr;
     void(REXBOX_GL_APIENTRY* FramebufferTexture2D)(GLenum target, GLenum attachment, GLenum textarget,
                                                    GLuint texture, GLint level) = nullptr;
@@ -240,6 +241,7 @@ struct GlFunctions
                                                       GLuint renderbuffer) = nullptr;
     GLenum(REXBOX_GL_APIENTRY* CheckFramebufferStatus)(GLenum target) = nullptr;
     void(REXBOX_GL_APIENTRY* GenRenderbuffers)(GLsizei n, GLuint* renderbuffers) = nullptr;
+    void(REXBOX_GL_APIENTRY* DeleteRenderbuffers)(GLsizei n, const GLuint* renderbuffers) = nullptr;
     void(REXBOX_GL_APIENTRY* BindRenderbuffer)(GLenum target, GLuint renderbuffer) = nullptr;
     void(REXBOX_GL_APIENTRY* RenderbufferStorage)(GLenum target, GLenum internal_format, GLsizei width,
                                                   GLsizei height) = nullptr;

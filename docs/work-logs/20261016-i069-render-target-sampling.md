@@ -40,6 +40,16 @@
 * bump 경로가 `v_tex.xy`를 `w`로 나누지 않은 탓이다. 이전 2D 경로처럼 나눈 좌표에 bump 오프셋을 더하게 바꿨다. probe 검사도 이 식을 본다.
 * 실제 장면 확인은 사용자 플레이가 필요하다.
 
+## 추가: 크기가 바뀐 렌더 타깃 다시 만들기
+
+* 사용자 캡처(10306~10370, 소유 지도와 정점 포함):
+  * 부스트 중 장면은 `03FDBFE0`에 뷰포트 128×128로 그려진다.
+  * 그 헤더의 크기 필드는 `S0307F07F`, 곧 선형 128×128, pitch 256이다.
+  * 합성 사각형(`ps 0A`, FVF 0x202)의 1번 텍스처 좌표는 텍셀 단위 (0..128, 16..112)다(**확인됨**).
+* 우리는 이 표면을 처음 본 크기(512×512)로 만든 GL 텍스처를 계속 썼다. 같은 헤더 주소가 다른 크기의 표면으로 다시 쓰인 것이다(**추정**). 그래서 좌표 배율이 어긋났다.
+* `DropIfResized`: 렌더 타깃을 묶을 때마다 헤더 크기를 다시 읽는다. 다르면 색·깊이 GL 객체, 샘플링 사본, 그것을 쓰는 FBO를 지우고 새로 만든다. GL 표에 `glDeleteFramebuffers`, `glDeleteRenderbuffers`를 더했다.
+* 검증: Release 경고 없음. 데모 프레임 4650 BMP가 변경 전과 같음. `rexbox_d3d8_probe` 160/0, `rejsrf_d3d8_check` 14018/0. 실제 부스트 확인은 사용자 플레이가 필요하다.
+
 ## 남은 것
 
 * X8 형식 타깃의 알파, 헤더와 타깃 크기가 다른 경우(설계 §2.3).
@@ -88,6 +98,16 @@ Design: [20261016-i069](../design/20261016-i069-render-target-sampling.md) · Wo
 * The user's check (after BUMPENVMAP): during the boost the screen copy filled the top-left quarter at twice its size, with the rest grey.
 * The bump path did not divide `v_tex.xy` by `w`. It now adds the bump offset to the divided coordinates, as the earlier 2D path did, and the probe checks this expression.
 * Checking the real scene needs the user's play.
+
+## Added: remaking render targets whose size changed
+
+* The user's captures (10306 to 10370, with owner maps and vertices):
+  * During the boost the scene is drawn into `03FDBFE0` with a 128×128 viewport.
+  * That header's size field is `S0307F07F`: linear 128×128, pitch 256.
+  * The composite quad's (`ps 0A`, FVF 0x202) stage-1 texture coordinates are texels (0..128, 16..112) (**confirmed**).
+* We kept using a GL texture made at the size the surface first had (512×512). The same header address was set up again as a surface of another size (**inferred**), so the coordinate scale was wrong.
+* `DropIfResized`: every render-target bind reads the header size again. On a change it deletes and remakes the color and depth GL objects, the sampling copy and the FBOs that use them. The GL table gained `glDeleteFramebuffers` and `glDeleteRenderbuffers`.
+* Verification: no Release warnings; the demo's frame 4650 BMP is unchanged; `rexbox_d3d8_probe` 160/0, `rejsrf_d3d8_check` 14018/0. Checking the real boost needs the user's play.
 
 ## Left
 

@@ -52,7 +52,7 @@ uint32_t g_width = 0;
 uint32_t g_height = 0;
 
 // The pair BindRenderTarget resolved last, so a run of draws to one target
-// skips the map lookups. The maps only grow, so a resolved entry stays valid.
+// skips the map lookups. DropIfResized clears it when it removes entries.
 struct ResolvedTarget
 {
     bool valid = false;
@@ -69,6 +69,69 @@ void SurfaceSize(GuestAddress surface, uint32_t* width, uint32_t* height)
     const LevelLayout layout = HeaderLevelLayout(surface, 0);
     *width = layout.width;
     *height = layout.height;
+}
+
+// A header can be set up again for a surface of another size (the title
+// reuses them); GL objects made for the old size are dropped and remade.
+// Returns true when anything was dropped.
+bool DropIfResized(GuestAddress color, GuestAddress depth)
+{
+    bool dropped = false;
+    uint32_t width = 0;
+    uint32_t height = 0;
+    GlFunctions& gl = Gl();
+    if (color != 0)
+    {
+        const auto it = g_colors.find(color);
+        if (it != g_colors.end())
+        {
+            SurfaceSize(color, &width, &height);
+            if (width != it->second.width || height != it->second.height)
+            {
+                ColorTarget& old = it->second;
+                gl.DeleteTextures(1, &old.texture);
+                if (old.copy != 0)
+                {
+                    gl.DeleteTextures(1, &old.copy);
+                    gl.DeleteFramebuffers(1, &old.copy_framebuffer);
+                }
+                g_colors.erase(it);
+                dropped = true;
+            }
+        }
+    }
+    if (depth != 0)
+    {
+        const auto it = g_depths.find(depth);
+        if (it != g_depths.end())
+        {
+            SurfaceSize(depth, &width, &height);
+            if (width != it->second.width || height != it->second.height)
+            {
+                gl.DeleteRenderbuffers(1, &it->second.renderbuffer);
+                g_depths.erase(it);
+                dropped = true;
+            }
+        }
+    }
+    if (dropped)
+    {
+        for (auto it = g_framebuffers.begin(); it != g_framebuffers.end();)
+        {
+            if ((color != 0 && it->first.first == color) || (depth != 0 && it->first.second == depth))
+            {
+                gl.DeleteFramebuffers(1, &it->second);
+                it = g_framebuffers.erase(it);
+            }
+            else
+            {
+                ++it;
+            }
+        }
+        g_resolved_target.valid = false;
+        InvalidateGlStateCache();
+    }
+    return dropped;
 }
 
 const ColorTarget& Color(GuestAddress surface)
@@ -271,6 +334,7 @@ void WriteLittleEndian(std::vector<uint8_t>* out, uint32_t value, int bytes)
 bool BindRenderTarget(GuestAddress color, GuestAddress depth)
 {
     ResolvedTarget& resolved = g_resolved_target;
+    DropIfResized(color, depth);
     if (!resolved.valid || resolved.color != color || resolved.depth != depth)
     {
         resolved.framebuffer = Framebuffer(color, depth);
