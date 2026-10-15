@@ -38,6 +38,12 @@
   * 데모 `REXBOX_CAPTURE_FRAME=4650`에서 275개 호출 목록과 BMP가 나왔다.
   * 보이는 창에 PowerShell `SendKeys`로 보낸 F9는 게임에 닿지 않았다(활성화는 성공). 실제 키보드 확인은 사용자에게 맡긴다.
 
+## 추가: 소유 지도 (설계 §2.3)
+
+* 사용자 캡처: 7459·7171의 윤곽선이 밝은 회색이다. 그런데 윤곽선 그리기의 상태(`c[97]` 거의 검정, MODULATE, 텍스처 없음)대로라면 검어야 한다.
+* 캡처에 소유 지도(`_owner.bmp`), 뷰포트, 원시 헤더 필드, 작은 그리기의 정점을 더했다. `d3d8_gl_targets`는 `ReadRenderTarget`, `WriteBmp`로 나눴다.
+* 검증: Release 빌드 경고 없음. 데모 `REXBOX_CAPTURE_FRAME=4650`에서 282개 호출, `_owner.bmp`, 정점 줄을 확인했다.
+
 ## 남은 것
 
 * 사용자 보고를 받아 원인을 정하고, 이 issue에 수정 설계를 이어 쓴다.
@@ -83,6 +89,12 @@ Design: [20261016-i070](../design/20261016-i070-outline-watch.md) · Work order:
   * No warnings in the Release and Debug builds.
   * The demo with `REXBOX_CAPTURE_FRAME=4650` wrote a 275-call list and a BMP.
   * F9 sent by PowerShell `SendKeys` to the visible window did not reach the game (activation succeeded); checking with a real keyboard is left to the user.
+
+## Added: owner map (design §2.3)
+
+* The user's captures: the outlines in 7459 and 7171 are light grey, while the outline draws' state (`c[97]` almost black, MODULATE, no texture) says black.
+* The capture gained the owner map (`_owner.bmp`), the viewport, the raw header fields and the vertices of small draws; `d3d8_gl_targets` split out `ReadRenderTarget` and `WriteBmp`.
+* Verification: no Release warnings; the demo with `REXBOX_CAPTURE_FRAME=4650` gave 282 calls, `_owner.bmp` and vertex lists.
 
 ## Left
 

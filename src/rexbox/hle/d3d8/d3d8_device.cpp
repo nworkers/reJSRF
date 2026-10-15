@@ -457,6 +457,10 @@ void D3DDevice_Clear()
         }
         gl.Disable(kGlScissorTest);
     }
+    if (CaptureActive())
+    {
+        CaptureAfterCall();
+    }
     call.Return(kD3dOk, 6);
 }
 

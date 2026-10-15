@@ -1,11 +1,16 @@
 // A diagnostic: one frame's draws on request (F9 in the window;
-// docs/design/20261016-i070-outline-watch.md section 2.2).
+// docs/design/20261016-i070-outline-watch.md sections 2.2 and 2.3).
 //
-// After the key, the next frame is captured: every Clear and draw is written,
-// with the state that decides its color, to capture_<frame>.txt, and the
-// presented picture to capture_<frame>.bmp, both in REXBOX_FRAME_DUMP_DIR
-// (default: the current folder). REXBOX_CAPTURE_FRAME=<n> captures frame n
-// without the key.
+// After the key, the next frame is captured, in REXBOX_FRAME_DUMP_DIR
+// (default: the current folder):
+//   capture_<frame>.txt        every Clear and draw with the state that
+//                              decides its color (viewport, raw texture and
+//                              target headers, the vertices of small draws)
+//   capture_<frame>.bmp        the presented picture
+//   capture_<frame>_owner.bmp  per pixel of the presented picture, the call
+//                              that changed it last: call index + 1 in red
+//                              (low byte) and green (high byte), 0 = none
+// REXBOX_CAPTURE_FRAME=<n> captures frame n without the key.
 
 #ifndef REXBOX_HLE_D3D8_D3D8_CAPTURE_H
 #define REXBOX_HLE_D3D8_D3D8_CAPTURE_H
@@ -28,10 +33,17 @@ void CaptureAtPresent(uint32_t frame, GuestAddress shown);
 bool CaptureActive();
 
 // One draw call as the title made it (before any path decides how to draw).
-void CaptureDraw(const char* name, uint32_t primitive, uint32_t count);
+// `vertices` and `stride` locate stream 0 (0 for host-side vertices);
+// `indices` is the 16-bit index data or 0, added to `index_base`.
+void CaptureDraw(const char* name, uint32_t primitive, uint32_t count, GuestAddress vertices, uint32_t stride,
+                 GuestAddress indices, uint32_t index_base);
 
 // One Clear.
 void CaptureClear(uint32_t flags, uint32_t color, float z, uint32_t stencil);
+
+// After a captured call reached GL: which pixels of the bound target it
+// changed.
+void CaptureAfterCall();
 
 }  // namespace rexbox::hle::d3d8
 

@@ -425,23 +425,36 @@ void PresentRenderTarget(GuestAddress color, const GammaRamp& ramp)
     InvalidateGlStateCache();
 }
 
-bool DumpRenderTarget(GuestAddress color, const std::string& path, const GammaRamp& ramp)
+void ReadRenderTarget(GuestAddress color, std::vector<uint8_t>* rgba, uint32_t* width, uint32_t* height)
 {
     GlFunctions& gl = Gl();
     const ColorTarget& source = Color(color);
-    std::vector<uint8_t> rgba(static_cast<size_t>(source.width) * source.height * 4);
+    rgba->resize(static_cast<size_t>(source.width) * source.height * 4);
     gl.BindFramebuffer(kGlReadFramebuffer, Framebuffer(color, 0));
     gl.PixelStorei(kGlPackAlignment, 1);
     gl.ReadPixels(0, 0, static_cast<GLsizei>(source.width), static_cast<GLsizei>(source.height), kGlRgba,
-                  kGlUnsignedByte, rgba.data());
+                  kGlUnsignedByte, rgba->data());
     gl.BindFramebuffer(kGlFramebuffer, Framebuffer(g_bound_color, g_bound_depth));
     InvalidateGlStateCache();
+    *width = source.width;
+    *height = source.height;
+}
 
-    ApplyGammaRamp(ramp, rgba.data(), static_cast<size_t>(source.width) * source.height);
+bool DumpRenderTarget(GuestAddress color, const std::string& path, const GammaRamp& ramp)
+{
+    std::vector<uint8_t> rgba;
+    uint32_t width = 0;
+    uint32_t height = 0;
+    ReadRenderTarget(color, &rgba, &width, &height);
+    ApplyGammaRamp(ramp, rgba.data(), static_cast<size_t>(width) * height);
+    return WriteBmp(path, rgba.data(), width, height);
+}
 
+bool WriteBmp(const std::string& path, const uint8_t* rgba, uint32_t width, uint32_t height)
+{
     // 24-bit BMP rows are stored bottom-up like GL's, padded to 4 bytes, as B, G, R.
-    const uint32_t row_bytes = (source.width * 3 + 3) & ~3u;
-    const uint32_t image_bytes = row_bytes * source.height;
+    const uint32_t row_bytes = (width * 3 + 3) & ~3u;
+    const uint32_t image_bytes = row_bytes * height;
     std::vector<uint8_t> file;
     file.push_back('B');
     file.push_back('M');
@@ -449,8 +462,8 @@ bool DumpRenderTarget(GuestAddress color, const std::string& path, const GammaRa
     WriteLittleEndian(&file, 0, 4);
     WriteLittleEndian(&file, 54, 4);
     WriteLittleEndian(&file, 40, 4);
-    WriteLittleEndian(&file, source.width, 4);
-    WriteLittleEndian(&file, source.height, 4);
+    WriteLittleEndian(&file, width, 4);
+    WriteLittleEndian(&file, height, 4);
     WriteLittleEndian(&file, 1, 2);
     WriteLittleEndian(&file, 24, 2);
     WriteLittleEndian(&file, 0, 4);
@@ -459,16 +472,16 @@ bool DumpRenderTarget(GuestAddress color, const std::string& path, const GammaRa
     WriteLittleEndian(&file, 2835, 4);
     WriteLittleEndian(&file, 0, 4);
     WriteLittleEndian(&file, 0, 4);
-    for (uint32_t y = 0; y < source.height; ++y)
+    for (uint32_t y = 0; y < height; ++y)
     {
-        const uint8_t* row = rgba.data() + static_cast<size_t>(y) * source.width * 4;
-        for (uint32_t x = 0; x < source.width; ++x)
+        const uint8_t* row = rgba + static_cast<size_t>(y) * width * 4;
+        for (uint32_t x = 0; x < width; ++x)
         {
             file.push_back(row[x * 4 + 2]);
             file.push_back(row[x * 4 + 1]);
             file.push_back(row[x * 4 + 0]);
         }
-        for (uint32_t pad = source.width * 3; pad < row_bytes; ++pad)
+        for (uint32_t pad = width * 3; pad < row_bytes; ++pad)
         {
             file.push_back(0);
         }

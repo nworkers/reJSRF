@@ -707,7 +707,8 @@ void Draw(const char* name, uint32_t primitive, uint32_t count, IndexSource indi
     }
     if (CaptureActive())
     {
-        CaptureDraw(name, primitive, count);
+        CaptureDraw(name, primitive, count, source.immediate != nullptr ? 0 : source.base, source.stride,
+                    indices.address, indices.base);
     }
     const PipelineState& pipeline = Pipeline();
     const bool is_program = (pipeline.vertex_shader & fvf::kProgramHandle) != 0;
@@ -1004,6 +1005,10 @@ void Draw(const char* name, uint32_t primitive, uint32_t count, IndexSource indi
                         reinterpret_cast<const void*>(index_data.offset));
     }
     lap.Mark(profile::Phase::kDraw);
+    if (CaptureActive())
+    {
+        CaptureAfterCall();
+    }
     profile::CountDraw(is_program);
 }
 

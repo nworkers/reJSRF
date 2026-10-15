@@ -43,6 +43,18 @@
   * `REXBOX_CAPTURE_FRAME=<n>`은 키 없이 n번째 프레임을 캡처한다(창 없는 실행, 검증용).
   * 위치: `d3d8_capture.h/.cpp`. 꺼져 있으면 그리기마다 bool 하나다.
 
+### 2.3 추가: 픽셀 소유 지도, 원시 헤더, 작은 그리기의 정점
+
+* 사용자 캡처(15개)에서 확인한 것:
+  * 플레이 프레임 7459와 7171에서 윤곽선 전체가 밝은 회색 선이다.
+  * 같은 프레임의 윤곽선 그리기(`vs 03FD9741` = 66950977, 컬링 `900`)는 `c[97] = (0.08, 0, 0, 1)`이다. 0번 스테이지는 MODULATE(텍스처 없음, diffuse)다. 상태대로라면 검게 나와야 한다(**확인됨**).
+  * 그래서 어느 그리기가 그 픽셀을 칠했는지를 직접 봐야 한다.
+* 캡처에 더하는 것:
+  * **소유 지도**: 호출마다 그 뒤 묶인 타깃을 읽어, 바뀐 픽셀의 "마지막 호출"을 기록한다. 보이는 화면의 지도를 `capture_<n>_owner.bmp`로 쓴다(빨강 = 번호+1의 낮은 바이트, 초록 = 높은 바이트).
+  * 뷰포트, 렌더 타깃·텍스처 헤더의 원시 형식·크기·데이터 필드.
+  * 정점 8개 이하 그리기의 처음 4개 정점(원시 DWORD). 부스트 합성 사각형의 텍스처 좌표를 보기 위해서다(#69).
+* 캡처 프레임에서만 호출마다 화면을 읽으므로 그 프레임만 느려진다.
+
 ## 3. 검증
 
 | 검증 | 기대 |
@@ -93,6 +105,18 @@
   * Output: `capture_<frame>.txt` (call order, shaders, render target, culling, depth, blending, alpha test, stencil, color writes, texture factor, fog, lighting, stages with textures and formats, and `c[97..98]` for programs) and `capture_<frame>.bmp`, in `REXBOX_FRAME_DUMP_DIR`.
   * `REXBOX_CAPTURE_FRAME=<n>` captures frame n without the key (windowless runs, verification).
   * Location: `d3d8_capture.h/.cpp`; when off, one bool per draw.
+
+### 2.3 Added: pixel owner map, raw headers, vertices of small draws
+
+* From the user's captures (15):
+  * In play frames 7459 and 7171 the whole outline is a light grey line.
+  * The outline draws in the same frames (`vs 03FD9741` = 66950977, culling `900`) have `c[97] = (0.08, 0, 0, 1)` and stage 0 MODULATE(no texture, diffuse), so by their state they should come out black (**confirmed**).
+  * Which draw painted those pixels has to be seen directly.
+* Added to the capture:
+  * **Owner map**: after each call the bound target is read back and each changed pixel records that call as its last writer. The map of the shown picture is written to `capture_<n>_owner.bmp` (red = low byte of index + 1, green = high byte).
+  * The viewport, and the raw format, size and data fields of the render target and texture headers.
+  * The first 4 vertices (raw DWORDs) of draws with at most 8 vertices, to see the texture coordinates of the boost composite quad (#69).
+* The screen is read after every call only in the captured frame, so only that frame is slow.
 
 ## 3. Verification
 
