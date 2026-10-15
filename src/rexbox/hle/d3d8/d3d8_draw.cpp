@@ -17,6 +17,7 @@
 #include "d3d8_gl_targets.h"
 #include "d3d8_gl_textures.h"
 #include "d3d8_globals.h"
+#include "d3d8_immediate.h"
 #include "d3d8_internal.h"
 #include "d3d8_profile.h"
 #include "d3d8_render_state.h"
@@ -60,6 +61,9 @@ struct VertexSource
     GuestAddress base = 0;  // address of vertex 0
     uint32_t stride = 0;
     bool from_buffer = false;  // a vertex buffer (cached) rather than UP data (streamed)
+    // Immediate-mode vertices in host memory, packed for the current vertex
+    // shader; `base` and `stride` are then unused.
+    const ImmediateBatch* immediate = nullptr;
 };
 
 // Where a draw's indices come from.
@@ -536,6 +540,13 @@ void Draw(const char* name, uint32_t primitive, uint32_t count, IndexSource indi
         });
         return;
     }
+    std::vector<uint8_t> immediate_bytes;
+    if (source.immediate != nullptr)
+    {
+        immediate_bytes = is_program ? PackDeclarationVertices(shader->declaration, layout.stride,
+                                                               source.immediate->vertices())
+                                     : PackFvfVertices(layout, source.immediate->vertices());
+    }
     GLenum mode = kGlTriangles;
     if (!GlPrimitive(primitive, &mode))
     {
@@ -639,15 +650,24 @@ void Draw(const char* name, uint32_t primitive, uint32_t count, IndexSource indi
     }
     lap.Mark(profile::Phase::kIndices);
     const uint32_t stride = source.stride != 0 ? source.stride : layout.stride;
-    const GuestAddress begin = (source.base + index_data.first * stride) & kPhysicalMask;
     const uint32_t bytes = index_data.vertex_count * stride;
-    if (!Memory().IsValid(begin, bytes))
+    size_t vertex_offset = 0;
+    if (source.immediate != nullptr)
     {
-        ReportOnce(Format("vertices %08X", begin),
-                   Format("%s: vertices %08X+%X are outside guest memory", name, begin, bytes));
-        return;
+        vertex_offset = PrepareHostVertexData(immediate_bytes.data() + static_cast<size_t>(index_data.first) * stride,
+                                              bytes);
     }
-    const size_t vertex_offset = PrepareVertexData(begin, bytes, source.from_buffer);
+    else
+    {
+        const GuestAddress begin = (source.base + index_data.first * stride) & kPhysicalMask;
+        if (!Memory().IsValid(begin, bytes))
+        {
+            ReportOnce(Format("vertices %08X", begin),
+                       Format("%s: vertices %08X+%X are outside guest memory", name, begin, bytes));
+            return;
+        }
+        vertex_offset = PrepareVertexData(begin, bytes, source.from_buffer);
+    }
     lap.Mark(profile::Phase::kUpload);
     if (is_program)
     {
@@ -798,12 +818,30 @@ void D3DDevice_DrawIndexedVerticesUP()
     call.Return(kD3dOk, 5);
 }
 
-// void D3DDevice_Begin(D3DPRIMITIVETYPE PrimitiveType) and the immediate-mode
-// vertex setters: not used by the title so far.
+// Immediate-mode drawing: Begin starts a batch, SetVertexData* set
+// registers (D3DVSDE_VERTEX completes a vertex), End draws the batch with
+// the current state.
+ImmediateBatch& Immediate()
+{
+    static ImmediateBatch batch;
+    return batch;
+}
+
+void SetVertexData(uint32_t reg, float x, float y, float z, float w)
+{
+    // Outside Begin/End the value is only kept.
+    if (!Immediate().Set(reg, x, y, z, w))
+    {
+        ReportOncePer("vertex data register", reg,
+                      [reg] { return Format("D3DDevice_SetVertexData*: register %d is out of range", static_cast<int>(reg)); });
+    }
+}
+
+// void D3DDevice_Begin(D3DPRIMITIVETYPE PrimitiveType)
 void D3DDevice_Begin()
 {
     HleCall call;
-    ReportOnce("begin", "D3DDevice_Begin/End immediate-mode drawing is not implemented yet");
+    Immediate().Begin(call.Arg(0));
     call.Return(kD3dOk, 1);
 }
 
@@ -811,13 +849,22 @@ void D3DDevice_Begin()
 void D3DDevice_End()
 {
     HleCall call;
+    ImmediateBatch& batch = Immediate();
+    if (batch.active())
+    {
+        batch.End();
+        VertexSource source;
+        source.immediate = &batch;
+        Draw("End", batch.primitive(), static_cast<uint32_t>(batch.vertices().size()), IndexSource{}, source);
+    }
     call.Return(kD3dOk, 0);
 }
 
-// void D3DDevice_SetVertexData2f(int Register, float a, float b)
+// void D3DDevice_SetVertexData2f(int Register, float a, float b): (a, b, 0, 1)
 void D3DDevice_SetVertexData2f()
 {
     HleCall call;
+    SetVertexData(call.Arg(0), FloatBits(call.Arg(1)), FloatBits(call.Arg(2)), 0.0f, 1.0f);
     call.Return(kD3dOk, 3);
 }
 
@@ -825,6 +872,8 @@ void D3DDevice_SetVertexData2f()
 void D3DDevice_SetVertexData4f()
 {
     HleCall call;
+    SetVertexData(call.Arg(0), FloatBits(call.Arg(1)), FloatBits(call.Arg(2)), FloatBits(call.Arg(3)),
+                  FloatBits(call.Arg(4)));
     call.Return(kD3dOk, 5);
 }
 

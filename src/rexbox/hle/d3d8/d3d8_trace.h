@@ -6,6 +6,8 @@
 #ifndef REXBOX_HLE_D3D8_D3D8_TRACE_H
 #define REXBOX_HLE_D3D8_D3D8_TRACE_H
 
+#include "d3d8_profile.h"
+
 #include <cstdint>
 #include <string>
 
@@ -31,6 +33,7 @@ bool FirstReport(const char* site, uint64_t value);
 template <typename Text>
 void ReportOncePer(const char* site, uint64_t value, Text&& text)
 {
+    profile::CountMissing(site);
     if (FirstReport(site, value))
     {
         ReportOnce(std::string(site) + ":" + std::to_string(value), text());

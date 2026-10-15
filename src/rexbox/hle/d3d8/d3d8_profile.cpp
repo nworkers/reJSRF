@@ -39,6 +39,14 @@ uint64_t g_vertex_bytes = 0;
 uint64_t g_index_bytes = 0;
 uint64_t g_compares = 0;
 uint32_t g_programs_built = 0;
+// Unimplemented report sites hit in the window (few, so a linear search).
+struct MissingCount
+{
+    const char* site;
+    uint64_t count;
+};
+std::array<MissingCount, 32> g_missing = {};
+size_t g_missing_sites = 0;
 uint32_t g_programs_cached = 0;
 Clock::duration g_program_time{};
 uint32_t g_programs_stored = 0;
@@ -149,6 +157,26 @@ void CountUpload(size_t vertex_bytes, size_t index_bytes)
     g_index_bytes += index_bytes;
 }
 
+void CountMissing(const char* site)
+{
+    if (!Enabled() || !t_presenting)
+    {
+        return;
+    }
+    for (size_t i = 0; i < g_missing_sites; ++i)
+    {
+        if (g_missing[i].site == site)
+        {
+            ++g_missing[i].count;
+            return;
+        }
+    }
+    if (g_missing_sites < g_missing.size())
+    {
+        g_missing[g_missing_sites++] = {site, 1};
+    }
+}
+
 void CountProgram(bool cached, Clock::duration elapsed)
 {
     if (!Enabled() || !t_presenting)
@@ -236,6 +264,16 @@ void EndFrame(uint32_t frame)
                  per_frame(Phase::kTarget), per_frame(Phase::kUpload), per_frame(Phase::kAttributes),
                  per_frame(Phase::kConstants), per_frame(Phase::kTextures), per_frame(Phase::kState),
                  per_frame(Phase::kDraw), per_frame(Phase::kPresent), per_frame(Phase::kWait), wall - measured);
+    if (g_missing_sites != 0)
+    {
+        std::string line = "[d3d8 profile] unimplemented per frame:";
+        for (size_t i = 0; i < g_missing_sites; ++i)
+        {
+            line += Format(" %s %.1f", g_missing[i].site, static_cast<double>(g_missing[i].count) / frames);
+            g_missing[i].count = 0;
+        }
+        std::fprintf(stderr, "%s\n", line.c_str());
+    }
     if (g_programs_built + g_programs_cached != 0)
     {
         // Programs made in this window (not per frame): they come in bursts.
