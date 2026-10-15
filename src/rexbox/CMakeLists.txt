@@ -12,6 +12,7 @@ target_include_directories(rexbox_xbe PUBLIC "${PROJECT_SOURCE_DIR}/include")
 add_library(rexbox_runtime STATIC
     runtime/environment.cpp
     runtime/guest_heap.cpp
+    runtime/guest_lock.cpp
     runtime/guest_memory.cpp
     runtime/hle_call.cpp
     runtime/hle_registry.cpp

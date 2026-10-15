@@ -27,6 +27,9 @@ using GuestAddress = uint32_t;
 // `guest_id` is passed to the thread describer.
 void NoteThreadName(std::string name, uint32_t guest_id);
 
+// The calling thread's name as given to NoteThreadName, or "a host thread".
+std::string CurrentThreadName();
+
 // The calling thread entered an HLE function. `name` must outlive the process
 // (a string literal or a registry entry); `esp` is the guest stack pointer
 // at the call, so [esp] is the return address.

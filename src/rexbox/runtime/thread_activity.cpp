@@ -293,6 +293,13 @@ void NoteThreadName(std::string name, uint32_t guest_id)
     record.name = std::move(name);
 }
 
+std::string CurrentThreadName()
+{
+    ThreadRecord& record = Self();
+    std::lock_guard<std::mutex> lock(record.name_mutex);
+    return record.name.empty() ? std::string("a host thread") : record.name;
+}
+
 void NoteHleEntry(const char* name, uint32_t esp)
 {
     ThreadRecord& record = Self();
