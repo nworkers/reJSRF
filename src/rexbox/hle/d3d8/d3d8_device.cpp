@@ -16,6 +16,7 @@
 #include "d3d8_vblank.h"
 #include "rexbox/platform/display.h"
 #include "rexbox/runtime/environment.h"
+#include "rexbox/runtime/thread_activity.h"
 
 #include <algorithm>
 #include <chrono>
@@ -546,6 +547,7 @@ void D3DDevice_Swap()
     EndVertexDataFrame();
     lap.Mark(profile::Phase::kPresent);
     profile::EndFrame(state.frame_count);
+    runtime::NotePresent(state.frame_count);
     call.Return(kD3dOk, 1);
 }
 

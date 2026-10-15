@@ -7,6 +7,9 @@
 
 #include "kernel_internal.h"
 
+#include "rexbox/runtime/thread_activity.h"
+
+#include <algorithm>
 #include <vector>
 
 namespace rexbox::hle::kernel
@@ -163,10 +166,14 @@ KernelThread* AlertableThread(uint32_t mode, uint32_t alertable)
 }
 
 // WaitForObjects, then the APCs that ended it.
-uint32_t WaitAndDeliver(const std::vector<GuestAddress>& objects, bool wait_all, const Deadline& deadline,
-                        KernelThread* apcs)
+uint32_t WaitAndDeliver(const char* what, const std::vector<GuestAddress>& objects, bool wait_all,
+                        const Deadline& deadline, KernelThread* apcs)
 {
-    const uint32_t status = WaitForObjects(objects, wait_all, deadline, apcs);
+    uint32_t status = 0;
+    {
+        const WaitNote note(what, objects, wait_all, deadline);
+        status = WaitForObjects(objects, wait_all, deadline, apcs);
+    }
     if (status == kStatusUserApc && apcs != nullptr)
     {
         DeliverUserApcs(*apcs);
@@ -455,11 +462,12 @@ void KeWaitForSingleObject()
     HleCall call;
     const std::vector<GuestAddress> objects{call.Arg(0)};
     const Deadline deadline = DeadlineFromTimeout(call.Arg(4));
-    const uint32_t status = WaitAndDeliver(objects, false, deadline, AlertableThread(call.Arg(2), call.Arg(3)));
+    const uint32_t status =
+        WaitAndDeliver("KeWaitForSingleObject", objects, false, deadline, AlertableThread(call.Arg(2), call.Arg(3)));
     HleCall().Return(status, 5);
 }
 
-void WaitForHandle(int stack_args, uint32_t handle, GuestAddress timeout, KernelThread* apcs)
+void WaitForHandle(const char* what, int stack_args, uint32_t handle, GuestAddress timeout, KernelThread* apcs)
 {
     const GuestAddress object = ObjectFromHandle(handle);
     if (object == 0)
@@ -468,7 +476,7 @@ void WaitForHandle(int stack_args, uint32_t handle, GuestAddress timeout, Kernel
         return;
     }
     const std::vector<GuestAddress> objects{object};
-    const uint32_t status = WaitAndDeliver(objects, false, DeadlineFromTimeout(timeout), apcs);
+    const uint32_t status = WaitAndDeliver(what, objects, false, DeadlineFromTimeout(timeout), apcs);
     HleCall().Return(status, stack_args);
 }
 
@@ -477,7 +485,7 @@ void WaitForHandle(int stack_args, uint32_t handle, GuestAddress timeout, Kernel
 void NtWaitForSingleObject()
 {
     HleCall call;
-    WaitForHandle(3, call.Arg(0), call.Arg(2), AlertableThread(kUserMode, call.Arg(1)));
+    WaitForHandle("NtWaitForSingleObject", 3, call.Arg(0), call.Arg(2), AlertableThread(kUserMode, call.Arg(1)));
 }
 
 // NTSTATUS NtWaitForSingleObjectEx(HANDLE Handle, KPROCESSOR_MODE WaitMode,
@@ -485,7 +493,7 @@ void NtWaitForSingleObject()
 void NtWaitForSingleObjectEx()
 {
     HleCall call;
-    WaitForHandle(4, call.Arg(0), call.Arg(3), AlertableThread(call.Arg(1), call.Arg(2)));
+    WaitForHandle("NtWaitForSingleObjectEx", 4, call.Arg(0), call.Arg(3), AlertableThread(call.Arg(1), call.Arg(2)));
 }
 
 // NTSTATUS NtWaitForMultipleObjectsEx(ULONG Count, HANDLE Handles[], WAIT_TYPE WaitType,
@@ -513,7 +521,8 @@ void NtWaitForMultipleObjectsEx()
         objects.push_back(object);
     }
     const uint32_t status =
-        WaitAndDeliver(objects, wait_all, DeadlineFromTimeout(call.Arg(5)), AlertableThread(call.Arg(3), call.Arg(4)));
+        WaitAndDeliver("NtWaitForMultipleObjectsEx", objects, wait_all, DeadlineFromTimeout(call.Arg(5)),
+                       AlertableThread(call.Arg(3), call.Arg(4)));
     HleCall().Return(status, 6);
 }
 
@@ -546,8 +555,57 @@ void SignalThreadExit(GuestAddress ethread, uint32_t exit_status)
     NotifyWaitersLocked();
 }
 
+WaitNote::WaitNote(const char* what, const std::vector<GuestAddress>& objects, bool all, const Deadline& deadline)
+{
+    int64_t timeout_ms = -1;
+    if (deadline)
+    {
+        timeout_ms = std::max<int64_t>(0, std::chrono::duration_cast<std::chrono::milliseconds>(
+                                              *deadline - std::chrono::steady_clock::now())
+                                              .count());
+    }
+    runtime::NoteWaitBegin(what, objects.data(), objects.size(), all, timeout_ms);
+}
+
+WaitNote::~WaitNote()
+{
+    runtime::NoteWaitEnd();
+}
+
+namespace
+{
+
+// For the stall report: a dispatcher object's kind and current signal state.
+std::string DescribeWaitObject(GuestAddress object)
+{
+    runtime::GuestMemory& memory = Memory();
+    if (!memory.IsValid(object, L::kHeaderSignalState + 4))
+    {
+        return "(not mapped)";
+    }
+    const uint8_t type = memory.Read8(object + L::kHeaderType);
+    const char* kind = "object";
+    switch (static_cast<ObjectType>(type))
+    {
+    case ObjectType::kNotificationEvent: kind = "NotificationEvent"; break;
+    case ObjectType::kSynchronizationEvent: kind = "SynchronizationEvent"; break;
+    case ObjectType::kMutant: kind = "Mutant"; break;
+    case ObjectType::kSemaphore: kind = "Semaphore"; break;
+    case ObjectType::kThread: kind = "Thread"; break;
+    case ObjectType::kNotificationTimer: kind = "NotificationTimer"; break;
+    case ObjectType::kSynchronizationTimer: kind = "SynchronizationTimer"; break;
+    }
+    char text[64];
+    std::snprintf(text, sizeof(text), "%s (type %u) signal %d", kind, type,
+                  static_cast<int32_t>(memory.Read32(object + L::kHeaderSignalState)));
+    return text;
+}
+
+}  // namespace
+
 void RegisterSyncExports(runtime::HleRegistry& registry)
 {
+    runtime::SetWaitObjectDescriber(&DescribeWaitObject);
     registry.AddExport("kernel", "KeSetEvent", &KeSetEvent);
     registry.AddExport("kernel", "NtCreateEvent", &NtCreateEvent);
     registry.AddExport("kernel", "NtSetEvent", &NtSetEvent);

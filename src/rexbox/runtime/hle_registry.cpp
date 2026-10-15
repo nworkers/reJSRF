@@ -56,6 +56,12 @@ GuestAddress HleRegistry::FindVariable(std::string_view name) const
 
 HleThunk HleRegistry::Lookup(GuestAddress address) const
 {
+    const HleExport* bound = LookupExport(address);
+    return bound == nullptr ? nullptr : bound->thunk;
+}
+
+const HleExport* HleRegistry::LookupExport(GuestAddress address) const
+{
     if (address < kFlatLimit)
     {
         const size_t word = address / 64;
@@ -65,7 +71,7 @@ HleThunk HleRegistry::Lookup(GuestAddress address) const
         }
     }
     const auto it = bindings_.find(address);
-    return it == bindings_.end() ? nullptr : exports_[it->second].thunk;
+    return it == bindings_.end() ? nullptr : &exports_[it->second];
 }
 
 }  // namespace rexbox::runtime

@@ -55,6 +55,9 @@ public:
     // The HLE implementation bound at `address`, or nullptr. Asked on every
     // indirect call of the lifted code, so most answers are a bitmap test.
     HleThunk Lookup(GuestAddress address) const;
+    // The export bound at `address` (its name too), or nullptr. Entries do not
+    // move once registration is over.
+    const HleExport* LookupExport(GuestAddress address) const;
 
     // A title profile records where its copy of an XDK variable lives (found
     // by function identification), e.g. {"g_DeviceType_Gamepad", 0x001BC860}.

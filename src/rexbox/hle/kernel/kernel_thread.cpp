@@ -4,9 +4,11 @@
 #include "kernel_internal.h"
 
 #include "rexbox/hle/kernel/kernel_hle.h"
+#include "rexbox/runtime/thread_activity.h"
 #include "rexbox/xbe/xbe_image.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <thread>
 
 namespace rexbox::hle::kernel
@@ -33,13 +35,19 @@ uint32_t RoundUpPage(uint32_t size)
 struct ThreadLaunch
 {
     std::shared_ptr<KernelThread> thread;
+    GuestAddress function = 0;
 };
 
 void OnThreadStart(void* context)
 {
-    KernelThread* thread = static_cast<ThreadLaunch*>(context)->thread.get();
+    auto* launch = static_cast<ThreadLaunch*>(context);
+    KernelThread* thread = launch->thread.get();
     t_current = thread;
+    char name[40];
+    std::snprintf(name, sizeof(name), "thread %u (%08X)", thread->id, launch->function);
+    runtime::NoteThreadName(name, thread->id);
     std::unique_lock<std::mutex> lock(thread->gate);
+    const runtime::ScopedWait note("thread start (created suspended)", nullptr, 0, false, -1);
     thread->resumed.wait(lock, [thread] { return thread->suspend_count <= 0; });
 }
 
@@ -124,7 +132,7 @@ std::shared_ptr<KernelThread> CreateGuestThread(GuestAddress function, const uin
     start.thread_id = thread->id;
     start.on_start = &OnThreadStart;
     start.on_exit = &OnThreadExit;
-    start.context = new ThreadLaunch{thread};
+    start.context = new ThreadLaunch{thread, function};
     if (!runtime::Env().executor->StartThread(start, error))
     {
         delete static_cast<ThreadLaunch*>(start.context);
@@ -224,6 +232,7 @@ void KeDelayExecutionThread()
 {
     HleCall call;
     const Deadline deadline = DeadlineFromTimeout(call.Arg(2));
+    const WaitNote note("KeDelayExecutionThread", {}, false, deadline);
     const bool alertable = (call.Arg(1) & 0xFF) != 0 && (call.Arg(0) & 0xFF) == kUserMode;
     if (alertable)
     {
@@ -335,6 +344,7 @@ void NtSuspendThread()
             // until NtResumeThread brings the count back to 0. The title's
             // frame thread does this once per frame, resumed from its
             // vertical-blank thread.
+            const runtime::ScopedWait note("NtSuspendThread (itself, until resumed)", nullptr, 0, false, -1);
             thread->resumed.wait(lock, [&thread] { return thread->suspend_count == 0; });
         }
         else
@@ -356,8 +366,55 @@ KernelThread* CurrentThread()
     return t_current;
 }
 
+namespace
+{
+
+// For the stall report: what the kernel knows of a guest thread. Other
+// threads' suspensions only count (NtSuspendThread), so a count above zero on
+// a running thread is worth seeing.
+std::string DescribeThread(uint32_t id)
+{
+    std::shared_ptr<KernelThread> thread;
+    std::vector<uint32_t> handles;
+    {
+        std::lock_guard<std::mutex> lock(State().dispatcher);
+        const auto it = State().threads.find(id);
+        if (it == State().threads.end())
+        {
+            return "";
+        }
+        thread = it->second;
+        for (const auto& [handle, object] : State().handles)
+        {
+            if (object->kind == KernelObject::Kind::kThread && object->object == thread->ethread)
+            {
+                handles.push_back(handle);
+            }
+        }
+    }
+    int suspend_count = 0;
+    {
+        std::lock_guard<std::mutex> lock(thread->gate);
+        suspend_count = thread->suspend_count;
+    }
+    char text[96];
+    std::snprintf(text, sizeof(text), "ethread %08X, suspend count %d, base priority %d", thread->ethread,
+                  suspend_count, static_cast<int8_t>(Memory().Read8(thread->ethread + L::kThreadBasePriority)));
+    std::string described = text;
+    std::sort(handles.begin(), handles.end());
+    for (size_t i = 0; i < handles.size(); ++i)
+    {
+        std::snprintf(text, sizeof(text), "%s%X", i == 0 ? ", handles " : " ", handles[i]);
+        described += text;
+    }
+    return described;
+}
+
+}  // namespace
+
 void RegisterThreadExports(runtime::HleRegistry& registry)
 {
+    runtime::SetThreadDescriber(&DescribeThread);
     registry.AddExport("kernel", "PsCreateSystemThreadEx", &PsCreateSystemThreadEx);
     registry.AddExport("kernel", "PsTerminateSystemThread", &PsTerminateSystemThread);
     registry.AddExport("kernel", "KeDelayExecutionThread", &KeDelayExecutionThread);
