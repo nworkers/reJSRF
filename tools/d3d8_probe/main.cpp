@@ -674,6 +674,7 @@ void CheckPixelShaders()
     def[psh::word::kC1Mapping] = 0xFFFFFFFF;
     def[psh::word::kFinalConstants] = 0x000001FF;
     def[psh::word::kConstant0 + 0] = 0x80FF0000;  // stage 0's own c0
+    def[psh::word::kConstant0 + 1] = 0xFF336699;  // stage 1's, until register 0 is written
     psh::Key key;
     key.definition = def;
     key.samplers[0] = SamplerKind::k2D;
@@ -696,10 +697,13 @@ void CheckPixelShaders()
     float c1[psh::kStages][4];
     float f0[4];
     float f1[4];
-    psh::StageConstants(def, pixel_constants, c0, c1, f0, f1);
+    psh::StageConstants(def, pixel_constants, 0x1u, c0, c1, f0, f1);
     Expect(c0[1][0] == 0.5f && c0[1][3] == 1.0f, "stage 1 c0 comes from SetPixelShaderConstant(0)");
     Expect(c0[0][0] == 1.0f && std::fabs(c0[0][3] - 128.0f / 255.0f) < 1e-6f, "stage 0 c0 is its own D3DCOLOR");
     Expect(c1[3][0] == 0.0f && f0[0] == 0.0f, "unmapped c1 and final constants come from the definition");
+    psh::StageConstants(def, pixel_constants, 0x0u, c0, c1, f0, f1);
+    Expect(c0[1][0] == static_cast<float>((def[psh::word::kConstant0 + 1] >> 16) & 0xFF) / 255.0f,
+           "a mapped register not written since SetPixelShader leaves the definition's constant");
 
     // A final combiner: A = fog.a, B = r0, C = fog.rgb, D = 0; G = r0.a.
     psh::Definition fin = def;

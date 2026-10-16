@@ -667,7 +667,8 @@ void SetPixelShaderUniforms(UniformCache& uniforms, const psh::Definition& defin
     float c1[psh::kStages][4];
     float final_c0[4];
     float final_c1[4];
-    psh::StageConstants(definition, PixelShaderConstants(), c0, c1, final_c0, final_c1);
+    psh::StageConstants(definition, PixelShaderConstants(), PixelShaderConstantsWritten(), c0, c1, final_c0,
+                        final_c1);
     uniforms.Set4fv(locations.stage_c0, static_cast<int>(psh::kStages), &c0[0][0]);
     uniforms.Set4fv(locations.stage_c1, static_cast<int>(psh::kStages), &c1[0][0]);
     uniforms.Set4fv(locations.final_c0, 1, final_c0);

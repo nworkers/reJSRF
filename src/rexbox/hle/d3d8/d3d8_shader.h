@@ -35,8 +35,13 @@ uint64_t VertexShaderConstantsVersion();
 // The D3DPIXELSHADERDEF behind a CreatePixelShader handle, or nullptr.
 const psh::Definition* FindPixelShader(uint32_t handle);
 
-// The SetPixelShaderConstant registers 0..15.
+// The SetPixelShaderConstant registers 0..15, and which of them were written
+// since the last SetPixelShader (bit r: register r). SetPixelShader loads the
+// definition's constants, so unwritten registers do not apply
+// (docs/design/20261017-i078-psh-definition-constants.md).
 const float (*PixelShaderConstants())[4];
+uint32_t PixelShaderConstantsWritten();
+void ForgetPixelShaderConstants();
 
 // Writes the screen-space constants c[58] and c[59] for the viewport, as the
 // library does when the viewport changes (vsh::ViewportConstants).
