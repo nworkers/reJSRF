@@ -8,14 +8,16 @@
  *
  * The originals are short SSE sequences called very often; lifted, each call
  * pays more for the guest-register plumbing than for its arithmetic. These
- * versions compute the same lanes with SSE intrinsics in the same order (so
- * the IEEE results are bit-identical) and leave the general registers, the
- * memory (including stack slots below esp) and XMM0..7 as the originals do;
- * rejsrf_decomp_check compares all three. Prefetches are omitted. */
+ * versions compute the same lanes in plain C, in the same order and grouping
+ * (IEEE single precision, so the results are bit-identical with the lifted
+ * lane-wise C), and leave the general registers, the memory (including stack
+ * slots below esp) and XMM0..7 as the originals do; rejsrf_decomp_check
+ * compares all three. No intrinsics: this code builds for every target.
+ * Prefetches are omitted. */
 
 #include "recomp_types.h"
 
-#include <xmmintrin.h>
+#include <string.h>
 
 extern void sub_001BA8A0_gen(void);
 extern void sub_001BA8F0_gen(void);
@@ -48,29 +50,85 @@ extern void sub_001BB380_gen(void);
 
 /* Host pointer to a guest address; the base is read once per function. */
 #define GUEST_BASE() const uintptr_t base = (uintptr_t)g_xbox_mem_offset
-#define PF(addr) ((float*)(base + (uint32_t)(addr)))
+#define PF(addr) ((void*)(base + (uint32_t)(addr)))
 
-static __inline __m128 Load4(uintptr_t base, uint32_t addr)
+/* The four float lanes of an XMM register. */
+typedef struct Lanes
 {
-    return _mm_loadu_ps(PF(addr));
+    float f[4];
+} Lanes;
+
+/* movups / movaps load and store (bit patterns copied unchanged). */
+static __inline Lanes Load4(uintptr_t base, uint32_t addr)
+{
+    Lanes r;
+    memcpy(r.f, PF(addr), 16);
+    return r;
 }
 
-static __inline void Store4(uintptr_t base, uint32_t addr, __m128 v)
+static __inline void Store4(uintptr_t base, uint32_t addr, Lanes v)
 {
-    _mm_storeu_ps(PF(addr), v);
+    memcpy(PF(addr), v.f, 16);
 }
 
 /* movss xmm, [addr]: the float in lane 0, zeros above. */
-static __inline __m128 Scalar(uintptr_t base, uint32_t addr)
+static __inline Lanes Scalar(uintptr_t base, uint32_t addr)
 {
-    return _mm_load_ss(PF(addr));
+    Lanes r = {{0.0f, 0.0f, 0.0f, 0.0f}};
+    memcpy(&r.f[0], PF(addr), 4);
+    return r;
+}
+
+/* movss [addr], xmm: lane 0. */
+static __inline void StoreScalar(uintptr_t base, uint32_t addr, Lanes v)
+{
+    memcpy(PF(addr), &v.f[0], 4);
+}
+
+/* shufps x, x, lane * 0x55: every lane from one lane. */
+static __inline Lanes Broadcast(Lanes v, int lane)
+{
+    const float x = v.f[lane];
+    Lanes r = {{x, x, x, x}};
+    return r;
 }
 
 /* movss xmm, [addr] then shufps xmm, xmm, 0. */
-static __inline __m128 Splat(uintptr_t base, uint32_t addr)
+static __inline Lanes Splat(uintptr_t base, uint32_t addr)
 {
-    const __m128 v = _mm_load_ss(PF(addr));
-    return _mm_shuffle_ps(v, v, 0);
+    return Broadcast(Scalar(base, addr), 0);
+}
+
+/* mulps, addps, subps: lane by lane, first operand first. */
+static __inline Lanes Mul(Lanes a, Lanes b)
+{
+    Lanes r = {{a.f[0] * b.f[0], a.f[1] * b.f[1], a.f[2] * b.f[2], a.f[3] * b.f[3]}};
+    return r;
+}
+
+static __inline Lanes Add(Lanes a, Lanes b)
+{
+    Lanes r = {{a.f[0] + b.f[0], a.f[1] + b.f[1], a.f[2] + b.f[2], a.f[3] + b.f[3]}};
+    return r;
+}
+
+static __inline Lanes Sub(Lanes a, Lanes b)
+{
+    Lanes r = {{a.f[0] - b.f[0], a.f[1] - b.f[1], a.f[2] - b.f[2], a.f[3] - b.f[3]}};
+    return r;
+}
+
+/* addss, subss: lane 0 only, the rest from the first operand. */
+static __inline Lanes AddScalar(Lanes a, Lanes b)
+{
+    a.f[0] = a.f[0] + b.f[0];
+    return a;
+}
+
+static __inline Lanes SubScalar(Lanes a, Lanes b)
+{
+    a.f[0] = a.f[0] - b.f[0];
+    return a;
 }
 
 static __inline uint32_t CurrentMatrix(uintptr_t base)
@@ -79,7 +137,7 @@ static __inline uint32_t CurrentMatrix(uintptr_t base)
     return *(const uint32_t*)(base + cell);
 }
 
-#define SET_XMM(reg, v) _mm_storeu_ps((reg).f, (v))
+#define SET_XMM(reg, v) memcpy(&(reg), (v).f, 16)
 
 /* `ret`: pop the return address. */
 #define RET() (g_esp += 4u)
@@ -106,10 +164,10 @@ void sub_001BA8F0(void)
     GUEST_BASE();
     const uint32_t m = CurrentMatrix(base);
     const uint32_t src = g_ecx;
-    const __m128 r0 = Load4(base, src);
-    const __m128 r1 = Load4(base, src + 0x10);
-    const __m128 r2 = Load4(base, src + 0x20);
-    const __m128 r3 = Load4(base, src + 0x30);
+    const Lanes r0 = Load4(base, src);
+    const Lanes r1 = Load4(base, src + 0x10);
+    const Lanes r2 = Load4(base, src + 0x20);
+    const Lanes r3 = Load4(base, src + 0x30);
     Store4(base, m, r0);
     Store4(base, m + 0x10, r1);
     Store4(base, m + 0x20, r2);
@@ -128,10 +186,10 @@ void sub_001BA950(void)
     GUEST_BASE();
     const uint32_t m = CurrentMatrix(base);
     const uint32_t dst = g_ecx;
-    const __m128 r0 = Load4(base, m);
-    const __m128 r1 = Load4(base, m + 0x10);
-    const __m128 r2 = Load4(base, m + 0x20);
-    const __m128 r3 = Load4(base, m + 0x30);
+    const Lanes r0 = Load4(base, m);
+    const Lanes r1 = Load4(base, m + 0x10);
+    const Lanes r2 = Load4(base, m + 0x20);
+    const Lanes r3 = Load4(base, m + 0x30);
     Store4(base, dst, r0);
     Store4(base, dst + 0x10, r1);
     Store4(base, dst + 0x20, r2);
@@ -161,10 +219,10 @@ void sub_001BA9C0(void)
     const uint32_t m = MEM32(cell);
     const uint32_t next = m + 0x40;
     MEM32(cell) = next;
-    const __m128 r0 = Load4(base, m);
-    const __m128 r1 = Load4(base, m + 0x10);
-    const __m128 r2 = Load4(base, m + 0x20);
-    const __m128 r3 = Load4(base, m + 0x30);
+    const Lanes r0 = Load4(base, m);
+    const Lanes r1 = Load4(base, m + 0x10);
+    const Lanes r2 = Load4(base, m + 0x20);
+    const Lanes r3 = Load4(base, m + 0x30);
     Store4(base, next, r0);
     Store4(base, next + 0x10, r1);
     Store4(base, next + 0x20, r2);
@@ -213,12 +271,12 @@ void sub_001BAA50(void)
 static __inline uint32_t Translate(uintptr_t base, uint32_t x_addr, uint32_t y_addr, uint32_t z_addr)
 {
     const uint32_t m = CurrentMatrix(base);
-    __m128 x0 = _mm_mul_ps(Splat(base, x_addr), Load4(base, m));
-    __m128 x1 = _mm_mul_ps(Splat(base, y_addr), Load4(base, m + 0x10));
-    const __m128 x2 = _mm_mul_ps(Splat(base, z_addr), Load4(base, m + 0x20));
-    x0 = _mm_add_ps(x0, Load4(base, m + 0x30));
-    x1 = _mm_add_ps(x1, x2);
-    x0 = _mm_add_ps(x0, x1);
+    Lanes x0 = Mul(Splat(base, x_addr), Load4(base, m));
+    Lanes x1 = Mul(Splat(base, y_addr), Load4(base, m + 0x10));
+    const Lanes x2 = Mul(Splat(base, z_addr), Load4(base, m + 0x20));
+    x0 = Add(x0, Load4(base, m + 0x30));
+    x1 = Add(x1, x2);
+    x0 = Add(x0, x1);
     Store4(base, m + 0x30, x0);
     SET_XMM(g_xmm0, x0);
     SET_XMM(g_xmm1, x1);
@@ -251,13 +309,13 @@ void sub_001BAAE0(void)
     GUEST_BASE();
     const uint32_t m = CurrentMatrix(base);
     const uint32_t v = g_ecx;
-    const __m128 x0 = _mm_mul_ps(Splat(base, v), Load4(base, m));
-    __m128 x1 = _mm_mul_ps(Splat(base, v + 4), Load4(base, m + 0x10));
-    const __m128 x2 = _mm_mul_ps(Splat(base, v + 8), Load4(base, m + 0x20));
-    __m128 x3 = Load4(base, m + 0x30);
-    x3 = _mm_sub_ps(x3, x0);
-    x1 = _mm_add_ps(x1, x2);
-    x3 = _mm_sub_ps(x3, x1);
+    const Lanes x0 = Mul(Splat(base, v), Load4(base, m));
+    Lanes x1 = Mul(Splat(base, v + 4), Load4(base, m + 0x10));
+    const Lanes x2 = Mul(Splat(base, v + 8), Load4(base, m + 0x20));
+    Lanes x3 = Load4(base, m + 0x30);
+    x3 = Sub(x3, x0);
+    x1 = Add(x1, x2);
+    x3 = Sub(x3, x1);
     Store4(base, m + 0x30, x3);
     SET_XMM(g_xmm0, x0);
     SET_XMM(g_xmm1, x1);
@@ -278,29 +336,29 @@ void sub_001BAB20(void)
     g_eax = m;
     if (in == 0)
     {
-        const __m128 x0 = Scalar(base, m + 0x30);
-        const __m128 x1 = Scalar(base, m + 0x34);
-        const __m128 x2 = Scalar(base, m + 0x38);
-        _mm_store_ss(PF(out), x0);
-        _mm_store_ss(PF(out + 4), x1);
-        _mm_store_ss(PF(out + 8), x2);
+        const Lanes x0 = Scalar(base, m + 0x30);
+        const Lanes x1 = Scalar(base, m + 0x34);
+        const Lanes x2 = Scalar(base, m + 0x38);
+        StoreScalar(base, out, x0);
+        StoreScalar(base, out + 4, x1);
+        StoreScalar(base, out + 8, x2);
         SET_XMM(g_xmm0, x0);
         SET_XMM(g_xmm1, x1);
         SET_XMM(g_xmm2, x2);
         RET();
         return;
     }
-    __m128 x0 = _mm_mul_ps(Splat(base, in), Load4(base, m));
-    __m128 x1 = _mm_mul_ps(Splat(base, in + 4), Load4(base, m + 0x10));
-    __m128 x2 = _mm_mul_ps(Splat(base, in + 8), Load4(base, m + 0x20));
-    x0 = _mm_add_ps(x0, Load4(base, m + 0x30));
-    x1 = _mm_add_ps(x1, x2);
-    x0 = _mm_add_ps(x0, x1);
-    x1 = _mm_shuffle_ps(x0, x0, 0x55);
-    x2 = _mm_shuffle_ps(x0, x0, 0xAA);
-    _mm_store_ss(PF(out), x0);
-    _mm_store_ss(PF(out + 4), x1);
-    _mm_store_ss(PF(out + 8), x2);
+    Lanes x0 = Mul(Splat(base, in), Load4(base, m));
+    Lanes x1 = Mul(Splat(base, in + 4), Load4(base, m + 0x10));
+    Lanes x2 = Mul(Splat(base, in + 8), Load4(base, m + 0x20));
+    x0 = Add(x0, Load4(base, m + 0x30));
+    x1 = Add(x1, x2);
+    x0 = Add(x0, x1);
+    x1 = Broadcast(x0, 1);
+    x2 = Broadcast(x0, 2);
+    StoreScalar(base, out, x0);
+    StoreScalar(base, out + 4, x1);
+    StoreScalar(base, out + 8, x2);
     SET_XMM(g_xmm0, x0);
     SET_XMM(g_xmm1, x1);
     SET_XMM(g_xmm2, x2);
@@ -328,16 +386,16 @@ void sub_001BABA0(void)
     const uint32_t src_stride = MEM32(args + 12);
     const uint32_t m = CurrentMatrix(base);
     uint32_t count = g_edx;
-    __m128 x0, x1, x2;
+    Lanes x0, x1, x2;
     do
     {
         /* The rows are memory operands in the loop: read them each time. */
-        x0 = _mm_mul_ps(Splat(base, src), Load4(base, m));
-        x1 = _mm_mul_ps(Splat(base, src + 4), Load4(base, m + 0x10));
-        x2 = _mm_mul_ps(Splat(base, src + 8), Load4(base, m + 0x20));
-        x0 = _mm_add_ps(x0, Load4(base, m + 0x30));
-        x1 = _mm_add_ps(x1, x2);
-        x0 = _mm_add_ps(x0, x1);
+        x0 = Mul(Splat(base, src), Load4(base, m));
+        x1 = Mul(Splat(base, src + 4), Load4(base, m + 0x10));
+        x2 = Mul(Splat(base, src + 8), Load4(base, m + 0x20));
+        x0 = Add(x0, Load4(base, m + 0x30));
+        x1 = Add(x1, x2);
+        x0 = Add(x0, x1);
         Store4(base, dst, x0);
         src += src_stride;
         dst += dst_stride;
@@ -359,16 +417,16 @@ void sub_001BAC00(void)
     const uint32_t m = CurrentMatrix(base);
     const uint32_t out = g_ecx;
     const uint32_t in = g_edx;
-    __m128 x0 = _mm_mul_ps(Splat(base, in), Load4(base, m));
-    __m128 x1 = _mm_mul_ps(Splat(base, in + 4), Load4(base, m + 0x10));
-    __m128 x2 = _mm_mul_ps(Splat(base, in + 8), Load4(base, m + 0x20));
-    x0 = _mm_add_ps(x0, x1);
-    x0 = _mm_add_ps(x0, x2);
-    x1 = _mm_shuffle_ps(x0, x0, 0x55);
-    x2 = _mm_shuffle_ps(x0, x0, 0xAA);
-    _mm_store_ss(PF(out), x0);
-    _mm_store_ss(PF(out + 4), x1);
-    _mm_store_ss(PF(out + 8), x2);
+    Lanes x0 = Mul(Splat(base, in), Load4(base, m));
+    Lanes x1 = Mul(Splat(base, in + 4), Load4(base, m + 0x10));
+    Lanes x2 = Mul(Splat(base, in + 8), Load4(base, m + 0x20));
+    x0 = Add(x0, x1);
+    x0 = Add(x0, x2);
+    x1 = Broadcast(x0, 1);
+    x2 = Broadcast(x0, 2);
+    StoreScalar(base, out, x0);
+    StoreScalar(base, out + 4, x1);
+    StoreScalar(base, out + 8, x2);
     SET_XMM(g_xmm0, x0);
     SET_XMM(g_xmm1, x1);
     SET_XMM(g_xmm2, x2);
@@ -403,21 +461,21 @@ static __inline void Rotate(uintptr_t base, RotateState* state, uint32_t row_p, 
     }
     const uint32_t entry = AngleEntry(state->ecx);
     const uint32_t m = CurrentMatrix(base);
-    const __m128 b = Splat(base, entry + 4);
-    const __m128 a = Splat(base, entry);
-    __m128 x0 = _mm_mul_ps(b, Load4(base, m + row_p));
-    const __m128 x1 = _mm_mul_ps(a, Load4(base, m + row_q));
-    __m128 x2 = _mm_mul_ps(b, Load4(base, m + row_q));
-    const __m128 x3 = _mm_mul_ps(a, Load4(base, m + row_p));
+    const Lanes b = Splat(base, entry + 4);
+    const Lanes a = Splat(base, entry);
+    Lanes x0 = Mul(b, Load4(base, m + row_p));
+    const Lanes x1 = Mul(a, Load4(base, m + row_q));
+    Lanes x2 = Mul(b, Load4(base, m + row_q));
+    const Lanes x3 = Mul(a, Load4(base, m + row_p));
     if (p_add)
     {
-        x0 = _mm_add_ps(x0, x1);
-        x2 = _mm_sub_ps(x2, x3);
+        x0 = Add(x0, x1);
+        x2 = Sub(x2, x3);
     }
     else
     {
-        x0 = _mm_sub_ps(x0, x1);
-        x2 = _mm_add_ps(x2, x3);
+        x0 = Sub(x0, x1);
+        x2 = Add(x2, x3);
     }
     Store4(base, m + row_p, x0);
     Store4(base, m + row_q, x2);
@@ -501,24 +559,24 @@ void sub_001BAC70(void)
     const uint32_t p = g_ecx;
     const uint32_t vec = MEM32(kWorkVector);
     const uint32_t entry = AngleEntry(MEM32(p + 0xC));
-    __m128 x0 = Scalar(base, entry + 4);
-    __m128 x1 = Scalar(base, entry);
+    Lanes x0 = Scalar(base, entry + 4);
+    Lanes x1 = Scalar(base, entry);
     const uint32_t w = MEM32(kWorkMatrix);
-    _mm_store_ss(PF(kWorkScalar), x0);
-    __m128 x2 = Load4(base, vec);
-    __m128 x3 = Load4(base, p);
-    x0 = _mm_shuffle_ps(x0, x0, 0);
-    x1 = _mm_shuffle_ps(x1, x1, 0);
-    x2 = _mm_sub_ps(x2, x0);
-    x1 = _mm_mul_ps(x1, x3);
-    x2 = _mm_mul_ps(x2, x3);
+    StoreScalar(base, kWorkScalar, x0);
+    Lanes x2 = Load4(base, vec);
+    Lanes x3 = Load4(base, p);
+    x0 = Broadcast(x0, 0);
+    x1 = Broadcast(x1, 0);
+    x2 = Sub(x2, x0);
+    x1 = Mul(x1, x3);
+    x2 = Mul(x2, x3);
     Store4(base, w + 0x30, x1);
-    __m128 x4 = _mm_shuffle_ps(x3, x3, 0x55);
-    __m128 x5 = _mm_shuffle_ps(x3, x3, 0xAA);
-    x3 = _mm_shuffle_ps(x3, x3, 0x00);
-    x3 = _mm_mul_ps(x3, x2);
-    x4 = _mm_mul_ps(x4, x2);
-    x5 = _mm_mul_ps(x5, x2);
+    Lanes x4 = Broadcast(x3, 1);
+    Lanes x5 = Broadcast(x3, 2);
+    x3 = Broadcast(x3, 0);
+    x3 = Mul(x3, x2);
+    x4 = Mul(x4, x2);
+    x5 = Mul(x5, x2);
     Store4(base, w, x3);
     Store4(base, w + 0x10, x4);
     Store4(base, w + 0x20, x5);
@@ -528,24 +586,24 @@ void sub_001BAC70(void)
      * each splatted and multiplied by a row of M. */
 #define SUM(a_off, op, b_addr) op(Scalar(base, w + (a_off)), Scalar(base, (b_addr)))
 #define ROW(s0, s1, s2)                                                         \
-    _mm_add_ps(_mm_add_ps(_mm_mul_ps(_mm_shuffle_ps(s0, s0, 0), Load4(base, m)), \
-                          _mm_mul_ps(_mm_shuffle_ps(s1, s1, 0), Load4(base, m + 0x10))), \
-               _mm_mul_ps(_mm_shuffle_ps(s2, s2, 0), Load4(base, m + 0x20)))
-    const __m128 a0 = SUM(0x00, _mm_add_ss, kWorkScalar);
-    const __m128 a1 = SUM(0x04, _mm_add_ss, w + 0x38);
-    const __m128 a2 = SUM(0x08, _mm_sub_ss, w + 0x34);
+    Add(Add(Mul(Broadcast(s0, 0), Load4(base, m)), \
+                          Mul(Broadcast(s1, 0), Load4(base, m + 0x10))), \
+               Mul(Broadcast(s2, 0), Load4(base, m + 0x20)))
+    const Lanes a0 = SUM(0x00, AddScalar, kWorkScalar);
+    const Lanes a1 = SUM(0x04, AddScalar, w + 0x38);
+    const Lanes a2 = SUM(0x08, SubScalar, w + 0x34);
     x0 = ROW(a0, a1, a2);
-    const __m128 b0 = SUM(0x10, _mm_sub_ss, w + 0x38);
-    const __m128 b1 = SUM(0x14, _mm_add_ss, kWorkScalar);
-    const __m128 b2 = SUM(0x18, _mm_add_ss, w + 0x30);
+    const Lanes b0 = SUM(0x10, SubScalar, w + 0x38);
+    const Lanes b1 = SUM(0x14, AddScalar, kWorkScalar);
+    const Lanes b2 = SUM(0x18, AddScalar, w + 0x30);
     x1 = ROW(b0, b1, b2);
-    const __m128 c0 = SUM(0x20, _mm_add_ss, w + 0x34);
-    const __m128 c1 = SUM(0x24, _mm_sub_ss, w + 0x30);
-    const __m128 c2 = SUM(0x28, _mm_add_ss, kWorkScalar);
+    const Lanes c0 = SUM(0x20, AddScalar, w + 0x34);
+    const Lanes c1 = SUM(0x24, SubScalar, w + 0x30);
+    const Lanes c2 = SUM(0x28, AddScalar, kWorkScalar);
     x2 = ROW(c0, c1, c2);
     /* xmm3 and xmm4 end as the last row's second and third products. */
-    x3 = _mm_mul_ps(_mm_shuffle_ps(c1, c1, 0), Load4(base, m + 0x10));
-    x4 = _mm_mul_ps(_mm_shuffle_ps(c2, c2, 0), Load4(base, m + 0x20));
+    x3 = Mul(Broadcast(c1, 0), Load4(base, m + 0x10));
+    x4 = Mul(Broadcast(c2, 0), Load4(base, m + 0x20));
 #undef ROW
 #undef SUM
     Store4(base, m, x0);
@@ -572,28 +630,28 @@ void sub_001BADB0(void)
     GUEST_BASE();
     const uint32_t m = CurrentMatrix(base);
     const uint32_t a = g_ecx;
-    const __m128 r0 = Load4(base, m);
-    const __m128 r1 = Load4(base, m + 0x10);
-    const __m128 r2 = Load4(base, m + 0x20);
-    const __m128 r3 = Load4(base, m + 0x30);
-    __m128 x0, x1, x2, x3;
+    const Lanes r0 = Load4(base, m);
+    const Lanes r1 = Load4(base, m + 0x10);
+    const Lanes r2 = Load4(base, m + 0x20);
+    const Lanes r3 = Load4(base, m + 0x30);
+    Lanes x0, x1, x2, x3;
     for (uint32_t row = 0; row < 3; ++row)
     {
         const uint32_t ar = a + row * 0x10;
-        x0 = _mm_mul_ps(Splat(base, ar), r0);
-        x1 = _mm_mul_ps(Splat(base, ar + 4), r1);
-        x2 = _mm_mul_ps(Splat(base, ar + 8), r2);
-        x0 = _mm_add_ps(x0, x1);
-        x0 = _mm_add_ps(x0, x2);
+        x0 = Mul(Splat(base, ar), r0);
+        x1 = Mul(Splat(base, ar + 4), r1);
+        x2 = Mul(Splat(base, ar + 8), r2);
+        x0 = Add(x0, x1);
+        x0 = Add(x0, x2);
         Store4(base, m + row * 0x10, x0);
     }
-    x0 = _mm_mul_ps(Splat(base, a + 0x30), r0);
-    x1 = _mm_mul_ps(Splat(base, a + 0x34), r1);
-    x2 = _mm_mul_ps(Splat(base, a + 0x38), r2);
-    x3 = _mm_mul_ps(Splat(base, a + 0x3C), r3);
-    x0 = _mm_add_ps(x0, x1);
-    x2 = _mm_add_ps(x2, x3);
-    x0 = _mm_add_ps(x0, x2);
+    x0 = Mul(Splat(base, a + 0x30), r0);
+    x1 = Mul(Splat(base, a + 0x34), r1);
+    x2 = Mul(Splat(base, a + 0x38), r2);
+    x3 = Mul(Splat(base, a + 0x3C), r3);
+    x0 = Add(x0, x1);
+    x2 = Add(x2, x3);
+    x0 = Add(x0, x2);
     Store4(base, m + 0x30, x0);
     SET_XMM(g_xmm0, x0);
     SET_XMM(g_xmm1, x1);
@@ -614,9 +672,9 @@ void sub_001BB270(void)
     GUEST_BASE();
     const uint32_t m = CurrentMatrix(base);
     const uint32_t s = g_ecx;
-    const __m128 x0 = _mm_mul_ps(Splat(base, s), Load4(base, m));
-    const __m128 x1 = _mm_mul_ps(Splat(base, s + 4), Load4(base, m + 0x10));
-    const __m128 x2 = _mm_mul_ps(Splat(base, s + 8), Load4(base, m + 0x20));
+    const Lanes x0 = Mul(Splat(base, s), Load4(base, m));
+    const Lanes x1 = Mul(Splat(base, s + 4), Load4(base, m + 0x10));
+    const Lanes x2 = Mul(Splat(base, s + 8), Load4(base, m + 0x20));
     Store4(base, m, x0);
     Store4(base, m + 0x10, x1);
     Store4(base, m + 0x20, x2);
@@ -632,10 +690,10 @@ void sub_001BB2B0(void)
 {
     GUEST_BASE();
     const uint32_t m = CurrentMatrix(base);
-    const __m128 s = Splat(base, g_esp + 4);
-    const __m128 x0 = _mm_mul_ps(s, Load4(base, m));
-    const __m128 x1 = _mm_mul_ps(s, Load4(base, m + 0x10));
-    const __m128 x2 = _mm_mul_ps(s, Load4(base, m + 0x20));
+    const Lanes s = Splat(base, g_esp + 4);
+    const Lanes x0 = Mul(s, Load4(base, m));
+    const Lanes x1 = Mul(s, Load4(base, m + 0x10));
+    const Lanes x2 = Mul(s, Load4(base, m + 0x20));
     Store4(base, m, x0);
     Store4(base, m + 0x10, x1);
     Store4(base, m + 0x20, x2);
