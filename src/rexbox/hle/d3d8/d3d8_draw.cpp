@@ -495,7 +495,9 @@ void ApplyFixedState(const FixedState& s)
     if (s.polygon_offset && (!known || !last.polygon_offset || s.offset_slope != last.offset_slope ||
                              s.offset_units != last.offset_units))
     {
-        gl.PolygonOffset(FloatBits(s.offset_slope), FloatBits(s.offset_units));
+        // The slope term counts depth change per pixel, which shrinks with the
+        // render scale; scaling the factor keeps the guest's offset.
+        gl.PolygonOffset(FloatBits(s.offset_slope) * static_cast<float>(RenderScale()), FloatBits(s.offset_units));
     }
     if (gl.PolygonMode != nullptr && (!known || s.fill != last.fill))
     {
@@ -503,7 +505,9 @@ void ApplyFixedState(const FixedState& s)
     }
     if (!known || std::memcmp(s.viewport, last.viewport, sizeof(s.viewport)) != 0)
     {
-        gl.Viewport(s.viewport[0], s.viewport[1], s.viewport[2], s.viewport[3]);
+        // Guest pixels; render targets are RenderScale() times larger.
+        const int32_t scale = static_cast<int32_t>(RenderScale());
+        gl.Viewport(s.viewport[0] * scale, s.viewport[1] * scale, s.viewport[2] * scale, s.viewport[3] * scale);
     }
     if (!known || std::memcmp(s.depth_range, last.depth_range, sizeof(s.depth_range)) != 0)
     {

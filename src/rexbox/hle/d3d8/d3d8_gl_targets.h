@@ -27,9 +27,18 @@ using runtime::GuestAddress;
 // could not build it (the reason is reported once).
 bool BindRenderTarget(GuestAddress color, GuestAddress depth);
 
-// Size of the color target last bound (or the depth target without color).
+// Size of the color target last bound (or the depth target without color),
+// in guest pixels: what D3D sees whatever the render scale.
 uint32_t RenderTargetWidth();
 uint32_t RenderTargetHeight();
+
+// The internal rendering scale (1..8): render targets are drawn at this many
+// times their guest size, so GL viewports and scissors take guest pixels times
+// it. REXBOX_RENDER_SCALE sets the first value; SetRenderScale (and Ctrl+1..8
+// in the window) asks for another, which takes effect after the next present
+// (docs/design/20261017-i080-render-scale.md).
+uint32_t RenderScale();
+void SetRenderScale(uint32_t scale);
 
 // Shows `color` (a back buffer) in the window through the display gamma ramp,
 // scaled to fit with its aspect ratio kept, and rebinds the current render target.
@@ -39,7 +48,9 @@ void PresentRenderTarget(GuestAddress color, const GammaRamp& ramp);
 // BMP file. Returns false on failure.
 bool DumpRenderTarget(GuestAddress color, const std::string& path, const GammaRamp& ramp);
 
-// A color target's pixels as RGBA8 in GL's row order (bottom row first).
+// A color target's pixels as RGBA8 in GL's row order (bottom row first), at
+// its guest size. DumpRenderTarget writes the GL size (guest size times the
+// render scale).
 void ReadRenderTarget(GuestAddress color, std::vector<uint8_t>* rgba, uint32_t* width, uint32_t* height);
 
 // RGBA8 pixels, bottom row first, as a 24-bit BMP file. False on failure.
