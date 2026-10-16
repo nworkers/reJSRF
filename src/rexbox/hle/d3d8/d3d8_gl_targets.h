@@ -45,10 +45,12 @@ void ReadRenderTarget(GuestAddress color, std::vector<uint8_t>* rgba, uint32_t* 
 // RGBA8 pixels, bottom row first, as a 24-bit BMP file. False on failure.
 bool WriteBmp(const std::string& path, const uint8_t* rgba, uint32_t width, uint32_t height);
 
-// For a texture whose data address is that of a color surface when it was
-// last bound as a render target: a GL texture with the target's current pixels in D3D's row
-// order (refreshed when the target was bound since), with the surface and its
-// size; 0 when no target matches (docs/design/20261016-i069-render-target-sampling.md).
+// For a texture over the memory of a color surface bound as a render target:
+// a GL texture with the target's current pixels in D3D's row order (refreshed
+// when the target was bound since), with the header last bound over that
+// memory and the size; 0 when no target is at that memory. Targets are keyed
+// by memory, not header (docs/design/20261016-i069-render-target-sampling.md,
+// docs/design/20261017-i071-render-target-by-memory.md).
 uint32_t SampleRenderTarget(GuestAddress data, GuestAddress* surface, uint32_t* width, uint32_t* height);
 
 // Pixel memory at `data` was freed: textures there no longer sample a target.
