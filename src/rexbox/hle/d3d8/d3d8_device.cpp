@@ -139,7 +139,9 @@ void ApplyViewport()
     }
     const uint32_t target_height = RenderTargetHeight();
     const GLint y = static_cast<GLint>(target_height) - static_cast<GLint>(vp.y + vp.height);
-    Gl().Viewport(static_cast<GLint>(vp.x), y, static_cast<GLsizei>(vp.width), static_cast<GLsizei>(vp.height));
+    const GLint scale = static_cast<GLint>(RenderScale());
+    Gl().Viewport(static_cast<GLint>(vp.x) * scale, y * scale, static_cast<GLsizei>(vp.width) * scale,
+                  static_cast<GLsizei>(vp.height) * scale);
     GlDepthRange(vp.min_z, vp.max_z);
 }
 
@@ -452,7 +454,9 @@ void D3DDevice_Clear()
             const int32_t y1 = static_cast<int32_t>(memory.Read32(rect + layout::kRectY1));
             const int32_t x2 = static_cast<int32_t>(memory.Read32(rect + layout::kRectX2));
             const int32_t y2 = static_cast<int32_t>(memory.Read32(rect + layout::kRectY2));
-            gl.Scissor(x1, static_cast<GLint>(target_height) - y2, x2 - x1, y2 - y1);
+            const GLint scale = static_cast<GLint>(RenderScale());
+            gl.Scissor(x1 * scale, (static_cast<GLint>(target_height) - y2) * scale, (x2 - x1) * scale,
+                       (y2 - y1) * scale);
             gl.Clear(mask);
         }
         gl.Disable(kGlScissorTest);

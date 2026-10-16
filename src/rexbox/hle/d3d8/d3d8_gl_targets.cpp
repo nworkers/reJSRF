@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <map>
 #include <unordered_map>
 #include <utility>
@@ -29,11 +30,51 @@ uint32_t SurfaceMemory(GuestAddress surface)
     return surface != 0 ? Memory().Read32(surface + header::kData) & kPhysicalMask : kNoSurface;
 }
 
+// The internal rendering scale: GL storage, viewports, scissors and blits
+// are this many times the guest's sizes, which D3D keeps seeing
+// (docs/design/20261017-i080-render-scale.md). A change waits for the end of
+// a present so no frame mixes sizes.
+constexpr uint32_t kMaxRenderScale = 8;
+
+uint32_t InitialRenderScale()
+{
+    const char* setting = std::getenv("REXBOX_RENDER_SCALE");
+    if (setting == nullptr || *setting == '\0')
+    {
+        return 1;
+    }
+    const long value = std::strtol(setting, nullptr, 10);
+    const uint32_t scale = static_cast<uint32_t>(std::clamp<long>(value, 1, kMaxRenderScale));
+    if (value != static_cast<long>(scale))
+    {
+        ReportOnce("render scale range", Format("REXBOX_RENDER_SCALE=%s is outside 1..%u; using %u", setting,
+                                                kMaxRenderScale, scale));
+    }
+    return scale;
+}
+
+uint32_t g_render_scale = 0;  // REXBOX_RENDER_SCALE, read on first use
+uint32_t g_pending_render_scale = 0;  // 0: no change waiting
+
+uint32_t ActiveScale()
+{
+    if (g_render_scale == 0)
+    {
+        g_render_scale = InitialRenderScale();
+        if (g_render_scale != 1)
+        {
+            std::fprintf(stderr, "[d3d8] render scale %u\n", g_render_scale);
+        }
+    }
+    return g_render_scale;
+}
+
 struct ColorTarget
 {
     GLuint texture = 0;
-    uint32_t width = 0;
+    uint32_t width = 0;  // guest size; the GL texture is scale times this
     uint32_t height = 0;
+    uint32_t scale = 1;
     // The header last bound over this memory, for reports.
     GuestAddress header = 0;
     // For sampling (SampleRenderTarget): a copy in D3D's row order, the
@@ -49,8 +90,9 @@ struct ColorTarget
 struct DepthTarget
 {
     GLuint renderbuffer = 0;
-    uint32_t width = 0;
+    uint32_t width = 0;  // guest size
     uint32_t height = 0;
+    uint32_t scale = 1;
 };
 
 // Keyed by surface memory (SurfaceMemory); framebuffers by the memory pair.
@@ -130,15 +172,31 @@ ColorTarget& Color(GuestAddress surface)
     uint32_t height = 0;
     SurfaceSize(surface, &width, &height);
     GlFunctions& gl = Gl();
+    // Only the scale changed: the old pixels are stretched into the new
+    // texture, since a surface may be sampled before it is drawn again.
+    GLuint rescaled = 0;
+    uint32_t rescaled_width = 0;
+    uint32_t rescaled_height = 0;
+    bool sampleable = false;
     auto it = g_colors.find(memory);
     if (it != g_colors.end())
     {
-        if (it->second.width == width && it->second.height == height)
-        {
-            return it->second;
-        }
         ColorTarget& old = it->second;
-        gl.DeleteTextures(1, &old.texture);
+        if (old.width == width && old.height == height && old.scale == ActiveScale())
+        {
+            return old;
+        }
+        if (old.width == width && old.height == height)
+        {
+            rescaled = old.texture;
+            rescaled_width = old.width * old.scale;
+            rescaled_height = old.height * old.scale;
+            sampleable = old.sampleable;
+        }
+        else
+        {
+            gl.DeleteTextures(1, &old.texture);
+        }
         if (old.copy != 0)
         {
             gl.DeleteTextures(1, &old.copy);
@@ -150,12 +208,14 @@ ColorTarget& Color(GuestAddress surface)
     ColorTarget target;
     target.width = width;
     target.height = height;
+    target.scale = ActiveScale();
     target.header = surface;
+    target.sampleable = sampleable;
     InvalidateGlStateCache();  // binds on the active texture unit
     gl.GenTextures(1, &target.texture);
     gl.BindTexture(kGlTexture2D, target.texture);
-    gl.TexImage2D(kGlTexture2D, 0, static_cast<GLint>(kGlRgba8), static_cast<GLsizei>(target.width),
-                  static_cast<GLsizei>(target.height), 0, kGlRgba, kGlUnsignedByte, nullptr);
+    gl.TexImage2D(kGlTexture2D, 0, static_cast<GLint>(kGlRgba8), static_cast<GLsizei>(target.width * target.scale),
+                  static_cast<GLsizei>(target.height * target.scale), 0, kGlRgba, kGlUnsignedByte, nullptr);
     gl.TexParameteri(kGlTexture2D, kGlTextureMinFilter, static_cast<GLint>(kGlLinear));
     gl.TexParameteri(kGlTexture2D, kGlTextureMagFilter, static_cast<GLint>(kGlLinear));
     gl.TexParameteri(kGlTexture2D, kGlTextureMaxLevel, 0);
@@ -166,6 +226,24 @@ ColorTarget& Color(GuestAddress surface)
                    Format("render target %08X at %08X (%ux%u) is not a back buffer: drawn into its own GL texture, "
                           "sampled through a copy",
                           surface, memory, target.width, target.height));
+    }
+    if (rescaled != 0)
+    {
+        GLuint framebuffers[2] = {};
+        gl.GenFramebuffers(2, framebuffers);
+        gl.BindFramebuffer(kGlReadFramebuffer, framebuffers[0]);
+        gl.FramebufferTexture2D(kGlReadFramebuffer, kGlColorAttachment0, kGlTexture2D, rescaled, 0);
+        gl.BindFramebuffer(kGlDrawFramebuffer, framebuffers[1]);
+        gl.FramebufferTexture2D(kGlDrawFramebuffer, kGlColorAttachment0, kGlTexture2D, target.texture, 0);
+        gl.Disable(kGlScissorTest);
+        gl.ColorMask(1, 1, 1, 1);
+        gl.BlitFramebuffer(0, 0, static_cast<GLint>(rescaled_width), static_cast<GLint>(rescaled_height), 0, 0,
+                           static_cast<GLint>(target.width * target.scale),
+                           static_cast<GLint>(target.height * target.scale), kGlColorBufferBit, kGlLinear);
+        gl.BindFramebuffer(kGlFramebuffer, 0);
+        gl.DeleteFramebuffers(2, framebuffers);
+        gl.DeleteTextures(1, &rescaled);
+        InvalidateGlStateCache();  // callers bind their framebuffer again
     }
     return g_colors.emplace(memory, target).first->second;
 }
@@ -180,7 +258,8 @@ const DepthTarget& Depth(GuestAddress surface)
     auto it = g_depths.find(memory);
     if (it != g_depths.end())
     {
-        if (it->second.width == width && it->second.height == height)
+        // Depth is cleared each frame; a new scale needs no copy.
+        if (it->second.width == width && it->second.height == height && it->second.scale == ActiveScale())
         {
             return it->second;
         }
@@ -191,10 +270,11 @@ const DepthTarget& Depth(GuestAddress surface)
     DepthTarget target;
     target.width = width;
     target.height = height;
+    target.scale = ActiveScale();
     gl.GenRenderbuffers(1, &target.renderbuffer);
     gl.BindRenderbuffer(kGlRenderbuffer, target.renderbuffer);
-    gl.RenderbufferStorage(kGlRenderbuffer, kGlDepth24Stencil8, static_cast<GLsizei>(target.width),
-                           static_cast<GLsizei>(target.height));
+    gl.RenderbufferStorage(kGlRenderbuffer, kGlDepth24Stencil8, static_cast<GLsizei>(target.width * target.scale),
+                           static_cast<GLsizei>(target.height * target.scale));
     return g_depths.emplace(memory, target).first->second;
 }
 
@@ -453,8 +533,8 @@ GLuint SampleRenderTarget(GuestAddress data, GuestAddress* surface, uint32_t* wi
         InvalidateGlStateCache();  // binds a texture and a framebuffer
         gl.GenTextures(1, &target.copy);
         gl.BindTexture(kGlTexture2D, target.copy);
-        gl.TexImage2D(kGlTexture2D, 0, static_cast<GLint>(kGlRgba8), static_cast<GLsizei>(target.width),
-                      static_cast<GLsizei>(target.height), 0, kGlRgba, kGlUnsignedByte, nullptr);
+        gl.TexImage2D(kGlTexture2D, 0, static_cast<GLint>(kGlRgba8), static_cast<GLsizei>(target.width * target.scale),
+                      static_cast<GLsizei>(target.height * target.scale), 0, kGlRgba, kGlUnsignedByte, nullptr);
         gl.TexParameteri(kGlTexture2D, kGlTextureMaxLevel, 0);
         gl.GenFramebuffers(1, &target.copy_framebuffer);
         gl.BindFramebuffer(kGlFramebuffer, target.copy_framebuffer);
@@ -465,8 +545,8 @@ GLuint SampleRenderTarget(GuestAddress data, GuestAddress* surface, uint32_t* wi
     // Draws and clears write only the bound target.
     if (target.bound_since_copy)
     {
-        const GLint w = static_cast<GLint>(target.width);
-        const GLint h = static_cast<GLint>(target.height);
+        const GLint w = static_cast<GLint>(target.width * target.scale);
+        const GLint h = static_cast<GLint>(target.height * target.scale);
         gl.BindFramebuffer(kGlReadFramebuffer, FramebufferAt(memory, kNoSurface));
         gl.BindFramebuffer(kGlDrawFramebuffer, target.copy_framebuffer);
         gl.Disable(kGlScissorTest);
@@ -526,28 +606,96 @@ void PresentRenderTarget(GuestAddress color, const GammaRamp& ramp)
     gl.Clear(kGlColorBufferBit);
     if (ramp.IsIdentity() || !DrawThroughRamp(source.texture, ramp, x, y, width, height))
     {
-        gl.BlitFramebuffer(0, 0, static_cast<GLint>(source.width), static_cast<GLint>(source.height), x, y,
-                           x + static_cast<GLint>(width), y + static_cast<GLint>(height), kGlColorBufferBit,
-                           kGlLinear);
+        gl.BlitFramebuffer(0, 0, static_cast<GLint>(source.width * source.scale),
+                           static_cast<GLint>(source.height * source.scale), x, y, x + static_cast<GLint>(width),
+                           y + static_cast<GLint>(height), kGlColorBufferBit, kGlLinear);
     }
     platform::PresentDisplay();
     RebindCurrentTarget();
     InvalidateGlStateCache();
+    // Between frames: a requested scale takes effect (targets are remade as
+    // they are next used).
+    const uint32_t requested = platform::ConsumeRenderScaleRequest();
+    if (requested != 0)
+    {
+        SetRenderScale(requested);
+    }
+    if (g_pending_render_scale != 0 && g_pending_render_scale != ActiveScale())
+    {
+        g_render_scale = g_pending_render_scale;
+        g_resolved_target.valid = false;
+        InvalidateGlStateCache();
+        std::fprintf(stderr, "[d3d8] render scale %u\n", g_render_scale);
+    }
+    g_pending_render_scale = 0;
 }
 
-void ReadRenderTarget(GuestAddress color, std::vector<uint8_t>* rgba, uint32_t* width, uint32_t* height)
+namespace
+{
+
+// `color`'s pixels at its guest size (scaled down with nearest sampling, so
+// every value is one the target holds) or at its GL size.
+void ReadPixelsAt(GuestAddress color, bool guest_size, std::vector<uint8_t>* rgba, uint32_t* width,
+                  uint32_t* height)
 {
     GlFunctions& gl = Gl();
     const ColorTarget& source = Color(color);
-    rgba->resize(static_cast<size_t>(source.width) * source.height * 4);
-    gl.BindFramebuffer(kGlReadFramebuffer, Framebuffer(color, 0));
+    const GLint physical_width = static_cast<GLint>(source.width * source.scale);
+    const GLint physical_height = static_cast<GLint>(source.height * source.scale);
+    const GLuint framebuffer = Framebuffer(color, 0);
+    const bool shrink = guest_size && source.scale != 1;
+    *width = guest_size ? source.width : static_cast<uint32_t>(physical_width);
+    *height = guest_size ? source.height : static_cast<uint32_t>(physical_height);
+    rgba->resize(static_cast<size_t>(*width) * *height * 4);
+    GLuint scratch_texture = 0;
+    GLuint scratch_framebuffer = 0;
+    if (shrink)
+    {
+        gl.GenTextures(1, &scratch_texture);
+        gl.BindTexture(kGlTexture2D, scratch_texture);
+        gl.TexImage2D(kGlTexture2D, 0, static_cast<GLint>(kGlRgba8), static_cast<GLsizei>(*width),
+                      static_cast<GLsizei>(*height), 0, kGlRgba, kGlUnsignedByte, nullptr);
+        gl.GenFramebuffers(1, &scratch_framebuffer);
+        gl.BindFramebuffer(kGlDrawFramebuffer, scratch_framebuffer);
+        gl.FramebufferTexture2D(kGlDrawFramebuffer, kGlColorAttachment0, kGlTexture2D, scratch_texture, 0);
+        gl.BindFramebuffer(kGlReadFramebuffer, framebuffer);
+        gl.Disable(kGlScissorTest);
+        gl.BlitFramebuffer(0, 0, physical_width, physical_height, 0, 0, static_cast<GLint>(*width),
+                           static_cast<GLint>(*height), kGlColorBufferBit, kGlNearest);
+        gl.BindFramebuffer(kGlReadFramebuffer, scratch_framebuffer);
+    }
+    else
+    {
+        gl.BindFramebuffer(kGlReadFramebuffer, framebuffer);
+    }
     gl.PixelStorei(kGlPackAlignment, 1);
-    gl.ReadPixels(0, 0, static_cast<GLsizei>(source.width), static_cast<GLsizei>(source.height), kGlRgba,
-                  kGlUnsignedByte, rgba->data());
+    gl.ReadPixels(0, 0, static_cast<GLsizei>(*width), static_cast<GLsizei>(*height), kGlRgba, kGlUnsignedByte,
+                  rgba->data());
+    if (shrink)
+    {
+        gl.BindFramebuffer(kGlFramebuffer, 0);
+        gl.DeleteFramebuffers(1, &scratch_framebuffer);
+        gl.DeleteTextures(1, &scratch_texture);
+    }
     RebindCurrentTarget();
     InvalidateGlStateCache();
-    *width = source.width;
-    *height = source.height;
+}
+
+}  // namespace
+
+void ReadRenderTarget(GuestAddress color, std::vector<uint8_t>* rgba, uint32_t* width, uint32_t* height)
+{
+    ReadPixelsAt(color, true, rgba, width, height);
+}
+
+uint32_t RenderScale()
+{
+    return ActiveScale();
+}
+
+void SetRenderScale(uint32_t scale)
+{
+    g_pending_render_scale = std::clamp<uint32_t>(scale, 1, kMaxRenderScale);
 }
 
 bool DumpRenderTarget(GuestAddress color, const std::string& path, const GammaRamp& ramp)
@@ -555,7 +703,7 @@ bool DumpRenderTarget(GuestAddress color, const std::string& path, const GammaRa
     std::vector<uint8_t> rgba;
     uint32_t width = 0;
     uint32_t height = 0;
-    ReadRenderTarget(color, &rgba, &width, &height);
+    ReadPixelsAt(color, false, &rgba, &width, &height);
     ApplyGammaRamp(ramp, rgba.data(), static_cast<size_t>(width) * height);
     return WriteBmp(path, rgba.data(), width, height);
 }

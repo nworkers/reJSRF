@@ -82,6 +82,10 @@ void PumpDisplayEvents(bool* close_requested);
 // caller decides what to capture). Seen by PumpDisplayEvents.
 bool ConsumeCaptureRequest();
 
+// The render scale the user asked for with Ctrl+1..8 since the last call
+// (1..8), or 0. Seen by PumpDisplayEvents; the caller applies it.
+uint32_t ConsumeRenderScaleRequest();
+
 // Swaps the back buffer to the window (no vertical sync; the caller paces) and
 // counts the present for the title's FPS.
 void PresentDisplay();
