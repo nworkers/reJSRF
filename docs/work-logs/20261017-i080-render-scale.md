@@ -24,7 +24,7 @@
 | `rexbox_d3d8_probe` / `rejsrf_d3d8_check` / `rejsrf_decomp_check` | 163 check 0 failure / 14018 case 0 difference / 129 case 0 difference |
 | 데모, 배율 1 | 프레임 1500, 3000, 4650 BMP가 변경 전과 바이트 단위로 같음. Debug 빌드와 동시에 돌린 첫 실행은 3000, 4650이 달랐다. 장면은 같고 인물·차 위치만 달라서 CPU 부하로 인한 진행 시점 차이로 보이고, 부하 없이 다시 돌리니 같았다 |
 | 데모, 배율 2·4·8 | 덤프가 1280×960, 2560×1920, 5120×3840. GL 오류·불완전 FBO 보고 없음. 배율 4 프레임 4650을 줄여 보면 배율 1과 같은 장면이고, 원래 크기로 보면 계단 현상 없이 선명하다 |
-| 실행 중 변경(Ctrl+1~8), 부스트·그래피티·윤곽선 | 미검증(창 입력이 필요하다) |
+| 실행 중 변경(Ctrl+1~8), 부스트·그래피티·윤곽선 | 사용자 확인: 잘 된다 |
 
 ---
 
@@ -54,4 +54,4 @@ Design: [20261017-i080](../design/20261017-i080-render-scale.md) · Work order: 
 | `rexbox_d3d8_probe` / `rejsrf_d3d8_check` / `rejsrf_decomp_check` | 163 checks, 0 failures / 14018 cases, 0 differences / 129 cases, 0 differences |
 | Demo, scale 1 | frames 1500, 3000 and 4650 are byte-identical to before. A first run alongside the Debug build differed at 3000 and 4650: the same scene with characters and a car moved, which looks like a timing shift from CPU load; run again without load, they matched |
 | Demo, scales 2, 4 and 8 | dumps are 1280×960, 2560×1920 and 5120×3840, with no GL error or incomplete-FBO report. Scale 4 frame 4650 scaled down shows the same scene as scale 1, and at full size it is sharp with no stair-stepping |
-| Changing at run time (Ctrl+1 to 8); boost, graffiti and outlines | not verified (needs window input) |
+| Changing at run time (Ctrl+1 to 8); boost, graffiti and outlines | the user's check: it works |
