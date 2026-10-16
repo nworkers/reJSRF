@@ -516,8 +516,8 @@ std::string GenerateFragmentShader(const Key& key, bool gles, std::string* unsup
     return text;
 }
 
-void StageConstants(const Definition& definition, const float pixel_constants[kPixelConstants][4], float c0[kStages][4],
-                    float c1[kStages][4], float final_c0[4], float final_c1[4])
+void StageConstants(const Definition& definition, const float pixel_constants[kPixelConstants][4], uint32_t written,
+                    float c0[kStages][4], float c1[kStages][4], float final_c0[4], float final_c1[4])
 {
     const auto unpack = [](uint32_t argb, float out[4]) {
         out[0] = static_cast<float>((argb >> 16) & 0xFF) / 255.0f;
@@ -526,7 +526,7 @@ void StageConstants(const Definition& definition, const float pixel_constants[kP
         out[3] = static_cast<float>(argb >> 24) / 255.0f;
     };
     const auto pick = [&](uint32_t nibble, uint32_t fallback, float out[4]) {
-        if (nibble < kPixelConstants && nibble != 0xF)
+        if (nibble < kPixelConstants && nibble != 0xF && (written & (1u << nibble)) != 0)
         {
             for (int i = 0; i < 4; ++i)
             {

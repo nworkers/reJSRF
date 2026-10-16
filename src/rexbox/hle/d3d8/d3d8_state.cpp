@@ -3,6 +3,7 @@
 #include "d3d8_globals.h"
 #include "d3d8_internal.h"
 #include "d3d8_resource.h"
+#include "d3d8_shader.h"
 #include "d3d8_trace.h"
 
 #include <cstring>
@@ -225,6 +226,8 @@ void D3DDevice_SetPixelShader()
 {
     HleCall call;
     g_pipeline.pixel_shader = call.Arg(0);
+    // The original loads the definition's constants into the combiners.
+    ForgetPixelShaderConstants();
     call.Return(kD3dOk, 1);
 }
 

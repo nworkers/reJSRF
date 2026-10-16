@@ -85,10 +85,12 @@ std::string GenerateFragmentShader(const Key& key, bool gles, std::string* unsup
 
 // The per-stage constants for a draw: a stage's c0/c1 come from the
 // SetPixelShaderConstant register its PSC0/PSC1 mapping nibble names (0xF:
-// none), else from the definition's PSConstant0/1 (stage 0's for every
-// stage unless the combiner count says the constants are unique).
-void StageConstants(const Definition& definition, const float pixel_constants[kPixelConstants][4], float c0[kStages][4],
-                    float c1[kStages][4], float final_c0[4], float final_c1[4]);
+// none) when bit r of `written` says that register was written since the
+// shader was set, else from the definition's PSConstant0/1 (stage 0's for
+// every stage unless the combiner count says the constants are unique), as
+// SetPixelShader loads them (docs/design/20261017-i078-psh-definition-constants.md).
+void StageConstants(const Definition& definition, const float pixel_constants[kPixelConstants][4], uint32_t written,
+                    float c0[kStages][4], float c1[kStages][4], float final_c0[4], float final_c1[4]);
 
 }  // namespace rexbox::hle::d3d8::psh
 

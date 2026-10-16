@@ -144,6 +144,7 @@ float g_vertex_constants[kVertexConstantCount][4] = {};
 // Raised by every write to g_vertex_constants.
 uint64_t g_vertex_constants_version = 1;
 float g_pixel_constants[kPixelConstantCount][4] = {};
+uint32_t g_pixel_constants_written = 0;  // since the last SetPixelShader
 
 // HRESULT D3DDevice_CreateVertexShader(const DWORD* pDeclaration, const DWORD* pFunction, DWORD* pHandle, DWORD Usage)
 void D3DDevice_CreateVertexShader()
@@ -290,6 +291,7 @@ void D3DDevice_SetPixelShaderConstant()
         if (first + i < kPixelConstantCount && data != 0)
         {
             std::memcpy(g_pixel_constants[first + i], Memory().Translate(data + i * 16), 16);
+            g_pixel_constants_written |= 1u << (first + i);
         }
     }
     call.Return(kD3dOk, 3);
@@ -322,6 +324,16 @@ const psh::Definition* FindPixelShader(uint32_t handle)
 const float (*PixelShaderConstants())[4]
 {
     return g_pixel_constants;
+}
+
+uint32_t PixelShaderConstantsWritten()
+{
+    return g_pixel_constants_written;
+}
+
+void ForgetPixelShaderConstants()
+{
+    g_pixel_constants_written = 0;
 }
 
 void WriteViewportConstants(uint32_t x, uint32_t y, uint32_t width, uint32_t height)
