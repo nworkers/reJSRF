@@ -27,6 +27,15 @@ int64_t NowNs()
     return std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now().time_since_epoch()).count();
 }
 
+// NowNs() as of the monitor's last tick (kCoarseTick apart). NoteHleEntry runs
+// on every HLE call, and reading the precise clock there (QueryPerformanceCounter
+// on Windows) cost a few percent of the presenting thread; the report only
+// needs tenths of a second. Zero while no monitor runs, when no report reads
+// the HLE times either.
+constexpr auto kCoarseTick = std::chrono::milliseconds(100);
+constexpr int kTicksPerCheck = 10;  // the stall check stays once a second
+std::atomic<int64_t> g_coarse_now_ns{0};
+
 constexpr size_t kMaxWaitObjects = 4;
 
 // One per host thread that ever noted anything. Never freed: the monitor may
@@ -256,9 +265,14 @@ void Monitor(int64_t threshold_ns)
 {
     bool reported = false;
     int64_t reported_present = 0;
-    for (;;)
+    for (int tick = 1;; ++tick)
     {
-        std::this_thread::sleep_for(std::chrono::seconds(1));
+        std::this_thread::sleep_for(kCoarseTick);
+        g_coarse_now_ns.store(NowNs(), std::memory_order_relaxed);
+        if (tick % kTicksPerCheck != 0)
+        {
+            continue;
+        }
         const int64_t last = g_last_present_ns.load();
         if (last == 0)
         {
@@ -306,7 +320,7 @@ void NoteHleEntry(const char* name, uint32_t esp)
     ThreadRecord& record = Self();
     record.hle.store(name, std::memory_order_relaxed);
     record.esp.store(esp, std::memory_order_relaxed);
-    record.hle_ns.store(NowNs(), std::memory_order_relaxed);
+    record.hle_ns.store(g_coarse_now_ns.load(std::memory_order_relaxed), std::memory_order_relaxed);
 }
 
 void NoteWaitBegin(const char* what, const GuestAddress* objects, size_t count, bool all, int64_t timeout_ms)
@@ -354,6 +368,7 @@ void StartStallMonitor()
     {
         return;
     }
+    g_coarse_now_ns.store(NowNs(), std::memory_order_relaxed);
     std::thread(Monitor, static_cast<int64_t>(seconds * 1e9)).detach();
 }
 

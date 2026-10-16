@@ -5,13 +5,13 @@
 namespace rexbox::runtime
 {
 
-HleCall::HleCall() : cpu_(Env().executor->Cpu()), memory_(*Env().memory)
+HleCall::HleCall() : cpu_(Env().executor->Cpu()), memory_(*Env().memory), esp_(cpu_.Get(Gpr::kEsp))
 {
 }
 
 uint32_t HleCall::Arg(int index) const
 {
-    return memory_.Read32(cpu_.Get(Gpr::kEsp) + 4 + 4 * static_cast<uint32_t>(index));
+    return memory_.Read32(esp_ + 4 + 4 * static_cast<uint32_t>(index));
 }
 
 void HleCall::Return(uint32_t value, int stack_args)

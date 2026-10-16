@@ -32,7 +32,8 @@ std::string CurrentThreadName();
 
 // The calling thread entered an HLE function. `name` must outlive the process
 // (a string literal or a registry entry); `esp` is the guest stack pointer
-// at the call, so [esp] is the return address.
+// at the call, so [esp] is the return address. Runs on every HLE call, so it
+// only stores: the time is the monitor's coarse clock (0.1 s steps).
 void NoteHleEntry(const char* name, uint32_t esp);
 
 // The calling thread starts or ends a wait in `what` (static storage) on

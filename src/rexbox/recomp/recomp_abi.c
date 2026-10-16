@@ -129,29 +129,38 @@ void rexbox_recomp_set_xmm(int index, const uint32_t in[4])
     memcpy(xmm_slot(index), in, 16);
 }
 
-static uint32_t* gpr_slot(int index)
+/* A switch on the register itself rather than on its address: HLE argument
+ * and result access lands here several times per call, and taking the address
+ * of a thread-local through a separate function cost a measurable share of the
+ * presenting thread (issue #75). */
+uint32_t rexbox_recomp_get_gpr(int index)
 {
     switch (index)
     {
-    case 0: return &g_eax;
-    case 1: return &g_ecx;
-    case 2: return &g_edx;
-    case 3: return &g_ebx;
-    case 4: return &g_esp;
-    case 5: return &g_ebp;
-    case 6: return &g_esi;
-    default: return &g_edi;
+    case 0: return g_eax;
+    case 1: return g_ecx;
+    case 2: return g_edx;
+    case 3: return g_ebx;
+    case 4: return g_esp;
+    case 5: return g_ebp;
+    case 6: return g_esi;
+    default: return g_edi;
     }
-}
-
-uint32_t rexbox_recomp_get_gpr(int index)
-{
-    return *gpr_slot(index);
 }
 
 void rexbox_recomp_set_gpr(int index, uint32_t value)
 {
-    *gpr_slot(index) = value;
+    switch (index)
+    {
+    case 0: g_eax = value; break;
+    case 1: g_ecx = value; break;
+    case 2: g_edx = value; break;
+    case 3: g_ebx = value; break;
+    case 4: g_esp = value; break;
+    case 5: g_ebp = value; break;
+    case 6: g_esi = value; break;
+    default: g_edi = value; break;
+    }
 }
 
 uint32_t rexbox_recomp_get_fs_base(void)
