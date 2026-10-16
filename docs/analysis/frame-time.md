@@ -99,6 +99,11 @@
    * 같은 시각 번갈아 잰 present 스레드 CPU는 부하가 적던 두 쌍에서 12.3~13.6 ms → 11.3 ms였다. 부하가 큰 한 쌍은 흔들림 안이었다([설계 i073](../design/20261016-i073-mmatrix.md)).
    * 다음 후보: 같은 방식으로, 호출이 잦고 짧은 다른 게임 함수(`sub_000B3E10`, `sub_000163D0`, `sub_0014DB70` 등)를 디컴파일한다.
 
+7. **HLE 호출의 고정 비용**: **확인됨**(i075, 같은 구간 샘플링). HLE 경로가 대기를 뺀 CPU의 9.1%였다.
+   * 정지 보고(i060)가 호출마다 `QueryPerformanceCounter`를 읽었다. 감시 스레드의 0.1초 거친 시계로 바꿨다.
+   * `HleCall`이 esp를 한 번만 읽게 하고, 레지스터 접근을 직접 `switch`로 바꿨다. 4.5%가 됐다([설계 i075](../design/20261016-i075-hle-call-cost.md)).
+   * 남은 큰 항목(대기를 뺀 CPU 기준): Intel 드라이버 안의 `ZwSetEvent` 약 10%(GL 호출 약 4,100번/프레임과 관련, **추정**), D3D8 변경 감지 약 6.5%. lift된 게임 코드는 함수 하나가 1.2% 이하로 고르게 퍼져 있다.
+
 ---
 
 # Frame time: where a frame of the opening 3D demo goes
@@ -192,3 +197,7 @@ Variant executables were run alternately, three times each, close together in ti
    * With 21 of them rewritten (`src/game/jsrf/decomp/mmatrix.c`), the same window drew about 80% fewer samples, about 2 ms per frame. An SSE-intrinsic version drew 142 and a plain-C version 156, nearly the same, so the portable plain C was kept: the gain comes from removing the per-call overhead, not from SIMD.
    * Presenting-thread CPU, measured alternately, went from 12.3–13.6 ms to 11.3 ms in the two lightly loaded pairs; a heavily loaded pair stayed within the noise ([design i073](../design/20261016-i073-mmatrix.md)).
    * Next: decompile other short, often-called title functions the same way (`sub_000B3E10`, `sub_000163D0`, `sub_0014DB70` and others).
+7. **The fixed cost of an HLE call**: **Confirmed** (i075, sampling the same window). The HLE path was 9.1% of non-wait CPU.
+   * The stall report (i060) read `QueryPerformanceCounter` on every call. It now uses the monitor's 0.1 s coarse clock.
+   * `HleCall` reads esp once, and register access is a direct `switch`. The share is now 4.5% ([design i075](../design/20261016-i075-hle-call-cost.md)).
+   * The large items left (of non-wait CPU): `ZwSetEvent` inside the Intel driver, about 10% (tied to about 4,100 GL calls a frame, **inferred**), and D3D8 change detection, about 6.5%. The lifted title code is spread out, no function above 1.2%.

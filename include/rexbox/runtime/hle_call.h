@@ -1,6 +1,8 @@
 // Argument and result access for an HLE function, which is entered exactly
 // where the guest's `call` landed: [esp] holds the return address and stack
-// arguments follow it.
+// arguments follow it. esp is read once, when the HleCall is made; HLE code
+// never moves it before Return, and a guest callback in between returns
+// with it restored.
 
 #ifndef REXBOX_RUNTIME_HLE_CALL_H
 #define REXBOX_RUNTIME_HLE_CALL_H
@@ -36,6 +38,7 @@ public:
 private:
     GuestCpu& cpu_;
     GuestMemory& memory_;
+    uint32_t esp_;  // at entry
 };
 
 }  // namespace rexbox::runtime
