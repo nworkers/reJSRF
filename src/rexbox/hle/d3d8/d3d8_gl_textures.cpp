@@ -232,8 +232,9 @@ BoundTexture ResolveTexture(GuestAddress header)
     {
         if (FirstReport("rt sample", header))
         {
-            ReportOnce(Format("rt sample %08X", header), Format("texture %08X samples render target %08X (%ux%u)",
-                                                                 header, surface, target.width, target.height));
+            ReportOnce(Format("rt sample %08X", header),
+                       Format("texture %08X samples render target %08X at %08X (%ux%u)", header, surface,
+                              data & kPhysicalMask, target.width, target.height));
         }
         target.kind = SamplerKind::k2D;
         target.unnormalized = size_field != 0;

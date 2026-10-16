@@ -5,6 +5,7 @@
 #include "d3d8_resource.h"
 #include "d3d8_trace.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <map>
 #include <unordered_map>
@@ -17,21 +18,32 @@ namespace rexbox::hle::d3d8
 namespace
 {
 
+// A surface is its pixel memory: the title points a header at other memory
+// again (one header alternates between two surfaces of different sizes), so
+// the GL objects are keyed by the physical data address, not by the header
+// (docs/design/20261017-i071-render-target-by-memory.md).
+constexpr uint32_t kNoSurface = 0xFFFFFFFFu;
+
+uint32_t SurfaceMemory(GuestAddress surface)
+{
+    return surface != 0 ? Memory().Read32(surface + header::kData) & kPhysicalMask : kNoSurface;
+}
+
 struct ColorTarget
 {
     GLuint texture = 0;
     uint32_t width = 0;
     uint32_t height = 0;
+    // The header last bound over this memory, for reports.
+    GuestAddress header = 0;
     // For sampling (SampleRenderTarget): a copy in D3D's row order, the
     // framebuffer that writes it, and whether the target was bound since the
     // copy was made.
     GLuint copy = 0;
     GLuint copy_framebuffer = 0;
     bool bound_since_copy = true;
-    // The surface's pixel memory when last bound (physical); a texture over
-    // it samples this target until the memory is freed.
-    bool has_data = false;
-    uint32_t data = 0;
+    // Cleared when the memory is freed, set again when it is bound.
+    bool sampleable = false;
 };
 
 struct DepthTarget
@@ -41,28 +53,45 @@ struct DepthTarget
     uint32_t height = 0;
 };
 
-std::unordered_map<GuestAddress, ColorTarget> g_colors;
-std::unordered_map<GuestAddress, DepthTarget> g_depths;
-std::map<std::pair<GuestAddress, GuestAddress>, GLuint> g_framebuffers;
+// Keyed by surface memory (SurfaceMemory); framebuffers by the memory pair.
+std::unordered_map<uint32_t, ColorTarget> g_colors;
+std::unordered_map<uint32_t, DepthTarget> g_depths;
+std::map<std::pair<uint32_t, uint32_t>, GLuint> g_framebuffers;
 GLuint g_bound_framebuffer = 0;  // GL_FRAMEBUFFER as BindRenderTarget left it, valid in g_framebuffer_epoch
 uint32_t g_framebuffer_epoch = 0;
-GuestAddress g_bound_color = 0;
-GuestAddress g_bound_depth = 0;
+uint32_t g_bound_color = kNoSurface;  // memory of the bound surfaces
+uint32_t g_bound_depth = kNoSurface;
 uint32_t g_width = 0;
 uint32_t g_height = 0;
 
-// The pair BindRenderTarget resolved last, so a run of draws to one target
-// skips the map lookups. DropIfResized clears it when it removes entries.
+// What BindRenderTarget resolved last, so a run of draws to one target skips
+// the map lookups. The header words are compared too: a header pointed at
+// other memory or set up for another size resolves again.
 struct ResolvedTarget
 {
     bool valid = false;
     GuestAddress color = 0;
     GuestAddress depth = 0;
+    uint32_t color_words[3] = {};  // format, size, data
+    uint32_t depth_words[3] = {};
     GLuint framebuffer = 0;
     uint32_t width = 0;
     uint32_t height = 0;
 };
 ResolvedTarget g_resolved_target;
+
+void HeaderWords(GuestAddress surface, uint32_t* words)
+{
+    if (surface == 0)
+    {
+        words[0] = words[1] = words[2] = 0;
+        return;
+    }
+    runtime::GuestMemory& memory = Memory();
+    words[0] = memory.Read32(surface + header::kFormat);
+    words[1] = memory.Read32(surface + header::kSize);
+    words[2] = memory.Read32(surface + header::kData);
+}
 
 void SurfaceSize(GuestAddress surface, uint32_t* width, uint32_t* height)
 {
@@ -71,79 +100,57 @@ void SurfaceSize(GuestAddress surface, uint32_t* width, uint32_t* height)
     *height = layout.height;
 }
 
-// A header can be set up again for a surface of another size (the title
-// reuses them); GL objects made for the old size are dropped and remade.
-// Returns true when anything was dropped.
-bool DropIfResized(GuestAddress color, GuestAddress depth)
+// Deletes the framebuffers that use color memory `color` or depth memory
+// `depth` (kNoSurface matches none).
+void DropFramebuffers(uint32_t color, uint32_t depth)
 {
-    bool dropped = false;
-    uint32_t width = 0;
-    uint32_t height = 0;
     GlFunctions& gl = Gl();
-    if (color != 0)
+    for (auto it = g_framebuffers.begin(); it != g_framebuffers.end();)
     {
-        const auto it = g_colors.find(color);
-        if (it != g_colors.end())
+        if ((color != kNoSurface && it->first.first == color) || (depth != kNoSurface && it->first.second == depth))
         {
-            SurfaceSize(color, &width, &height);
-            if (width != it->second.width || height != it->second.height)
-            {
-                ColorTarget& old = it->second;
-                gl.DeleteTextures(1, &old.texture);
-                if (old.copy != 0)
-                {
-                    gl.DeleteTextures(1, &old.copy);
-                    gl.DeleteFramebuffers(1, &old.copy_framebuffer);
-                }
-                g_colors.erase(it);
-                dropped = true;
-            }
+            gl.DeleteFramebuffers(1, &it->second);
+            it = g_framebuffers.erase(it);
+        }
+        else
+        {
+            ++it;
         }
     }
-    if (depth != 0)
-    {
-        const auto it = g_depths.find(depth);
-        if (it != g_depths.end())
-        {
-            SurfaceSize(depth, &width, &height);
-            if (width != it->second.width || height != it->second.height)
-            {
-                gl.DeleteRenderbuffers(1, &it->second.renderbuffer);
-                g_depths.erase(it);
-                dropped = true;
-            }
-        }
-    }
-    if (dropped)
-    {
-        for (auto it = g_framebuffers.begin(); it != g_framebuffers.end();)
-        {
-            if ((color != 0 && it->first.first == color) || (depth != 0 && it->first.second == depth))
-            {
-                gl.DeleteFramebuffers(1, &it->second);
-                it = g_framebuffers.erase(it);
-            }
-            else
-            {
-                ++it;
-            }
-        }
-        g_resolved_target.valid = false;
-        InvalidateGlStateCache();
-    }
-    return dropped;
+    g_resolved_target.valid = false;
+    InvalidateGlStateCache();
 }
 
-const ColorTarget& Color(GuestAddress surface)
+// The color target at `surface`'s memory, made (or remade, when a surface of
+// another size came to the same memory) as needed.
+ColorTarget& Color(GuestAddress surface)
 {
-    auto it = g_colors.find(surface);
+    const uint32_t memory = SurfaceMemory(surface);
+    uint32_t width = 0;
+    uint32_t height = 0;
+    SurfaceSize(surface, &width, &height);
+    GlFunctions& gl = Gl();
+    auto it = g_colors.find(memory);
     if (it != g_colors.end())
     {
-        return it->second;
+        if (it->second.width == width && it->second.height == height)
+        {
+            return it->second;
+        }
+        ColorTarget& old = it->second;
+        gl.DeleteTextures(1, &old.texture);
+        if (old.copy != 0)
+        {
+            gl.DeleteTextures(1, &old.copy);
+            gl.DeleteFramebuffers(1, &old.copy_framebuffer);
+        }
+        g_colors.erase(it);
+        DropFramebuffers(memory, kNoSurface);
     }
-    GlFunctions& gl = Gl();
     ColorTarget target;
-    SurfaceSize(surface, &target.width, &target.height);
+    target.width = width;
+    target.height = height;
+    target.header = surface;
     InvalidateGlStateCache();  // binds on the active texture unit
     gl.GenTextures(1, &target.texture);
     gl.BindTexture(kGlTexture2D, target.texture);
@@ -155,32 +162,44 @@ const ColorTarget& Color(GuestAddress surface)
     const HostResource* host = FindResource(surface);
     if (host == nullptr || (host->kind != ResourceKind::kBackBuffer))
     {
-        ReportOnce(Format("target %08X", surface),
-                   Format("render target %08X (%ux%u) is not a back buffer: drawn into its own GL texture, "
+        ReportOnce(Format("target %08X %ux%u", memory, target.width, target.height),
+                   Format("render target %08X at %08X (%ux%u) is not a back buffer: drawn into its own GL texture, "
                           "sampled through a copy",
-                          surface, target.width, target.height));
+                          surface, memory, target.width, target.height));
     }
-    return g_colors.emplace(surface, target).first->second;
+    return g_colors.emplace(memory, target).first->second;
 }
 
 const DepthTarget& Depth(GuestAddress surface)
 {
-    auto it = g_depths.find(surface);
+    const uint32_t memory = SurfaceMemory(surface);
+    uint32_t width = 0;
+    uint32_t height = 0;
+    SurfaceSize(surface, &width, &height);
+    GlFunctions& gl = Gl();
+    auto it = g_depths.find(memory);
     if (it != g_depths.end())
     {
-        return it->second;
+        if (it->second.width == width && it->second.height == height)
+        {
+            return it->second;
+        }
+        gl.DeleteRenderbuffers(1, &it->second.renderbuffer);
+        g_depths.erase(it);
+        DropFramebuffers(kNoSurface, memory);
     }
-    GlFunctions& gl = Gl();
     DepthTarget target;
-    SurfaceSize(surface, &target.width, &target.height);
+    target.width = width;
+    target.height = height;
     gl.GenRenderbuffers(1, &target.renderbuffer);
     gl.BindRenderbuffer(kGlRenderbuffer, target.renderbuffer);
     gl.RenderbufferStorage(kGlRenderbuffer, kGlDepth24Stencil8, static_cast<GLsizei>(target.width),
                            static_cast<GLsizei>(target.height));
-    return g_depths.emplace(surface, target).first->second;
+    return g_depths.emplace(memory, target).first->second;
 }
 
-GLuint Framebuffer(GuestAddress color, GuestAddress depth)
+// The framebuffer for the targets at these memories (kNoSurface: none).
+GLuint FramebufferAt(uint32_t color, uint32_t depth)
 {
     const auto key = std::make_pair(color, depth);
     auto it = g_framebuffers.find(key);
@@ -193,23 +212,47 @@ GLuint Framebuffer(GuestAddress color, GuestAddress depth)
     gl.GenFramebuffers(1, &framebuffer);
     InvalidateGlStateCache();  // binds the new framebuffer
     gl.BindFramebuffer(kGlFramebuffer, framebuffer);
-    if (color != 0)
+    const auto color_it = g_colors.find(color);
+    if (color_it != g_colors.end())
     {
-        gl.FramebufferTexture2D(kGlFramebuffer, kGlColorAttachment0, kGlTexture2D, Color(color).texture, 0);
+        gl.FramebufferTexture2D(kGlFramebuffer, kGlColorAttachment0, kGlTexture2D, color_it->second.texture, 0);
     }
-    if (depth != 0)
+    const auto depth_it = g_depths.find(depth);
+    if (depth_it != g_depths.end())
     {
         gl.FramebufferRenderbuffer(kGlFramebuffer, kGlDepthStencilAttachment, kGlRenderbuffer,
-                                   Depth(depth).renderbuffer);
+                                   depth_it->second.renderbuffer);
     }
     const GLenum status = gl.CheckFramebufferStatus(kGlFramebuffer);
     if (status != kGlFramebufferComplete)
     {
         ReportOnce(Format("fbo %08X %08X", color, depth),
-                   Format("framebuffer for color %08X depth %08X is incomplete (status %04X)", color, depth, status));
+                   Format("framebuffer for color memory %08X depth memory %08X is incomplete (status %04X)", color,
+                          depth, status));
     }
     g_framebuffers.emplace(key, framebuffer);
     return framebuffer;
+}
+
+// The framebuffer for these surface headers (either may be 0), making or
+// remaking their targets first.
+GLuint Framebuffer(GuestAddress color, GuestAddress depth)
+{
+    if (color != 0)
+    {
+        Color(color);
+    }
+    if (depth != 0)
+    {
+        Depth(depth);
+    }
+    return FramebufferAt(SurfaceMemory(color), SurfaceMemory(depth));
+}
+
+// Binds the framebuffer of the current render target again.
+void RebindCurrentTarget()
+{
+    Gl().BindFramebuffer(kGlFramebuffer, FramebufferAt(g_bound_color, g_bound_depth));
 }
 
 struct RampPresenter
@@ -334,33 +377,41 @@ void WriteLittleEndian(std::vector<uint8_t>* out, uint32_t value, int bytes)
 bool BindRenderTarget(GuestAddress color, GuestAddress depth)
 {
     ResolvedTarget& resolved = g_resolved_target;
-    DropIfResized(color, depth);
-    if (!resolved.valid || resolved.color != color || resolved.depth != depth)
+    uint32_t color_words[3];
+    uint32_t depth_words[3];
+    HeaderWords(color, color_words);
+    HeaderWords(depth, depth_words);
+    if (!resolved.valid || resolved.color != color || resolved.depth != depth ||
+        !std::equal(color_words, color_words + 3, resolved.color_words) ||
+        !std::equal(depth_words, depth_words + 3, resolved.depth_words))
     {
-        resolved.framebuffer = Framebuffer(color, depth);
+        // Neither surface: the size of the previous target stays.
+        uint32_t width = g_width;
+        uint32_t height = g_height;
+        if (depth != 0)
+        {
+            const DepthTarget& target = Depth(depth);
+            width = target.width;
+            height = target.height;
+        }
+        if (color != 0)
+        {
+            ColorTarget& target = Color(color);
+            target.header = color;
+            target.bound_since_copy = true;
+            target.sampleable = true;
+            width = target.width;
+            height = target.height;
+        }
+        // Remaking a target above drops framebuffers and clears `resolved`.
+        resolved.framebuffer = FramebufferAt(SurfaceMemory(color), SurfaceMemory(depth));
         resolved.color = color;
         resolved.depth = depth;
-        // Neither surface: the size of the previous target stays.
-        resolved.width = g_width;
-        resolved.height = g_height;
-        if (color != 0)
-        {
-            resolved.width = Color(color).width;
-            resolved.height = Color(color).height;
-        }
-        else if (depth != 0)
-        {
-            resolved.width = Depth(depth).width;
-            resolved.height = Depth(depth).height;
-        }
+        std::copy(color_words, color_words + 3, resolved.color_words);
+        std::copy(depth_words, depth_words + 3, resolved.depth_words);
+        resolved.width = width;
+        resolved.height = height;
         resolved.valid = color != 0 || depth != 0;
-        if (color != 0)
-        {
-            ColorTarget& target = g_colors.find(color)->second;  // made by Framebuffer() above
-            target.bound_since_copy = true;
-            target.has_data = true;
-            target.data = Memory().Read32(color + header::kData) & kPhysicalMask;
-        }
     }
     // Other paths that bind framebuffers (present, dumps, creation)
     // invalidate the GL state cache.
@@ -370,8 +421,8 @@ bool BindRenderTarget(GuestAddress color, GuestAddress depth)
         g_bound_framebuffer = resolved.framebuffer;
         g_framebuffer_epoch = GlStateEpoch();
     }
-    g_bound_color = color;
-    g_bound_depth = depth;
+    g_bound_color = SurfaceMemory(color);
+    g_bound_depth = SurfaceMemory(depth);
     g_width = resolved.width;
     g_height = resolved.height;
     return true;
@@ -389,67 +440,62 @@ uint32_t RenderTargetHeight()
 
 GLuint SampleRenderTarget(GuestAddress data, GuestAddress* surface, uint32_t* width, uint32_t* height)
 {
-    data &= kPhysicalMask;
-    for (auto& [address, target] : g_colors)
+    const uint32_t memory = data & kPhysicalMask;
+    const auto it = g_colors.find(memory);
+    if (it == g_colors.end() || it->second.texture == 0 || !it->second.sampleable)
     {
-        if (target.texture == 0 || !target.has_data || target.data != data)
-        {
-            continue;
-        }
-        GlFunctions& gl = Gl();
-        if (target.copy == 0)
-        {
-            InvalidateGlStateCache();  // binds a texture and a framebuffer
-            gl.GenTextures(1, &target.copy);
-            gl.BindTexture(kGlTexture2D, target.copy);
-            gl.TexImage2D(kGlTexture2D, 0, static_cast<GLint>(kGlRgba8), static_cast<GLsizei>(target.width),
-                          static_cast<GLsizei>(target.height), 0, kGlRgba, kGlUnsignedByte, nullptr);
-            gl.TexParameteri(kGlTexture2D, kGlTextureMaxLevel, 0);
-            gl.GenFramebuffers(1, &target.copy_framebuffer);
-            gl.BindFramebuffer(kGlFramebuffer, target.copy_framebuffer);
-            gl.FramebufferTexture2D(kGlFramebuffer, kGlColorAttachment0, kGlTexture2D, target.copy, 0);
-            gl.BindFramebuffer(kGlFramebuffer, Framebuffer(g_bound_color, g_bound_depth));
-            target.bound_since_copy = true;
-        }
-        // Draws and clears write only the bound target.
-        if (target.bound_since_copy)
-        {
-            const GLint w = static_cast<GLint>(target.width);
-            const GLint h = static_cast<GLint>(target.height);
-            gl.BindFramebuffer(kGlReadFramebuffer, Framebuffer(address, 0));
-            gl.BindFramebuffer(kGlDrawFramebuffer, target.copy_framebuffer);
-            gl.Disable(kGlScissorTest);
-            gl.ColorMask(1, 1, 1, 1);
-            // GL keeps D3D's top row at the top; textures have it at row 0.
-            gl.BlitFramebuffer(0, 0, w, h, 0, h, w, 0, kGlColorBufferBit, kGlNearest);
-            gl.BindFramebuffer(kGlFramebuffer, Framebuffer(g_bound_color, g_bound_depth));
-            InvalidateGlStateCache();
-            // Still bound: later draws go to it, so copy again next time.
-            target.bound_since_copy = address == g_bound_color;
-        }
-        *surface = address;
-        *width = target.width;
-        *height = target.height;
-        return target.copy;
+        return 0;
     }
-    return 0;
+    ColorTarget& target = it->second;
+    GlFunctions& gl = Gl();
+    if (target.copy == 0)
+    {
+        InvalidateGlStateCache();  // binds a texture and a framebuffer
+        gl.GenTextures(1, &target.copy);
+        gl.BindTexture(kGlTexture2D, target.copy);
+        gl.TexImage2D(kGlTexture2D, 0, static_cast<GLint>(kGlRgba8), static_cast<GLsizei>(target.width),
+                      static_cast<GLsizei>(target.height), 0, kGlRgba, kGlUnsignedByte, nullptr);
+        gl.TexParameteri(kGlTexture2D, kGlTextureMaxLevel, 0);
+        gl.GenFramebuffers(1, &target.copy_framebuffer);
+        gl.BindFramebuffer(kGlFramebuffer, target.copy_framebuffer);
+        gl.FramebufferTexture2D(kGlFramebuffer, kGlColorAttachment0, kGlTexture2D, target.copy, 0);
+        RebindCurrentTarget();
+        target.bound_since_copy = true;
+    }
+    // Draws and clears write only the bound target.
+    if (target.bound_since_copy)
+    {
+        const GLint w = static_cast<GLint>(target.width);
+        const GLint h = static_cast<GLint>(target.height);
+        gl.BindFramebuffer(kGlReadFramebuffer, FramebufferAt(memory, kNoSurface));
+        gl.BindFramebuffer(kGlDrawFramebuffer, target.copy_framebuffer);
+        gl.Disable(kGlScissorTest);
+        gl.ColorMask(1, 1, 1, 1);
+        // GL keeps D3D's top row at the top; textures have it at row 0.
+        gl.BlitFramebuffer(0, 0, w, h, 0, h, w, 0, kGlColorBufferBit, kGlNearest);
+        RebindCurrentTarget();
+        InvalidateGlStateCache();
+        // Still bound: later draws go to it, so copy again next time.
+        target.bound_since_copy = memory == g_bound_color;
+    }
+    *surface = target.header;
+    *width = target.width;
+    *height = target.height;
+    return target.copy;
 }
 
 void ForgetRenderTargetMemory(GuestAddress data)
 {
-    data &= kPhysicalMask;
-    for (auto& [address, target] : g_colors)
+    const auto it = g_colors.find(data & kPhysicalMask);
+    if (it != g_colors.end())
     {
-        if (target.has_data && target.data == data)
-        {
-            target.has_data = false;
-        }
+        it->second.sampleable = false;
     }
 }
 
 uint32_t RenderTargetTexture(GuestAddress color)
 {
-    const auto it = g_colors.find(color);
+    const auto it = g_colors.find(SurfaceMemory(color));
     return it != g_colors.end() ? it->second.texture : 0;
 }
 
@@ -485,7 +531,7 @@ void PresentRenderTarget(GuestAddress color, const GammaRamp& ramp)
                            kGlLinear);
     }
     platform::PresentDisplay();
-    gl.BindFramebuffer(kGlFramebuffer, Framebuffer(g_bound_color, g_bound_depth));
+    RebindCurrentTarget();
     InvalidateGlStateCache();
 }
 
@@ -498,7 +544,7 @@ void ReadRenderTarget(GuestAddress color, std::vector<uint8_t>* rgba, uint32_t* 
     gl.PixelStorei(kGlPackAlignment, 1);
     gl.ReadPixels(0, 0, static_cast<GLsizei>(source.width), static_cast<GLsizei>(source.height), kGlRgba,
                   kGlUnsignedByte, rgba->data());
-    gl.BindFramebuffer(kGlFramebuffer, Framebuffer(g_bound_color, g_bound_depth));
+    RebindCurrentTarget();
     InvalidateGlStateCache();
     *width = source.width;
     *height = source.height;
