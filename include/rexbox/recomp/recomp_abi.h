@@ -37,6 +37,10 @@ uint32_t rexbox_recomp_get_gpr(int index);
 void rexbox_recomp_set_gpr(int index, uint32_t value);
 uint32_t rexbox_recomp_get_fs_base(void);
 
+/* Guest XMM register `index` (0..7) as its four 32-bit lanes. */
+void rexbox_recomp_get_xmm(int index, uint32_t out[4]);
+void rexbox_recomp_set_xmm(int index, const uint32_t in[4]);
+
 /* The most recent indirect-call target on this thread, 0 if none. */
 uint32_t rexbox_recomp_last_icall(void);
 

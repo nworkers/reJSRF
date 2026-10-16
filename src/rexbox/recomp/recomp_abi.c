@@ -104,6 +104,31 @@ void rexbox_recomp_set_gprs(const RexboxRecompGprs* in)
     g_edi = in->edi;
 }
 
+static RecompXmm* xmm_slot(int index)
+{
+    switch (index)
+    {
+    case 0: return &g_xmm0;
+    case 1: return &g_xmm1;
+    case 2: return &g_xmm2;
+    case 3: return &g_xmm3;
+    case 4: return &g_xmm4;
+    case 5: return &g_xmm5;
+    case 6: return &g_xmm6;
+    default: return &g_xmm7;
+    }
+}
+
+void rexbox_recomp_get_xmm(int index, uint32_t out[4])
+{
+    memcpy(out, xmm_slot(index), 16);
+}
+
+void rexbox_recomp_set_xmm(int index, const uint32_t in[4])
+{
+    memcpy(xmm_slot(index), in, 16);
+}
+
 static uint32_t* gpr_slot(int index)
 {
     switch (index)

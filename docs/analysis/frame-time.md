@@ -93,6 +93,12 @@
    * **추정**: 데모 중 샘플의 `ZwWriteFile`은 측정 도구의 stderr 출력이나 GL 드라이버 자체의 셰이더 캐시 쓰기다. i042 로그에 그 비율이 남아 있지 않다.
    * **미확정**: Intel 기계의 주기적인 83~100 ms 프레임은 이 기계에서 재현되지 않았다. 실제 게임 진행(세이브, 그래피티 편집)에서는 `NtWriteFile`이 호출마다 동기로 `flush()`하므로 다시 본다.
 
+6. **게임의 행렬 스택(MMATRIX) 디컴파일**: **확인됨**(i073, Intel HD 620, 프레임 2,700~3,300 샘플링).
+   * lift된 게임 코드 샘플의 약 28%가 `MMATRIX` 섹션 함수 22개에 있었다(744개 / 전체 10,607개). 대기를 뺀 CPU의 약 9.5%다.
+   * 21개를 다시 쓰자(`src/game/jsrf/decomp/mmatrix.c`) 같은 구간 샘플이 약 80% 줄었다. 프레임당 약 2 ms다. SSE intrinsic 판은 142개, 일반 C 판은 156개로 거의 같아서 이식 가능한 일반 C로 정했다. 이득은 SIMD가 아니라 호출 고정 비용을 없앤 데서 나온다.
+   * 같은 시각 번갈아 잰 present 스레드 CPU는 부하가 적던 두 쌍에서 12.3~13.6 ms → 11.3 ms였다. 부하가 큰 한 쌍은 흔들림 안이었다([설계 i073](../design/20261016-i073-mmatrix.md)).
+   * 다음 후보: 같은 방식으로, 호출이 잦고 짧은 다른 게임 함수(`sub_000B3E10`, `sub_000163D0`, `sub_0014DB70` 등)를 디컴파일한다.
+
 ---
 
 # Frame time: where a frame of the opening 3D demo goes
@@ -181,3 +187,8 @@ Variant executables were run alternately, three times each, close together in ti
    * The calls are on the presenting thread but do not meet the slow frames (frames 2,427–2,462 and others). They are not the cause of the demo's stutter.
    * **Inferred**: the `ZwWriteFile` in samples during the demo is the measuring tools' stderr output or the GL driver writing its own shader cache. The i042 log does not keep its share.
    * **Unresolved**: the periodic 83–100 ms frames on the Intel machine did not reproduce here. In real play (saves, graffiti editing) `NtWriteFile` flushes synchronously on every call, so it is to be looked at again.
+6. **Decompiling the title's matrix stack (MMATRIX)**: **Confirmed** (i073, Intel HD 620, sampling frames 2,700–3,300).
+   * About 28% of the lifted title code's samples sat in 22 functions of the `MMATRIX` section (744 of 10,607 in all), about 9.5% of non-wait CPU.
+   * With 21 of them rewritten (`src/game/jsrf/decomp/mmatrix.c`), the same window drew about 80% fewer samples, about 2 ms per frame. An SSE-intrinsic version drew 142 and a plain-C version 156, nearly the same, so the portable plain C was kept: the gain comes from removing the per-call overhead, not from SIMD.
+   * Presenting-thread CPU, measured alternately, went from 12.3–13.6 ms to 11.3 ms in the two lightly loaded pairs; a heavily loaded pair stayed within the noise ([design i073](../design/20261016-i073-mmatrix.md)).
+   * Next: decompile other short, often-called title functions the same way (`sub_000B3E10`, `sub_000163D0`, `sub_0014DB70` and others).
