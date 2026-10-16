@@ -26,7 +26,7 @@
 | Release, Debug 빌드 | 경고·오류 없음 |
 | `rexbox_d3d8_probe` / `rejsrf_d3d8_check` / `rejsrf_decomp_check` | 162 check 0 failure / 14018 case 0 difference / 129 case 0 difference |
 | 데모 95초(hidden, 오디오 끔) | 프레임 1500, 3000, 4650 BMP가 변경 전과 바이트 단위로 같음. stderr도 파일 경로 말고는 같음 |
-| 사용자 플레이(부스트 대시) | 미검증. 확인할 것: 장면이 화면 전체에 보이는지, 회색 영역이 없는지, `samples render target ... at 004EC000`/`at 0066C000` 줄 |
+| 사용자 플레이(부스트 대시) | 사용자 확인: 부스트가 잘 된다 |
 
 ---
 
@@ -58,4 +58,4 @@ Design: [20261017-i071](../design/20261017-i071-render-target-by-memory.md) · W
 | Release and Debug builds | no warnings or errors |
 | `rexbox_d3d8_probe` / `rejsrf_d3d8_check` / `rejsrf_decomp_check` | 162 checks, 0 failures / 14018 cases, 0 differences / 129 cases, 0 differences |
 | Demo, 95 s (hidden, audio off) | frames 1500, 3000 and 4650 are byte-identical to before; stderr matches apart from file paths |
-| User play (boost dash) | not verified. To check: the scene fills the screen, no grey area, and `samples render target ... at 004EC000` / `at 0066C000` lines |
+| User play (boost dash) | the user's check: the boost works |
