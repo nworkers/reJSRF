@@ -25,7 +25,7 @@
 | Release, Debug 빌드 | 경고·오류 없음 |
 | `rexbox_d3d8_probe` / `rejsrf_d3d8_check` / `rejsrf_decomp_check` | 163 check 0 failure / 14018 case 0 difference / 129 case 0 difference |
 | 데모 95초(hidden, 오디오 끔) | 프레임 1500, 3000, 4650 BMP가 v0.0.33과 바이트 단위로 같음 |
-| 사용자 플레이(그래피티 스프레이) | 미검증 |
+| 사용자 플레이(그래피티 스프레이) | 사용자 확인: 그래피티가 잘 나온다 |
 
 ---
 
@@ -56,4 +56,4 @@ Design: [20261017-i078](../design/20261017-i078-psh-definition-constants.md) · 
 | Release and Debug builds | no warnings or errors |
 | `rexbox_d3d8_probe` / `rejsrf_d3d8_check` / `rejsrf_decomp_check` | 163 checks, 0 failures / 14018 cases, 0 differences / 129 cases, 0 differences |
 | Demo, 95 s (hidden, audio off) | frames 1500, 3000 and 4650 are byte-identical to v0.0.33 |
-| User play (spraying graffiti) | not verified |
+| User play (spraying graffiti) | the user's check: the graffiti shows |
