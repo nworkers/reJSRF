@@ -64,6 +64,7 @@ private:
     void DrawInfoTab();
     void DrawGraphicsTab();
     void DrawAntiAliasing();
+    void DrawInputTab();
     void DrawStatsWindow();
 
     BuildInfo build_;

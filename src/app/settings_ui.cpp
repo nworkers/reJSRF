@@ -2,6 +2,7 @@
 
 #include "rexbox/hle/d3d8/d3d8_display.h"
 #include "rexbox/platform/display.h"
+#include "rexbox/platform/input.h"
 #include "rexbox/platform/overlay.h"
 #include "rexbox/runtime/environment.h"
 #include "rexbox/runtime/guest_heap.h"
@@ -306,6 +307,11 @@ void SettingsUi::DrawMenu()
                 DrawTab(&SettingsUi::DrawGraphicsTab);
                 ImGui::EndTabItem();
             }
+            if (ImGui::BeginTabItem("Input"))
+            {
+                DrawTab(&SettingsUi::DrawInputTab);
+                ImGui::EndTabItem();
+            }
             ImGui::EndTabBar();
         }
     }
@@ -526,6 +532,20 @@ void SettingsUi::DrawGraphicsTab()
         ImGui::TextDisabled("(REXBOX_VSYNC set at start)");
     }
 
+    // docs/design/20261018-i095-vblank-wait.md
+    bool vblank_wait = settings_.vblank_wait;
+    if (ImGui::Checkbox("VBlank wait", &vblank_wait))
+    {
+        settings_.vblank_wait = vblank_wait;
+        rexbox::hle::d3d8::SetVerticalBlankWaitEnabled(vblank_wait);
+        Save();
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("(?)");
+    ImGui::SetItemTooltip("On: the game is paced by the Xbox's 60 Hz vertical blank, as on the console.\n"
+                          "Off: it runs as fast as it can draw, so game speed rises with the frame rate\n"
+                          "(VSync still holds it to the monitor). For benchmarks.");
+
     DrawAntiAliasing();
 
     ImGui::SeparatorText("Stats window");
@@ -613,6 +633,45 @@ void SettingsUi::DrawAntiAliasing()
     ImGui::SameLine();
     ImGui::TextDisabled("(?)");
     ImGui::SetItemTooltip("Sharper textures at grazing angles (up to %ux on this GPU).", d3d8::MaxAnisotropy());
+}
+
+// Vibration (docs/design/20261018-i094-gamepad-vibration.md). The platform
+// gets the strength, or 0 with vibration off.
+void SettingsUi::DrawInputTab()
+{
+    ImGui::SeparatorText("Vibration");
+    const auto apply = [this]() {
+        rexbox::platform::SetRumbleStrength(settings_.vibration ? settings_.vibration_strength : 0);
+        Save();
+    };
+    if (ImGui::Checkbox("Vibration", &settings_.vibration))
+    {
+        apply();
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("(?)");
+    ImGui::SetItemTooltip("Gamepad rumble as the game asks for it. It pauses while this menu is open.");
+
+    ImGui::BeginDisabled(!settings_.vibration);
+    int strength = static_cast<int>(settings_.vibration_strength);
+    ImGui::SliderInt("Strength", &strength, 10, 100, "%d%%", ImGuiSliderFlags_AlwaysClamp);
+    if (ImGui::IsItemDeactivatedAfterEdit() && static_cast<uint32_t>(strength) != settings_.vibration_strength)
+    {
+        settings_.vibration_strength = static_cast<uint32_t>(strength);
+        apply();
+    }
+    else if (ImGui::IsItemActive())
+    {
+        // Follow the slider while it is dragged; save once on release.
+        rexbox::platform::SetRumbleStrength(static_cast<uint32_t>(strength));
+    }
+    if (ImGui::Button("Test"))
+    {
+        rexbox::platform::TestGamepadRumble(0, 500);
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("Rumbles the first controller for half a second.");
+    ImGui::EndDisabled();
 }
 
 void SettingsUi::DrawStatsWindow()

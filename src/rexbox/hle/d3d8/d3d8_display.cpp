@@ -5,6 +5,7 @@
 #include "d3d8_gl_targets.h"
 #include "d3d8_gl_textures.h"
 #include "d3d8_internal.h"
+#include "d3d8_vblank.h"
 
 #include <algorithm>
 #include <atomic>
@@ -36,6 +37,7 @@ void SetDisplayDefaults(const DisplayDefaults& defaults)
     std::lock_guard<std::mutex> lock(g_mutex);
     g_defaults = defaults;
     g_widescreen.store(defaults.widescreen);
+    SetVerticalBlankWait(defaults.vblank_wait);
     g_anisotropy.store(defaults.anisotropy);
     g_smaa.store(static_cast<int>(defaults.smaa));
 }
@@ -154,6 +156,16 @@ void SetWidescreen(bool widescreen)
 {
     g_widescreen.store(widescreen);
     ApplyPictureAspect();
+}
+
+bool VerticalBlankWaitEnabled()
+{
+    return VerticalBlankWait();
+}
+
+void SetVerticalBlankWaitEnabled(bool wait)
+{
+    SetVerticalBlankWait(wait);
 }
 
 void ApplyPictureAspect()

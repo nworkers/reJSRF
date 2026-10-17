@@ -17,11 +17,15 @@ struct Settings
     uint32_t window_scale = 2;  // 1..3: the window at 1x-3x the picture (docs/design/20261017-i090-window-size.md)
     bool widescreen = false;
     bool vsync = true;  // adaptive vsync; false: off
+    bool vblank_wait = true;  // false: the title is not paced by the virtual vertical blank (issue #95)
     // Anti-aliasing and filtering (docs/design/20261017-i089-anti-aliasing.md).
     // MSAA and SMAA exclude each other; with both set, MSAA wins.
     uint32_t msaa = 0;        // 0 (off), 2, 4, 8, 16
     uint32_t smaa = 0;        // 0 off, 1 1x
     uint32_t anisotropy = 1;  // 1 (off), 2, 4, 8, 16
+    // [Input] (docs/design/20261018-i094-gamepad-vibration.md).
+    bool vibration = true;
+    uint32_t vibration_strength = 100;  // percent, 10..100
     // The stats window's sections (shown while any is on) and where its
     // top-right corner sits, as fractions of the window (negative: the
     // default, top right).

@@ -63,9 +63,12 @@ constexpr uint32_t kCapsIn = 0x4;
 constexpr uint32_t kCapsOutLeftMotor = 0x16;
 constexpr uint32_t kCapsOutRightMotor = 0x18;
 
-// XINPUT_FEEDBACK_HEADER: DWORD dwStatus, HANDLE hEvent, ...
+// XINPUT_FEEDBACK: the header (DWORD dwStatus, HANDLE hEvent, BYTE
+// Reserved[58]), then XINPUT_RUMBLE (WORD wLeftMotorSpeed, WORD wRightMotorSpeed).
 constexpr uint32_t kFeedbackStatus = 0x0;
 constexpr uint32_t kFeedbackEvent = 0x4;
+constexpr uint32_t kFeedbackLeftMotor = 0x42;
+constexpr uint32_t kFeedbackRightMotor = 0x44;
 }  // namespace layout
 
 constexpr uint8_t kSubTypeGamepad = 1;  // XINPUT_DEVSUBTYPE_GC_GAMEPAD

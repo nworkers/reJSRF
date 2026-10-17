@@ -27,6 +27,13 @@ void AlignVerticalBlank(std::chrono::steady_clock::time_point host_blank);
 // Vertical blanks since the clock started.
 uint64_t VerticalBlankCount();
 
+// Whether the clock paces the title at the guest's refresh
+// (docs/design/20261018-i095-vblank-wait.md). Off, it runs at 10 kHz, so the
+// waits below are all but gone and the title runs as fast as the host draws.
+// A switch keeps the blank count.
+void SetVerticalBlankWait(bool wait);
+bool VerticalBlankWait();
+
 // Sleeps until the next vertical blank.
 void WaitForVerticalBlank();
 

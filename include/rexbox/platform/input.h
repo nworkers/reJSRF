@@ -55,6 +55,17 @@ bool InitializeInput(std::string* error);
 // reads as not connected, except index 0, which falls back to the keyboard.
 void ReadGamepad(uint32_t index, GamepadSnapshot* snapshot);
 
+// Rumble (docs/design/20261018-i094-gamepad-vibration.md). Motor speeds are
+// 0..65535: left is the low-frequency (large) motor, right the high-frequency
+// one. A rumble holds until changed, and stops while the settings menu is
+// open. Nothing happens for the keyboard or a controller without motors.
+void SetGamepadRumble(uint32_t index, uint16_t left, uint16_t right);
+// Strength in percent applied to every rumble; 0 turns rumble off.
+void SetRumbleStrength(uint32_t percent);
+// A short rumble of both motors at the current strength, to try the setting
+// (it plays with the settings menu open).
+void TestGamepadRumble(uint32_t index, uint32_t milliseconds);
+
 }  // namespace rexbox::platform
 
 #endif  // REXBOX_PLATFORM_INPUT_H

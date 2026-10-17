@@ -133,12 +133,29 @@ Settings SettingsFile::Load()
             continue;
         }
         const size_t equals = line.find('=');
-        if (equals == std::string::npos || section != "graphics")
+        if (equals == std::string::npos || (section != "graphics" && section != "input"))
         {
             continue;
         }
         const std::string key = Lower(Trim(line.substr(0, equals)));
         const std::string value = Trim(line.substr(equals + 1));
+        if (section == "input")
+        {
+            if (key == "vibration")
+            {
+                ParseBool(value, &settings.vibration);
+            }
+            else if (key == "vibrationstrength")
+            {
+                char* end = nullptr;
+                const long percent = std::strtol(value.c_str(), &end, 10);
+                if (end != value.c_str() && *end == '\0' && percent >= 10 && percent <= 100)
+                {
+                    settings.vibration_strength = static_cast<uint32_t>(percent);
+                }
+            }
+            continue;
+        }
         if (key == "renderscale")
         {
             char* end = nullptr;
@@ -194,6 +211,10 @@ Settings SettingsFile::Load()
         {
             ParseBool(value, &settings.vsync);
         }
+        else if (key == "vblankwait")
+        {
+            ParseBool(value, &settings.vblank_wait);
+        }
         else if (key == "showfpsoverlay" || key == "showfps")
         {
             ParseBool(value, &settings.show_fps);
@@ -239,6 +260,8 @@ bool SettingsFile::Save(const Settings& settings)
          << "Fullscreen = " << flag(settings.fullscreen) << "\n"
          << "Widescreen = " << flag(settings.widescreen) << "\n"
          << "VSync = " << flag(settings.vsync) << "\n"
+         << "; VBlankWait: false lets the game run as fast as it draws (game speed follows).\n"
+         << "VBlankWait = " << flag(settings.vblank_wait) << "\n"
          << "; Msaa: 0, 2, 4, 8, 16. Smaa: off, 1x (not with Msaa). Anisotropy: 1, 2, 4, 8, 16.\n"
          << "Msaa = " << settings.msaa << "\n"
          << "Smaa = " << (settings.smaa == 1 ? "1x" : "off") << "\n"
@@ -252,6 +275,10 @@ bool SettingsFile::Save(const Settings& settings)
         text << "StatsX = " << settings.stats_x << "\n"
              << "StatsY = " << settings.stats_y << "\n";
     }
+    text << "[Input]\n"
+         << "; Vibration: gamepad rumble. VibrationStrength: 10..100 (percent).\n"
+         << "Vibration = " << flag(settings.vibration) << "\n"
+         << "VibrationStrength = " << settings.vibration_strength << "\n";
     if (WriteFile(path_, text.str()))
     {
         return true;
