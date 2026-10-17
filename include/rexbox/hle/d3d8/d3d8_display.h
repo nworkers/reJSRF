@@ -26,6 +26,7 @@ struct DisplayDefaults
     bool widescreen = false;    // 16:9, stretched for now (issue #85)
     platform::VsyncMode vsync = platform::VsyncMode::kAdaptive;
     bool fullscreen = false;
+    uint32_t window_scale = 2;  // 1..3, the window's size at start (docs/design/20261017-i090-window-size.md)
     uint32_t msaa_samples = 0;  // 0 (off), 2, 4, 8, 16
     SmaaMode smaa = SmaaMode::kOff;
     uint32_t anisotropy = 1;  // 1 (off), 2, 4, 8, 16

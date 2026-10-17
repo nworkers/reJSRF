@@ -38,12 +38,12 @@
 * 모드
   * **1x**: 위의 세 단계다.
   * **T2x, S2x, 4x는 넣지 않는다.** T2x와 4x는 이전 프레임을 재투영해 섞는데, 이 게임에는 속도 버퍼가 없어 굵은 외곽선에 잔상이 생기고 단색 면이 번진다. 카툰 렌더링에 맞지 않는다. S2x(2x MSAA + 샘플별 SMAA)의 효과는 메뉴에서 MSAA 2x와 SMAA 1x를 함께 고르는 것으로 대신한다.
-* MSAA와 함께 쓸 수 있다(MSAA resolve 뒤에 SMAA).
+* MSAA와 함께 쓰지 않는다. MSAA로 resolve한 화면은 경계가 이미 중간색이라 SMAA가 경계를 덜 찾고, 찾은 곳은 한 번 더 흐려진다. 비용만 늘어 메뉴에서 둘 중 하나만 고르게 한다(2.4).
 
 ### 2.4 설정
 
-* 메뉴 Graphics 탭의 "Anti-aliasing" 절에 드롭다운 세 개를 둔다: MSAA(Off, 2x, 4x, 8x, 16x), SMAA(Off, 1x), Anisotropic filtering(Off, 2x, 4x, 8x, 16x). 상한을 넘는 값과 다음 단계의 SMAA 모드는 비활성이다.
-* `rejsrf.ini`의 `Msaa`, `Smaa`, `Anisotropy`. 공개 헤더 `d3d8_display.h`의 `DisplayDefaults`에 더하고 `Set/Get` 함수를 둔다.
+* 메뉴 Graphics 탭의 "Image quality" 절에 드롭다운 두 개를 둔다: Anti-aliasing(Off, MSAA 2x, 4x, 8x, 16x, SMAA 1x)과 Anisotropic filtering(Off, 2x, 4x, 8x, 16x). MSAA와 SMAA는 한 목록이라 동시에 켤 수 없다. 드라이버 상한을 넘는 값은 비활성이다.
+* `rejsrf.ini`의 `Msaa`, `Smaa`, `Anisotropy`. 파일에 `Msaa`와 `Smaa`가 모두 켜져 있으면 MSAA를 쓰고 SMAA는 끈다. 공개 헤더 `d3d8_display.h`의 `DisplayDefaults`에 더하고 `Set/Get` 함수를 둔다.
 * Info 탭의 VRAM 집계에 멀티샘플 렌더버퍼를 더한다.
 
 ### 2.5 하지 않는 것
@@ -99,12 +99,12 @@ What the title sees (D3D state, render-target sizes) does not change, and values
 * Modes
   * **1x**: the three passes above.
   * **T2x, S2x and 4x are not included.** T2x and 4x blend in the reprojected previous frame; the title has no velocity buffer, so the thick outlines would ghost and flat areas smear, which does not suit cel shading. S2x (2x MSAA plus per-sample SMAA) is approximated by picking MSAA 2x together with SMAA 1x in the menu.
-* It combines with MSAA (SMAA after the MSAA resolve).
+* It is not combined with MSAA. A picture resolved from MSAA already has in-between colors at its edges, so SMAA finds fewer edges and softens the ones it finds once more; the cost grows for little gain, so the menu offers one or the other (2.4).
 
 ### 2.4 Settings
 
-* An "Anti-aliasing" section in the menu's Graphics tab with three dropdowns: MSAA (Off, 2x, 4x, 8x, 16x), SMAA (Off, 1x), Anisotropic filtering (Off, 2x, 4x, 8x, 16x). Values over the limit and the next-step SMAA modes are disabled.
-* `Msaa`, `Smaa`, `Anisotropy` in `rejsrf.ini`; added to `DisplayDefaults` in the public `d3d8_display.h`, with `Set/Get` functions.
+* An "Image quality" section in the menu's Graphics tab with two dropdowns: Anti-aliasing (Off, MSAA 2x, 4x, 8x, 16x, SMAA 1x) and Anisotropic filtering (Off, 2x, 4x, 8x, 16x). MSAA and SMAA share one list, so they are never on together. Values over the driver's limits are disabled.
+* `Msaa`, `Smaa`, `Anisotropy` in `rejsrf.ini` (with both `Msaa` and `Smaa` on in the file, MSAA is used and SMAA is off); added to `DisplayDefaults` in the public `d3d8_display.h`, with `Set/Get` functions.
 * The Info tab's VRAM figures include the multisample renderbuffers.
 
 ### 2.5 Not done

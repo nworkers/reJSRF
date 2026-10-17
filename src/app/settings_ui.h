@@ -72,6 +72,7 @@ private:
     bool observed_ = false;
     Tracked<uint32_t> render_scale_;
     Tracked<bool> fullscreen_;
+    Tracked<uint32_t> window_scale_;
     Tracked<bool> widescreen_;
     Tracked<bool> vsync_;
     float tab_height_ = 0.0f;  // the tallest tab's content, divided by the OSD scale

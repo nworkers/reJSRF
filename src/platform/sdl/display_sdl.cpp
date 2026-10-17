@@ -313,6 +313,7 @@ void PumpDisplayEvents(bool* close_requested)
             case SDLK_1:
             case SDLK_2:
             case SDLK_3:
+                static_assert(kMaxWindowScale == 3, "Alt+1..3 are the window presets");
                 ApplyScale(window, picture_width, picture_height, 1 + (event.key.key - SDLK_1));
                 break;
             case SDLK_RETURN:
@@ -425,6 +426,52 @@ void SetPictureAspect(uint32_t width, uint32_t height)
         SDL_SetWindowSize(g_display.window, static_cast<int>(static_cast<float>(window_height) * aspect + 0.5f),
                           window_height);
     }
+}
+
+void SetWindowScale(uint32_t scale)
+{
+    SDL_Window* window = nullptr;
+    uint32_t picture_width = 0;
+    uint32_t picture_height = 0;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        window = g_display.hidden ? nullptr : g_display.window;
+        picture_width = g_display.picture_width;
+        picture_height = g_display.picture_height;
+    }
+    if (window != nullptr && scale >= 1 && scale <= kMaxWindowScale)
+    {
+        ApplyScale(window, picture_width, picture_height, scale);
+    }
+}
+
+uint32_t WindowScale()
+{
+    std::lock_guard<std::mutex> lock(g_mutex);
+    if (g_display.window == nullptr ||
+        (SDL_GetWindowFlags(g_display.window) & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_MAXIMIZED)) != 0)
+    {
+        return 0;
+    }
+    int width = 0;
+    int height = 0;
+    SDL_GetWindowSize(g_display.window, &width, &height);
+    for (uint32_t scale = 1; scale <= kMaxWindowScale; ++scale)
+    {
+        if (static_cast<uint32_t>(width) == g_display.picture_width * scale &&
+            static_cast<uint32_t>(height) == g_display.picture_height * scale)
+        {
+            return scale;
+        }
+    }
+    return 0;
+}
+
+void GetPictureSize(uint32_t* width, uint32_t* height)
+{
+    std::lock_guard<std::mutex> lock(g_mutex);
+    *width = g_display.picture_width;
+    *height = g_display.picture_height;
 }
 
 namespace sdl_internal

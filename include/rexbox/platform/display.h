@@ -111,6 +111,17 @@ void SetVsync(VsyncMode mode);
 // from a 640x480 one).
 void SetPictureAspect(uint32_t width, uint32_t height);
 
+// The fixed window sizes (docs/design/20261017-i090-window-size.md): the
+// picture at 1..kMaxWindowScale times, as Alt+1/2/3 set them. SetWindowScale
+// leaves fullscreen or a maximized window first; call it on the thread that
+// pumps events. WindowScale is the preset the window has now, or 0 (resized
+// by hand, maximized, fullscreen or no window).
+constexpr uint32_t kMaxWindowScale = 3;
+void SetWindowScale(uint32_t scale);
+uint32_t WindowScale();
+// The picture's size the presets multiply (SetPictureAspect).
+void GetPictureSize(uint32_t* width, uint32_t* height);
+
 // The render scale the user asked for with Ctrl+1..8 since the last call
 // (1..8), or 0. Seen by PumpDisplayEvents; the caller applies it.
 uint32_t ConsumeRenderScaleRequest();

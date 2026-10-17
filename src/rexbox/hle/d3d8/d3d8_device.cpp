@@ -105,6 +105,7 @@ bool OpenDisplay(const PresentParameters& pp, std::string* error)
     const DisplayDefaults defaults = CurrentDisplayDefaults();
     config.vsync = defaults.vsync;
     config.fullscreen = defaults.fullscreen;
+    config.scale = defaults.window_scale;
     const char* vsync = std::getenv("REXBOX_VSYNC");
     if (vsync != nullptr && std::strcmp(vsync, "off") == 0)
     {
