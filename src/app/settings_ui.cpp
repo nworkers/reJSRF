@@ -479,6 +479,8 @@ void SettingsUi::DrawGraphicsTab()
         ImGui::TextDisabled("(REXBOX_VSYNC set at start)");
     }
 
+    DrawAntiAliasing();
+
     ImGui::SeparatorText("Stats window");
     bool changed = ImGui::Checkbox("FPS", &settings_.show_fps);
     ImGui::SameLine();
@@ -495,6 +497,86 @@ void SettingsUi::DrawGraphicsTab()
     ImGui::TextDisabled("Shortcuts: Ctrl+1..8 resolution, Alt+Enter or double click fullscreen,\n"
                         "Alt+1/2/3 window size, F9 diagnostic capture.\n"
                         "Gamepad: LT+RT+Y menu, LT+RT+L3+R3 held 1 s quits.");
+}
+
+// MSAA, SMAA and anisotropic filtering (docs/design/20261017-i089-anti-aliasing.md).
+// Values over the driver's limits, and the SMAA modes not built yet, cannot
+// be picked.
+void SettingsUi::DrawAntiAliasing()
+{
+    namespace d3d8 = rexbox::hle::d3d8;
+    ImGui::SeparatorText("Anti-aliasing");
+    const auto multiples = [](const char* label, uint32_t current, uint32_t off_value, uint32_t limit,
+                              uint32_t* chosen) {
+        const uint32_t values[] = {off_value, 2, 4, 8, 16};
+        const std::string preview = current <= off_value ? std::string("Off") : Printf("%ux", current);
+        bool changed = false;
+        if (ImGui::BeginCombo(label, preview.c_str()))
+        {
+            for (const uint32_t value : values)
+            {
+                const bool enabled = value == off_value || value <= limit;
+                const std::string name = value == off_value ? std::string("Off") : Printf("%ux", value);
+                ImGui::BeginDisabled(!enabled);
+                if (ImGui::Selectable(name.c_str(), value == current) && value != current)
+                {
+                    *chosen = value;
+                    changed = true;
+                }
+                ImGui::EndDisabled();
+            }
+            ImGui::EndCombo();
+        }
+        return changed;
+    };
+
+    uint32_t msaa = settings_.msaa;
+    if (multiples("MSAA", d3d8::MsaaSamples() != 0 ? d3d8::MsaaSamples() : settings_.msaa, 0,
+                  d3d8::MaxMsaaSamples(), &msaa))
+    {
+        settings_.msaa = msaa;
+        d3d8::SetMsaaSamples(msaa);
+        Save();
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("(?)");
+    ImGui::SetItemTooltip("Multisample anti-aliasing on every render target (up to %ux on this GPU).\n"
+                          "Costs video memory: it multiplies with the rendering resolution.",
+                          d3d8::MaxMsaaSamples());
+
+    static const char* const kSmaaNames[] = {"Off", "1x", "T2x", "S2x", "4x"};
+    const uint32_t smaa = std::min<uint32_t>(static_cast<uint32_t>(d3d8::Smaa()), 4);
+    if (ImGui::BeginCombo("SMAA", kSmaaNames[smaa]))
+    {
+        for (uint32_t i = 0; i < 5; ++i)
+        {
+            const auto mode = static_cast<d3d8::SmaaMode>(i);
+            ImGui::BeginDisabled(!d3d8::SmaaModeAvailable(mode));
+            if (ImGui::Selectable(kSmaaNames[i], i == smaa) && i != smaa)
+            {
+                settings_.smaa = i;
+                d3d8::SetSmaa(mode);
+                Save();
+            }
+            ImGui::EndDisabled();
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("(?)");
+    ImGui::SetItemTooltip("Post-process anti-aliasing (SMAA by Jimenez et al.) on the final picture.\n"
+                          "T2x, S2x and 4x need temporal and multisample variants that come later.");
+
+    uint32_t anisotropy = settings_.anisotropy;
+    if (multiples("Anisotropic filtering", d3d8::Anisotropy(), 1, d3d8::MaxAnisotropy(), &anisotropy))
+    {
+        settings_.anisotropy = anisotropy;
+        d3d8::SetAnisotropy(anisotropy);
+        Save();
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("(?)");
+    ImGui::SetItemTooltip("Sharper textures at grazing angles (up to %ux on this GPU).", d3d8::MaxAnisotropy());
 }
 
 void SettingsUi::DrawStatsWindow()

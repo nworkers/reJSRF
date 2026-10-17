@@ -1,5 +1,7 @@
 #include "d3d8_gl_textures.h"
 
+#include "rexbox/hle/d3d8/d3d8_display.h"
+
 #include "d3d8_gl.h"
 #include "d3d8_gl_targets.h"
 #include "d3d8_globals.h"
@@ -10,6 +12,7 @@
 #include "d3d8_trace.h"
 
 #include <algorithm>
+#include <map>
 #include <cstring>
 #include <cstdlib>
 #include <cstdio>
@@ -79,7 +82,7 @@ GLenum DxtInternalFormat(uint32_t format)
 
 // One sampler object per combination of address modes and filters, so a
 // draw binds one instead of changing a shared sampler's parameters.
-std::unordered_map<uint64_t, GLuint> g_samplers;
+std::map<std::pair<uint64_t, uint32_t>, GLuint> g_samplers;  // (wraps and filters, anisotropy)
 
 // What each texture unit holds, valid while `epoch` is the GL state epoch.
 struct UnitBinding
@@ -322,13 +325,15 @@ BoundTexture ResolveTexture(GuestAddress header)
 }
 
 // The sampler object for these parameters, created on first use.
-GLuint Sampler(GLint wrap_s, GLint wrap_t, GLint wrap_r, GLenum mag_filter, GLenum min_filter)
+GLuint Sampler(GLint wrap_s, GLint wrap_t, GLint wrap_r, GLenum mag_filter, GLenum min_filter, uint32_t anisotropy)
 {
-    // GL enum values fit in 16 bits.
-    const uint64_t key = (static_cast<uint64_t>(wrap_s & 0xFFFF) << 48) |
-                         (static_cast<uint64_t>(wrap_t & 0xFFFF) << 32) |
-                         (static_cast<uint64_t>(wrap_r & 0xFFFF) << 16) |
-                         (static_cast<uint64_t>(mag_filter == kGlNearest ? 1 : 0) << 15) | (min_filter & 0x7FFF);
+    // GL enum values fit in 16 bits; the anisotropy is the key's second half.
+    const std::pair<uint64_t, uint32_t> key{(static_cast<uint64_t>(wrap_s & 0xFFFF) << 48) |
+                                                (static_cast<uint64_t>(wrap_t & 0xFFFF) << 32) |
+                                                (static_cast<uint64_t>(wrap_r & 0xFFFF) << 16) |
+                                                (static_cast<uint64_t>(mag_filter == kGlNearest ? 1 : 0) << 15) |
+                                                (min_filter & 0x7FFF),
+                                            anisotropy};
     const auto it = g_samplers.find(key);
     if (it != g_samplers.end())
     {
@@ -342,6 +347,10 @@ GLuint Sampler(GLint wrap_s, GLint wrap_t, GLint wrap_r, GLenum mag_filter, GLen
     gl.SamplerParameteri(sampler, kGlTextureWrapR, wrap_r);
     gl.SamplerParameteri(sampler, kGlTextureMagFilter, static_cast<GLint>(mag_filter));
     gl.SamplerParameteri(sampler, kGlTextureMinFilter, static_cast<GLint>(min_filter));
+    if (anisotropy > 1 && gl.SamplerParameterf != nullptr)
+    {
+        gl.SamplerParameterf(sampler, kGlTextureMaxAnisotropy, static_cast<GLfloat>(anisotropy));
+    }
     g_samplers.emplace(key, sampler);
     return sampler;
 }
@@ -361,10 +370,13 @@ void BindStageTexture(uint32_t stage, const BoundTexture& texture)
     {
         min_filter = min_point ? kGlNearestMipmapLinear : kGlLinearMipmapLinear;
     }
+    // The user's anisotropic filtering, on linear minification only (point
+    // filtering is the title's choice; docs/design/20261017-i089-anti-aliasing.md).
+    const uint32_t anisotropy = min_point ? 1u : Anisotropy();
     const GLuint sampler = Sampler(AddressMode(TextureStateValue(stage, tss::kAddressU)),
                                    AddressMode(TextureStateValue(stage, tss::kAddressV)),
                                    AddressMode(TextureStateValue(stage, tss::kAddressW)),
-                                   mag_point ? kGlNearest : kGlLinear, min_filter);
+                                   mag_point ? kGlNearest : kGlLinear, min_filter, anisotropy);
     const GLenum target = texture.kind == SamplerKind::k3D ? kGlTexture3D : kGlTexture2D;
 
     UnitBinding& unit = g_units[stage];

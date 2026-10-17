@@ -63,6 +63,7 @@ private:
     void DrawTab(void (SettingsUi::*draw)());
     void DrawInfoTab();
     void DrawGraphicsTab();
+    void DrawAntiAliasing();
     void DrawStatsWindow();
 
     BuildInfo build_;

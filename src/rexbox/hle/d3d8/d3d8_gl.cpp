@@ -13,6 +13,8 @@ namespace
 
 GlFunctions g_gl;
 bool g_s3tc = false;  // GL_EXT_texture_compression_s3tc usable
+int g_max_samples = 0;     // GL_MAX_SAMPLES, 0 without multisample renderbuffers
+int g_max_anisotropy = 1;  // GL_MAX_TEXTURE_MAX_ANISOTROPY, 1 without the extension
 bool g_es = false;
 uint32_t g_state_epoch = 1;
 
@@ -173,6 +175,7 @@ bool LoadGlFunctions(GlFunctions* functions, std::string* missing)
     LoadOptional<__LINE__>(&f.PolygonMode, "glPolygonMode");
     LoadOptional<__LINE__>(&f.CompressedTexImage2D, "glCompressedTexImage2D");
     LoadOptional<__LINE__>(&f.GetStringi, "glGetStringi");
+    LoadOptional<__LINE__>(&f.RenderbufferStorageMultisample, "glRenderbufferStorageMultisample");
     if (ok && f.ClearDepthf == nullptr && f.ClearDepth == nullptr)
     {
         first_missing = "glClearDepth";
@@ -195,17 +198,52 @@ bool LoadGlFunctions(GlFunctions* functions, std::string* missing)
     g_gl = f;
     // The extension list (core profiles list them one by one).
     g_s3tc = false;
-    if (f.CompressedTexImage2D != nullptr && f.GetStringi != nullptr)
+    bool anisotropic = false;
+    if (f.GetStringi != nullptr)
     {
         GLint count = 0;
         f.GetIntegerv(kGlNumExtensions, &count);
-        for (GLint i = 0; i < count && !g_s3tc; ++i)
+        for (GLint i = 0; i < count; ++i)
         {
             const auto* name = reinterpret_cast<const char*>(f.GetStringi(kGlExtensions, static_cast<GLuint>(i)));
-            g_s3tc = name != nullptr && std::strcmp(name, "GL_EXT_texture_compression_s3tc") == 0;
+            if (name == nullptr)
+            {
+                continue;
+            }
+            g_s3tc = g_s3tc || (f.CompressedTexImage2D != nullptr &&
+                                std::strcmp(name, "GL_EXT_texture_compression_s3tc") == 0);
+            anisotropic = anisotropic || std::strcmp(name, "GL_EXT_texture_filter_anisotropic") == 0 ||
+                          std::strcmp(name, "GL_ARB_texture_filter_anisotropic") == 0;
         }
     }
+    g_max_samples = 0;
+    if (f.RenderbufferStorageMultisample != nullptr)
+    {
+        GLint samples = 0;
+        f.GetIntegerv(kGlMaxSamples, &samples);
+        g_max_samples = samples > 1 ? samples : 0;
+    }
+    g_max_anisotropy = 1;
+    if (anisotropic && f.SamplerParameterf != nullptr)
+    {
+        GLint anisotropy = 1;
+        f.GetIntegerv(kGlMaxTextureMaxAnisotropy, &anisotropy);
+        g_max_anisotropy = anisotropy > 1 ? anisotropy : 1;
+    }
+    while (f.GetError() != 0)
+    {
+    }
     return true;
+}
+
+int GlMaxSamples()
+{
+    return g_max_samples;
+}
+
+int GlMaxAnisotropy()
+{
+    return g_max_anisotropy;
 }
 
 bool GlHasS3tc()

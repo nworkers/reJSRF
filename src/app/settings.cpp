@@ -148,6 +148,35 @@ Settings SettingsFile::Load()
                 settings.render_scale = static_cast<uint32_t>(scale);
             }
         }
+        else if (key == "msaa" || key == "anisotropy")
+        {
+            char* end = nullptr;
+            const long count = std::strtol(value.c_str(), &end, 10);
+            const bool power_of_two = count > 0 && (count & (count - 1)) == 0;
+            if (end != value.c_str() && *end == '\0' && count >= 0 && count <= 16 && (count == 0 || power_of_two))
+            {
+                if (key == "msaa")
+                {
+                    settings.msaa = count >= 2 ? static_cast<uint32_t>(count) : 0;
+                }
+                else
+                {
+                    settings.anisotropy = count >= 1 ? static_cast<uint32_t>(count) : 1;
+                }
+            }
+        }
+        else if (key == "smaa")
+        {
+            const std::string mode = Lower(value);
+            const char* const names[] = {"off", "1x", "t2x", "s2x", "4x"};
+            for (uint32_t i = 0; i < 5; ++i)
+            {
+                if (mode == names[i])
+                {
+                    settings.smaa = i;
+                }
+            }
+        }
         else if (key == "fullscreen")
         {
             ParseBool(value, &settings.fullscreen);
@@ -199,6 +228,11 @@ bool SettingsFile::Save(const Settings& settings)
          << "Fullscreen = " << flag(settings.fullscreen) << "\n"
          << "Widescreen = " << flag(settings.widescreen) << "\n"
          << "VSync = " << flag(settings.vsync) << "\n"
+         << "; Msaa: 0, 2, 4, 8, 16. Smaa: off, 1x. Anisotropy: 1, 2, 4, 8, 16.\n"
+         << "Msaa = " << settings.msaa << "\n"
+         << "Smaa = " << (settings.smaa == 1 ? "1x" : settings.smaa == 2 ? "t2x" : settings.smaa == 3 ? "s2x"
+                          : settings.smaa == 4 ? "4x" : "off") << "\n"
+         << "Anisotropy = " << settings.anisotropy << "\n"
          << "; The stats window: its sections, and its top-right corner as fractions of the window.\n"
          << "ShowFps = " << flag(settings.show_fps) << "\n"
          << "ShowMemory = " << flag(settings.show_memory) << "\n"

@@ -101,6 +101,39 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
+## SMAA
+
+* 출처 / Source: https://github.com/iryoku/smaa
+* 라이선스 / License: MIT (Copyright (C) 2013 Jorge Jimenez, Jose I. Echevarria, Belen Masia, Fernando Navarro, Diego Gutierrez). 전문은 `third_party/smaa/LICENSE.txt`. / Full text in `third_party/smaa/LICENSE.txt`.
+* 포함 방식 / How included: git submodule `third_party/smaa` (`71c806a`). `SMAA.hlsl`은 빌드 때 바이트 배열로 `rexbox_hle`에 들어가 GLSL 3 셰이더로 컴파일되고, `Textures/AreaTex.h`, `Textures/SearchTex.h`는 `d3d8_smaa.cpp`가 그대로 include한다. / `SMAA.hlsl` is embedded in `rexbox_hle` as bytes at build time and compiled as GLSL 3 shaders; `d3d8_smaa.cpp` includes `Textures/AreaTex.h` and `Textures/SearchTex.h` as they are.
+
+```text
+Copyright (C) 2013 Jorge Jimenez (jorge@iryoku.com)
+Copyright (C) 2013 Jose I. Echevarria (joseignacioechevarria@gmail.com)
+Copyright (C) 2013 Belen Masia (bmasia@unizar.es)
+Copyright (C) 2013 Fernando Navarro (fernandn@microsoft.com)
+Copyright (C) 2013 Diego Gutierrez (diegog@unizar.es)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software. As clarification, there is no
+requirement that the copyright notice and permission be included in binary
+distributions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+```
+
 ## jsrf-recomp (data)
 
 * 출처 / Source: https://github.com/andeecollard/jsrf-recomp, `experiments/d3d8_boundary/inferred_names.json`
