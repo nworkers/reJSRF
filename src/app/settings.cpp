@@ -211,6 +211,10 @@ Settings SettingsFile::Load()
         {
             ParseBool(value, &settings.vsync);
         }
+        else if (key == "vblankwait")
+        {
+            ParseBool(value, &settings.vblank_wait);
+        }
         else if (key == "showfpsoverlay" || key == "showfps")
         {
             ParseBool(value, &settings.show_fps);
@@ -256,6 +260,8 @@ bool SettingsFile::Save(const Settings& settings)
          << "Fullscreen = " << flag(settings.fullscreen) << "\n"
          << "Widescreen = " << flag(settings.widescreen) << "\n"
          << "VSync = " << flag(settings.vsync) << "\n"
+         << "; VBlankWait: false lets the game run as fast as it draws (game speed follows).\n"
+         << "VBlankWait = " << flag(settings.vblank_wait) << "\n"
          << "; Msaa: 0, 2, 4, 8, 16. Smaa: off, 1x (not with Msaa). Anisotropy: 1, 2, 4, 8, 16.\n"
          << "Msaa = " << settings.msaa << "\n"
          << "Smaa = " << (settings.smaa == 1 ? "1x" : "off") << "\n"

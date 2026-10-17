@@ -532,6 +532,20 @@ void SettingsUi::DrawGraphicsTab()
         ImGui::TextDisabled("(REXBOX_VSYNC set at start)");
     }
 
+    // docs/design/20261018-i095-vblank-wait.md
+    bool vblank_wait = settings_.vblank_wait;
+    if (ImGui::Checkbox("VBlank wait", &vblank_wait))
+    {
+        settings_.vblank_wait = vblank_wait;
+        rexbox::hle::d3d8::SetVerticalBlankWaitEnabled(vblank_wait);
+        Save();
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("(?)");
+    ImGui::SetItemTooltip("On: the game is paced by the Xbox's 60 Hz vertical blank, as on the console.\n"
+                          "Off: it runs as fast as it can draw, so game speed rises with the frame rate\n"
+                          "(VSync still holds it to the monitor). For benchmarks.");
+
     DrawAntiAliasing();
 
     ImGui::SeparatorText("Stats window");

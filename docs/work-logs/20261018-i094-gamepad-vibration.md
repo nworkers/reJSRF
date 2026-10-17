@@ -28,6 +28,7 @@
 | 숨긴 창 데모 100초 | 정상. 데모는 진동을 요청하지 않는다(요청 로그 없음). 프레임 1500은 이전 빌드와 같다. 3000·4650은 빌드가 바뀔 때의 실시간 진행 차이로 어긋난다(i091 작업 로그와 같은 현상) |
 | 설정 파일 | 기존 `rejsrf.ini`를 읽기만 해서는 바뀌지 않는다 |
 | Input 탭 화면 | Info, Graphics, Input 탭. Vibration, Strength 100%, Test 버튼 |
+| 성능(사용자가 저하를 보고) | VSync와 vblank 대기를 끈 숨긴 창 데모에서 진동 전(main)과 같다: 구간별 212/194/212 fps 대 212/195/215 fps, 각 2회. Xbox Series X 패드에서 `SDL_RumbleGamepad` 한 번은 약 0.02 ms. 보고한 실행의 로그는 시작 설정이 MSAA 16x와 배율 4였다 |
 | 실제 패드 진동(Test 버튼, 플레이 중 진동) | 사용자 확인 대기 |
 
 ---
@@ -62,4 +63,5 @@ Design: [20261018-i094](../design/20261018-i094-gamepad-vibration.md) · Work or
 | Hidden-window demo, 100 s | runs; the demo asks for no rumble (no request logged). Frame 1500 matches the previous build; 3000 and 4650 drift with real-time progress whenever the build changes (as in the i091 work log) |
 | Settings file | reading an existing `rejsrf.ini` leaves it unchanged |
 | Input tab | Info, Graphics and Input tabs; Vibration, Strength 100 %, the Test button |
+| Performance (the user reported a drop) | same as before vibration (main) in the hidden-window demo with VSync and the vblank wait off: 212/194/212 fps against 212/195/215 fps per window, two runs each. One `SDL_RumbleGamepad` takes about 0.02 ms on an Xbox Series X pad. The reported run started with MSAA 16x at scale 4 |
 | Real pad rumble (Test button, rumble in play) | waiting for the user's check |
