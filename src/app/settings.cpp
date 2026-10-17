@@ -160,9 +160,26 @@ Settings SettingsFile::Load()
         {
             ParseBool(value, &settings.vsync);
         }
-        else if (key == "showfpsoverlay")
+        else if (key == "showfpsoverlay" || key == "showfps")
         {
-            ParseBool(value, &settings.show_fps_overlay);
+            ParseBool(value, &settings.show_fps);
+        }
+        else if (key == "showmemory")
+        {
+            ParseBool(value, &settings.show_memory);
+        }
+        else if (key == "showvideomemory")
+        {
+            ParseBool(value, &settings.show_video_memory);
+        }
+        else if (key == "statsx" || key == "statsy")
+        {
+            char* end = nullptr;
+            const float fraction = std::strtof(value.c_str(), &end);
+            if (end != value.c_str() && *end == '\0' && fraction >= 0.0f && fraction <= 1.0f)
+            {
+                (key == "statsx" ? settings.stats_x : settings.stats_y) = fraction;
+            }
         }
     }
     std::fprintf(stderr, "[settings] loaded %s\n", path_.c_str());
@@ -182,7 +199,15 @@ bool SettingsFile::Save(const Settings& settings)
          << "Fullscreen = " << flag(settings.fullscreen) << "\n"
          << "Widescreen = " << flag(settings.widescreen) << "\n"
          << "VSync = " << flag(settings.vsync) << "\n"
-         << "ShowFpsOverlay = " << flag(settings.show_fps_overlay) << "\n";
+         << "; The stats window: its sections, and its top-right corner as fractions of the window.\n"
+         << "ShowFps = " << flag(settings.show_fps) << "\n"
+         << "ShowMemory = " << flag(settings.show_memory) << "\n"
+         << "ShowVideoMemory = " << flag(settings.show_video_memory) << "\n";
+    if (settings.stats_x >= 0.0f && settings.stats_y >= 0.0f)
+    {
+        text << "StatsX = " << settings.stats_x << "\n"
+             << "StatsY = " << settings.stats_y << "\n";
+    }
     if (WriteFile(path_, text.str()))
     {
         return true;

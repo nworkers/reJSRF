@@ -95,6 +95,21 @@ ShowFpsOverlay = false
 * Hor+ 와이드스크린(#85), 오디오·키 설정, 메뉴 중 일시 정지.
 * 한글 글꼴(UI는 영어).
 
+### 2.7 사용자 확인 뒤 바꾼 것 (앞의 FPS 패널·게임패드 토글을 대체한다)
+
+* 메뉴 높이는 탭 내용에 맞춘다(너비는 비율 고정, 높이는 자동). Info 탭이 스크롤 없이 다 보인다.
+* **Stats 창**이 FPS 패널을 대체한다.
+  * FPS, Memory, Video memory 세 섹션이 있고, Graphics 탭의 "Stats window" 체크박스로 각각 켠다(`ShowFps`, `ShowMemory`, `ShowVideoMemory`). 켠 섹션만 한 창에 위에서부터 이어 붙인다.
+  * 창은 하나라도 켜져 있으면 메뉴와 상관없이 보인다. 제목 표시줄을 끌어 옮길 수 있고, X는 세 섹션을 모두 끈다.
+  * 위치는 창의 오른쪽 위 꼭짓점을 게임 창에 대한 비율로 저장한다(`StatsX`, `StatsY`). 끌고 있지 않을 때는 매 프레임 이 비율로 놓는다. 그래서 게임 창 크기가 바뀌어도 같은 자리에 있고, 섹션을 켜면 왼쪽·아래로 자란다.
+  * 섹션마다 같은 레이아웃이다: 현재 값, 최근 60초 그래프, 오른쪽 눈금 설명.
+    * Memory: 프로세스 working set을 그린다. 축은 최댓값의 1.25배 이상인 둥근 값이고, 눈금은 최대·절반·0이다.
+    * Video memory: 드라이버가 알려 주면 GPU 사용량(다른 프로그램 포함)을 카드 용량 축에 그린다. 모르면 HLE 리소스 합계를 자동 축에 그린다.
+* **그래프 안정화**: 0.5초 칸을 절대 시간(`floor(초/0.5)`)에 고정한다. 끝난 칸은 값을 확정해 보관하고(최근 120칸), 그래프는 칸 단위로 왼쪽으로만 흐른다. 예전에는 "지금으로부터 60초"를 매 프레임 다시 나눠 지난 값이 흔들렸다. 표시하는 현재 값은 끝난 두 칸(1초)의 평균이다. 메모리 값도 칸이 끝날 때 함께 잰다.
+* **게임패드**
+  * LT+RT+Y가 눌리는 순간 메뉴를 토글한다(Back+Start 1초를 대체). 트리거는 절반 넘게 당기면 눌린 것으로 본다.
+  * LT+RT+L3+R3을 1초 누르면 게임을 끝낸다. 플랫폼이 창 닫기 요청으로 보고하고, HLE는 창을 닫을 때와 같이 종료한다.
+
 ## 3. 검증
 
 * Release·Debug 빌드, 회귀 도구.
@@ -200,6 +215,21 @@ ShowFpsOverlay = false
 
 * Hor+ widescreen (#85), audio and key settings, pausing while the menu is open.
 * A Korean font (the UI is in English).
+
+### 2.7 Changes after the user's check (replacing the FPS panel and the gamepad toggle above)
+
+* The menu's height fits the tab (width fixed in proportion, height automatic), so the Info tab shows without scrolling.
+* A **stats window** replaces the FPS panel.
+  * It has three sections, FPS, Memory and Video memory, each turned on by the Graphics tab's "Stats window" checkboxes (`ShowFps`, `ShowMemory`, `ShowVideoMemory`). Only the sections turned on are stacked in one window, top to bottom.
+  * The window shows whenever any section is on, menu or not. It moves by its title bar, and its close box turns all three sections off.
+  * Its place is its top-right corner as fractions of the game window (`StatsX`, `StatsY`). Except while it is being dragged, it is placed from those fractions every frame, so it stays put in proportion when the game window changes size and grows leftward and down as sections are added.
+  * Every section has the same layout: the current value, a graph of the last 60 seconds, tick labels on the right.
+    * Memory plots the process's working set. The axis is a round value at least 1.25 times the peak, with ticks at the maximum, half and 0.
+    * Video memory plots the GPU's use (all programs) against the card's size when the driver tells, else this HLE's resources on an automatic axis.
+* **A steady graph**: the 0.5 s bins are fixed in absolute time (`floor(seconds/0.5)`). A finished bin's value is final and kept (the last 120), and the graph only scrolls by whole bins. Before, "the last 60 s" was re-binned every frame, so past values shook. The value shown is the average of the last two finished bins (one second). Memory is measured as each bin finishes.
+* **Gamepad**
+  * LT+RT+Y toggles the menu as it goes down (replacing Back+Start held for a second). A trigger counts past half way.
+  * LT+RT+L3+R3 held for a second quits: the platform reports it as a window close request, and the HLE ends as it does when the window closes.
 
 ## 3. Verification
 

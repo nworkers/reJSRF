@@ -10,6 +10,8 @@
 #include "imgui.h"
 
 #include <algorithm>
+#include <cfloat>
+#include <cmath>
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
@@ -27,11 +29,11 @@ constexpr uint32_t kGuestWidth = 640;
 constexpr uint32_t kGuestHeight = 480;
 constexpr uint32_t kMaxScale = 8;
 
-// The FPS panel: the last 60 s in 0.5 s bins, on a 0..70 FPS axis.
-constexpr double kHistorySeconds = 60.0;
+// The stats history: the last 60 s in 0.5 s bins fixed in time.
 constexpr double kBinSeconds = 0.5;
-constexpr int kBins = static_cast<int>(kHistorySeconds / kBinSeconds);
-constexpr float kAxisMax = 70.0f;
+constexpr size_t kBins = 120;
+constexpr float kFpsAxisMax = 70.0f;
+constexpr double kMib = 1024.0 * 1024.0;
 
 // A setting changed elsewhere (a hotkey, a double click) follows the actual
 // state into the file; the menu's own change, arriving late, does not.
@@ -61,10 +63,21 @@ void Row(const char* label, const std::string& value)
     ImGui::TextWrapped("%s", value.empty() ? "-" : value.c_str());
 }
 
+bool BeginInfoTable(const char* id)
+{
+    if (!ImGui::BeginTable(id, 2, ImGuiTableFlags_SizingStretchProp))
+    {
+        return false;
+    }
+    ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthFixed, 130.0f * ImGui::GetStyle().FontScaleMain);
+    ImGui::TableSetupColumn("value", ImGuiTableColumnFlags_WidthStretch);
+    return true;
+}
+
 std::string Mib(uint64_t bytes)
 {
     char buffer[32];
-    std::snprintf(buffer, sizeof(buffer), "%.1f MiB", static_cast<double>(bytes) / (1024.0 * 1024.0));
+    std::snprintf(buffer, sizeof(buffer), "%.1f MiB", static_cast<double>(bytes) / kMib);
     return buffer;
 }
 
@@ -76,6 +89,64 @@ std::string Printf(const char* format, ...)
     std::vsnprintf(buffer, sizeof(buffer), format, args);
     va_end(args);
     return buffer;
+}
+
+// A memory axis: the next "round" value at least 25% above the peak.
+float MemoryAxisMax(float peak)
+{
+    const float target = std::max(peak * 1.25f, 16.0f);
+    float step = 16.0f;
+    while (step * 8.0f < target)
+    {
+        step *= 2.0f;
+    }
+    return std::ceil(target / step) * step;
+}
+
+struct Tick
+{
+    float value;
+    std::string label;
+    ImU32 color;
+    float thickness;
+};
+
+// One stats section's graph: the history right-aligned (newest at the right
+// edge), ticks across with their labels to the right.
+void DrawGraph(const std::vector<float>& values, float axis_max, const std::vector<Tick>& ticks, ImU32 line_color,
+               float label_width)
+{
+    const float scale = ImGui::GetStyle().FontScaleMain;
+    const float graph_width = 240.0f * scale;
+    const float graph_height = 64.0f * scale;
+    const float pad = ImGui::GetFontSize() * 0.5f;  // room for the top and bottom labels
+    const ImVec2 origin = ImGui::GetCursorScreenPos();
+    ImGui::Dummy(ImVec2(graph_width + label_width, graph_height + pad * 2.0f));
+    ImDrawList* draw = ImGui::GetWindowDrawList();
+    const float top = origin.y + pad;
+    const auto y_of = [&](float value) {
+        return top + graph_height * (1.0f - std::clamp(value, 0.0f, axis_max) / axis_max);
+    };
+    draw->AddRectFilled(ImVec2(origin.x, top), ImVec2(origin.x + graph_width, top + graph_height),
+                        IM_COL32(0, 0, 0, 110));
+    for (const Tick& tick : ticks)
+    {
+        const float y = y_of(tick.value);
+        draw->AddLine(ImVec2(origin.x, y), ImVec2(origin.x + graph_width, y), tick.color, tick.thickness);
+        draw->AddText(ImVec2(origin.x + graph_width + 6.0f * scale, y - ImGui::GetFontSize() * 0.5f), tick.color,
+                      tick.label.c_str());
+    }
+    std::vector<ImVec2> points;
+    const size_t first_slot = kBins - values.size();
+    for (size_t i = 0; i < values.size(); ++i)
+    {
+        const float x = origin.x + graph_width * (static_cast<float>(first_slot + i) + 0.5f) / kBins;
+        points.push_back(ImVec2(x, y_of(values[i])));
+    }
+    if (points.size() >= 2)
+    {
+        draw->AddPolyline(points.data(), static_cast<int>(points.size()), line_color, 1.5f * scale);
+    }
 }
 
 }  // namespace
@@ -122,42 +193,90 @@ void SettingsUi::ObserveActualState()
     }
 }
 
+void SettingsUi::TakeMemorySnapshot()
+{
+    process_memory_ = rexbox::platform::QueryProcessMemory();
+    video_memory_ = rexbox::hle::d3d8::GetVideoMemoryInfo();
+    const rexbox::runtime::GuestHeap* heap = rexbox::runtime::Env().heap;
+    guest_known_ = heap != nullptr;
+    if (guest_known_)
+    {
+        guest_total_ = rexbox::runtime::GuestMemory::kAddressSpaceSize;
+        guest_used_ = guest_total_ - heap->free_bytes();
+    }
+}
+
+// FPS per bin comes from the frame intervals ending in it (counting frames
+// would jitter by one), and each bin is fixed once its 0.5 s are over, so
+// the graph only scrolls; it never redraws the past.
+void SettingsUi::Record(double now)
+{
+    const int64_t bin = static_cast<int64_t>(std::floor(now / kBinSeconds));
+    if (bin != bin_)
+    {
+        if (bin_ >= 0)
+        {
+            TakeMemorySnapshot();
+            Sample sample;
+            sample.fps = bin_time_ > 0.0 ? static_cast<float>(bin_frames_ / bin_time_) : 0.0f;
+            sample.memory_mib = static_cast<float>(process_memory_.working_set / kMib);
+            const rexbox::hle::d3d8::VideoMemoryInfo& video = video_memory_;
+            sample.video_mib = static_cast<float>(
+                (video.driver_total_known ? video.driver_total - video.driver_free
+                                          : video.render_target_bytes + video.texture_bytes) /
+                kMib);
+            history_.push_back(sample);
+            // Bins with no present (a stall) count as 0 FPS.
+            for (int64_t missing = bin_ + 1; missing < bin && history_.size() < 2 * kBins; ++missing)
+            {
+                Sample stalled = sample;
+                stalled.fps = 0.0f;
+                history_.push_back(stalled);
+            }
+            while (history_.size() > kBins)
+            {
+                history_.pop_front();
+            }
+        }
+        bin_ = bin;
+        bin_frames_ = 0;
+        bin_time_ = 0.0;
+    }
+    if (last_present_ >= 0.0)
+    {
+        ++bin_frames_;
+        bin_time_ += now - last_present_;
+    }
+    last_present_ = now;
+}
+
 void SettingsUi::Build()
 {
-    const double now = std::chrono::duration<double>(std::chrono::steady_clock::now() - start_).count();
-    presents_.push_back(now);
-    while (!presents_.empty() && now - presents_.front() > kHistorySeconds)
-    {
-        presents_.pop_front();
-    }
+    Record(std::chrono::duration<double>(std::chrono::steady_clock::now() - start_).count());
     ObserveActualState();
-    const bool menu = rexbox::platform::OverlayVisible();
-    if (menu)
+    if (rexbox::platform::OverlayVisible())
     {
         DrawMenu();
     }
-    if (menu || settings_.show_fps_overlay)
-    {
-        DrawFpsPanel();
-    }
+    DrawStatsWindow();
 }
 
 void SettingsUi::DrawMenu()
 {
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
-    // The menu keeps its size in proportion to the window, centered (the
-    // platform scales the style with the window).
+    // The menu keeps its width in proportion to the window, centered (the
+    // platform scales the style with the window); its height fits the tab.
     ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f,
                                    viewport->WorkPos.y + viewport->WorkSize.y * 0.5f),
                             ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-    const float scale = ImGui::GetStyle().FontScaleMain;
-    ImGui::SetNextWindowSize(ImVec2(560.0f * scale, 450.0f * scale), ImGuiCond_Always);
+    const float width = 560.0f * ImGui::GetStyle().FontScaleMain;
+    ImGui::SetNextWindowSizeConstraints(ImVec2(width, 0.0f), ImVec2(width, FLT_MAX));
     bool open = true;
     if (ImGui::Begin("reJSRF Settings", &open,
-                     ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove))
+                     ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize))
     {
         ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-        ImGui::TextWrapped("Tab (or holding Back+Start) closes this menu. The game keeps running without input.");
+        ImGui::TextWrapped("Tab (LT+RT+Y on a gamepad) closes this menu. The game keeps running without input.");
         ImGui::PopStyleColor();
         if (ImGui::BeginTabBar("tabs"))
         {
@@ -181,34 +300,14 @@ void SettingsUi::DrawMenu()
     }
 }
 
-void SettingsUi::RefreshMemory(double now)
-{
-    if (memory_time_ >= 0.0 && now - memory_time_ < 0.5)
-    {
-        return;
-    }
-    memory_time_ = now;
-    process_memory_ = rexbox::platform::QueryProcessMemory();
-    video_memory_ = rexbox::hle::d3d8::GetVideoMemoryInfo();
-    const rexbox::runtime::GuestHeap* heap = rexbox::runtime::Env().heap;
-    guest_known_ = heap != nullptr;
-    if (guest_known_)
-    {
-        guest_total_ = rexbox::runtime::GuestMemory::kAddressSpaceSize;
-        guest_used_ = guest_total_ - heap->free_bytes();
-    }
-}
-
 void SettingsUi::DrawInfoTab()
 {
     rexbox::platform::DisplayInfo info;
     rexbox::platform::GetDisplayInfo(&info);
     const rexbox::hle::d3d8::RendererInfo renderer = rexbox::hle::d3d8::GetRendererInfo();
     const uint32_t scale = rexbox::hle::d3d8::RenderScale();
-    if (ImGui::BeginTable("info", 2, ImGuiTableFlags_SizingStretchProp))
+    if (BeginInfoTable("info"))
     {
-        ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthFixed, 130.0f * ImGui::GetStyle().FontScaleMain);
-        ImGui::TableSetupColumn("value", ImGuiTableColumnFlags_WidthStretch);
         Row("reJSRF", "v" + build_.version);
         Row("Build", build_.build_time);
         Row("Configuration", build_.identity);
@@ -217,10 +316,8 @@ void SettingsUi::DrawInfoTab()
         ImGui::EndTable();
     }
     ImGui::SeparatorText("Driver");
-    if (ImGui::BeginTable("driver", 2, ImGuiTableFlags_SizingStretchProp))
+    if (BeginInfoTable("driver"))
     {
-        ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthFixed, 130.0f * ImGui::GetStyle().FontScaleMain);
-        ImGui::TableSetupColumn("value", ImGuiTableColumnFlags_WidthStretch);
         Row("Vendor", renderer.vendor);
         Row("Renderer", renderer.renderer);
         Row(info.gl_es ? "OpenGL ES" : "OpenGL", renderer.version);
@@ -228,10 +325,8 @@ void SettingsUi::DrawInfoTab()
         ImGui::EndTable();
     }
     ImGui::SeparatorText("Display");
-    if (ImGui::BeginTable("display", 2, ImGuiTableFlags_SizingStretchProp))
+    if (BeginInfoTable("display"))
     {
-        ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthFixed, 130.0f * ImGui::GetStyle().FontScaleMain);
-        ImGui::TableSetupColumn("value", ImGuiTableColumnFlags_WidthStretch);
         Row("Monitor", info.refresh_hz > 0 ? Printf("%.2f Hz", info.refresh_hz) : std::string());
         Row("Swap interval", Printf("%d (%s)", info.swap_interval,
                                     info.swap_interval < 0   ? "adaptive vsync"
@@ -242,12 +337,9 @@ void SettingsUi::DrawInfoTab()
         Row("Settings file", file_ != nullptr ? file_->path() : std::string());
         ImGui::EndTable();
     }
-    RefreshMemory(presents_.empty() ? 0.0 : presents_.back());
     ImGui::SeparatorText("Memory");
-    if (ImGui::BeginTable("memory", 2, ImGuiTableFlags_SizingStretchProp))
+    if (BeginInfoTable("memory"))
     {
-        ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthFixed, 130.0f * ImGui::GetStyle().FontScaleMain);
-        ImGui::TableSetupColumn("value", ImGuiTableColumnFlags_WidthStretch);
         const rexbox::platform::ProcessMemory& process = process_memory_;
         Row("Process", process.known ? Mib(process.working_set) + " in use, " + Mib(process.private_bytes) +
                                            " committed"
@@ -259,15 +351,14 @@ void SettingsUi::DrawInfoTab()
         ImGui::EndTable();
     }
     ImGui::SeparatorText("Video memory");
-    if (ImGui::BeginTable("vram", 2, ImGuiTableFlags_SizingStretchProp))
+    if (BeginInfoTable("vram"))
     {
-        ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthFixed, 130.0f * ImGui::GetStyle().FontScaleMain);
-        ImGui::TableSetupColumn("value", ImGuiTableColumnFlags_WidthStretch);
         const rexbox::hle::d3d8::VideoMemoryInfo& video = video_memory_;
         std::string gpu = "not reported by this driver";
         if (video.driver_total_known)
         {
-            gpu = Mib(video.driver_total - video.driver_free) + " of " + Mib(video.driver_total) + " in use (all programs)";
+            gpu = Mib(video.driver_total - video.driver_free) + " of " + Mib(video.driver_total) +
+                  " in use (all programs)";
         }
         else if (video.driver_free_known)
         {
@@ -357,112 +448,185 @@ void SettingsUi::DrawGraphicsTab()
         ImGui::TextDisabled("(REXBOX_VSYNC set at start)");
     }
 
-    if (ImGui::Checkbox("Show FPS overlay", &settings_.show_fps_overlay))
+    ImGui::SeparatorText("Stats window");
+    bool changed = ImGui::Checkbox("FPS", &settings_.show_fps);
+    ImGui::SameLine();
+    changed |= ImGui::Checkbox("Memory", &settings_.show_memory);
+    ImGui::SameLine();
+    changed |= ImGui::Checkbox("Video memory", &settings_.show_video_memory);
+    if (changed)
     {
         Save();
     }
-    ImGui::SameLine();
-    ImGui::TextDisabled("(?)");
-    ImGui::SetItemTooltip("Keeps the FPS graph at the top right with the menu closed.");
+    ImGui::TextDisabled("The checked sections share one window over the game; drag it by its title bar.");
 
     ImGui::Spacing();
     ImGui::TextDisabled("Shortcuts: Ctrl+1..8 resolution, Alt+Enter or double click fullscreen,\n"
-                        "Alt+1/2/3 window size, F9 diagnostic capture.");
+                        "Alt+1/2/3 window size, F9 diagnostic capture.\n"
+                        "Gamepad: LT+RT+Y menu, LT+RT+L3+R3 held 1 s quits.");
 }
 
-void SettingsUi::DrawFpsPanel()
+void SettingsUi::DrawStatsWindow()
 {
-    const double now = presents_.empty() ? 0.0 : presents_.back();
-    // FPS from the frame intervals themselves (counting presents per bin
-    // would jitter by a frame): intervals ending in a bin over their sum.
-    // The current FPS is the same over the last second.
-    std::vector<int> bin_frames(kBins, 0);
-    std::vector<double> bin_time(kBins, 0.0);
-    int recent_frames = 0;
-    double recent_time = 0.0;
-    const double history_start = now - kHistorySeconds;
-    for (size_t i = 1; i < presents_.size(); ++i)
+    if (!settings_.show_fps && !settings_.show_memory && !settings_.show_video_memory)
     {
-        const double time = presents_[i];
-        const double interval = time - presents_[i - 1];
-        if (now - time < 1.0)
-        {
-            ++recent_frames;
-            recent_time += interval;
-        }
-        const int bin = static_cast<int>((time - history_start) / kBinSeconds);
-        if (bin >= 0 && bin < kBins)
-        {
-            ++bin_frames[bin];
-            bin_time[bin] += interval;
-        }
+        return;
     }
-    const double current_fps = recent_time > 0.0 ? recent_frames / recent_time : 0.0;
-
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
-    const float margin = 10.0f * ImGui::GetStyle().FontScaleMain;
-    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x - margin, viewport->WorkPos.y + margin),
-                            ImGuiCond_Always, ImVec2(1.0f, 0.0f));
-    ImGui::SetNextWindowBgAlpha(0.65f);
-    const ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
-                                   ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
-                                   ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoMove;
-    if (ImGui::Begin("##fps", nullptr, flags))
+    const float scale = ImGui::GetStyle().FontScaleMain;
+    // Anchored every frame by its top-right corner, as fractions of the game
+    // window, so it keeps its place in proportion to the window and grows
+    // leftward and down as sections are added. While the user drags it,
+    // ImGui moves it and the fractions follow.
+    if (!stats_moved_)
     {
-        ImGui::Text("FPS %.1f", current_fps);
-        ImGui::SameLine();
-        ImGui::TextDisabled("last 60 s");
-
-        const float scale = ImGui::GetStyle().FontScaleMain;
-        const float graph_width = 240.0f * scale;
-        const float graph_height = 80.0f * scale;
+        const float margin = 10.0f * scale;
+        const float x = settings_.stats_x >= 0.0f ? settings_.stats_x * viewport->WorkSize.x
+                                                  : viewport->WorkSize.x - margin;
+        const float y = settings_.stats_y >= 0.0f ? settings_.stats_y * viewport->WorkSize.y : margin;
+        ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + x, viewport->WorkPos.y + y), ImGuiCond_Always,
+                                ImVec2(1.0f, 0.0f));
+    }
+    ImGui::SetNextWindowBgAlpha(0.7f);
+    bool open = true;
+    const ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_AlwaysAutoResize |
+                                   ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
+                                   ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoScrollbar;
+    if (ImGui::Begin("Stats", &open, flags))
+    {
+        // One label column for every section, so the graphs line up.
         const float label_width = ImGui::CalcTextSize("30  half speed").x + 10.0f * scale;
-        const float pad = ImGui::GetFontSize() * 0.5f;  // room for the 70 and 0 labels
-        const ImVec2 origin = ImGui::GetCursorScreenPos();
-        ImGui::Dummy(ImVec2(graph_width + label_width, graph_height + pad * 2.0f));
-        ImDrawList* draw = ImGui::GetWindowDrawList();
-        const float top = origin.y + pad;
-        const auto y_of = [&](float fps) { return top + graph_height * (1.0f - std::clamp(fps, 0.0f, kAxisMax) / kAxisMax); };
-        draw->AddRectFilled(ImVec2(origin.x, top), ImVec2(origin.x + graph_width, top + graph_height),
-                            IM_COL32(0, 0, 0, 110));
-
-        struct Tick
-        {
-            float fps;
-            const char* label;
-            ImU32 color;
-            float thickness;
-        };
-        const Tick ticks[] = {
-            {60.0f, "60  full speed", IM_COL32(90, 220, 110, 255), 1.5f},
-            {30.0f, "30  half speed", IM_COL32(160, 160, 160, 200), 1.0f},
-            {0.0f, "0  stopped", IM_COL32(160, 160, 160, 200), 1.0f},
-        };
-        for (const Tick& tick : ticks)
-        {
-            const float y = y_of(tick.fps);
-            draw->AddLine(ImVec2(origin.x, y), ImVec2(origin.x + graph_width, y), tick.color, tick.thickness);
-            draw->AddText(ImVec2(origin.x + graph_width + 6.0f * scale, y - ImGui::GetFontSize() * 0.5f), tick.color,
-                          tick.label);
-        }
-
-        // Bins from before the start have no data and are left out.
-        std::vector<ImVec2> points;
-        for (int i = 0; i < kBins; ++i)
-        {
-            // The newest bin is still filling.
-            if (history_start + i * kBinSeconds >= 0.0 && i < kBins - 1 && bin_time[i] > 0.0)
+        const size_t count = history_.size();
+        const auto latest = [&](float Sample::*field) {
+            // The last two bins (one second), so the number moves calmly.
+            if (count == 0)
             {
-                const float fps = static_cast<float>(bin_frames[i] / bin_time[i]);
-                points.push_back(ImVec2(origin.x + graph_width * (i + 0.5f) / kBins, y_of(fps)));
+                return 0.0f;
             }
-        }
-        if (points.size() >= 2)
+            if (count == 1)
+            {
+                return history_.back().*field;
+            }
+            return (history_[count - 1].*field + history_[count - 2].*field) * 0.5f;
+        };
+        const auto series = [&](float Sample::*field) {
+            std::vector<float> values;
+            values.reserve(count);
+            for (const Sample& sample : history_)
+            {
+                values.push_back(sample.*field);
+            }
+            return values;
+        };
+        const auto peak = [&](float Sample::*field) {
+            float result = 0.0f;
+            for (const Sample& sample : history_)
+            {
+                result = std::max(result, sample.*field);
+            }
+            return result;
+        };
+        const ImU32 grey = IM_COL32(160, 160, 160, 200);
+        bool first = true;
+        const auto separate = [&]() {
+            if (!first)
+            {
+                ImGui::Separator();
+            }
+            first = false;
+        };
+
+        if (settings_.show_fps)
         {
-            draw->AddPolyline(points.data(), static_cast<int>(points.size()), IM_COL32(255, 210, 80, 255), 1.5f);
+            separate();
+            ImGui::Text("FPS %.1f", latest(&Sample::fps));
+            ImGui::SameLine();
+            ImGui::TextDisabled("last 60 s");
+            DrawGraph(series(&Sample::fps), kFpsAxisMax,
+                      {{60.0f, "60  full speed", IM_COL32(90, 220, 110, 255), 1.5f},
+                       {30.0f, "30  half speed", grey, 1.0f},
+                       {0.0f, "0  stopped", grey, 1.0f}},
+                      IM_COL32(255, 210, 80, 255), label_width);
+        }
+        if (settings_.show_memory)
+        {
+            separate();
+            const rexbox::platform::ProcessMemory& process = process_memory_;
+            ImGui::Text("Memory %.0f MiB", latest(&Sample::memory_mib));
+            ImGui::SameLine();
+            if (process.address_space_total != 0)
+            {
+                ImGui::TextDisabled("address space %.0f / %.0f MiB", process.address_space_used / kMib,
+                                    process.address_space_total / kMib);
+            }
+            const float axis = MemoryAxisMax(peak(&Sample::memory_mib));
+            DrawGraph(series(&Sample::memory_mib), axis,
+                      {{axis, Printf("%.0f MiB", axis), grey, 1.0f},
+                       {axis * 0.5f, Printf("%.0f MiB", axis * 0.5f), grey, 1.0f},
+                       {0.0f, "0", grey, 1.0f}},
+                      IM_COL32(110, 180, 255, 255), label_width);
+        }
+        if (settings_.show_video_memory)
+        {
+            separate();
+            const rexbox::hle::d3d8::VideoMemoryInfo& video = video_memory_;
+            ImGui::Text("Video memory %.0f MiB", latest(&Sample::video_mib));
+            ImGui::SameLine();
+            if (video.driver_total_known)
+            {
+                ImGui::TextDisabled("of %.0f MiB (all programs)", video.driver_total / kMib);
+            }
+            else
+            {
+                ImGui::TextDisabled("reJSRF's own (driver does not tell)");
+            }
+            // With the card's size known, the axis is the card.
+            const float axis = video.driver_total_known ? static_cast<float>(video.driver_total / kMib)
+                                                        : MemoryAxisMax(peak(&Sample::video_mib));
+            DrawGraph(series(&Sample::video_mib), axis,
+                      {{axis, Printf("%.0f MiB", axis), grey, 1.0f},
+                       {axis * 0.5f, Printf("%.0f MiB", axis * 0.5f), grey, 1.0f},
+                       {0.0f, "0", grey, 1.0f}},
+                      IM_COL32(220, 130, 255, 255), label_width);
+        }
+
+        // A press on the window starts a possible drag: from the next frame
+        // ImGui places it, and its top-right corner is kept as fractions; the
+        // place is saved when the button is let go.
+        if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+        {
+            stats_moved_ = true;
+        }
+        if (stats_moved_)
+        {
+            const ImVec2 position = ImGui::GetWindowPos();
+            const ImVec2 size = ImGui::GetWindowSize();
+            stats_drag_x_ =
+                std::clamp((position.x + size.x - viewport->WorkPos.x) / viewport->WorkSize.x, 0.0f, 1.0f);
+            stats_drag_y_ = std::clamp((position.y - viewport->WorkPos.y) / viewport->WorkSize.y, 0.0f, 1.0f);
         }
     }
     ImGui::End();
+    if (stats_moved_ && !ImGui::IsMouseDown(ImGuiMouseButton_Left))
+    {
+        stats_moved_ = false;
+        if (std::fabs(stats_drag_x_ - settings_.stats_x) > 0.001f ||
+            std::fabs(stats_drag_y_ - settings_.stats_y) > 0.001f)
+        {
+            settings_.stats_x = stats_drag_x_;
+            settings_.stats_y = stats_drag_y_;
+            Save();
+        }
+    }
+    if (!open)
+    {
+        // The close box hides every section.
+        settings_.show_fps = false;
+        settings_.show_memory = false;
+        settings_.show_video_memory = false;
+        stats_moved_ = false;
+        Save();
+    }
 }
 
 }  // namespace rejsrf

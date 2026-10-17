@@ -347,7 +347,7 @@ void PumpDisplayEvents(bool* close_requested)
     }
     if (window != nullptr)
     {
-        sdl_internal::PollOverlayGamepadToggle();
+        close = sdl_internal::PollGamepadShortcuts() || close;
     }
     if (close_requested != nullptr)
     {

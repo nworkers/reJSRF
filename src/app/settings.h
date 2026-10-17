@@ -16,7 +16,14 @@ struct Settings
     bool fullscreen = false;
     bool widescreen = false;
     bool vsync = true;  // adaptive vsync; false: off
-    bool show_fps_overlay = false;
+    // The stats window's sections (shown while any is on) and where its
+    // top-right corner sits, as fractions of the window (negative: the
+    // default, top right).
+    bool show_fps = false;
+    bool show_memory = false;
+    bool show_video_memory = false;
+    float stats_x = -1.0f;
+    float stats_y = -1.0f;
 };
 
 // rejsrf.ini next to the executable, or in the user's settings folder when

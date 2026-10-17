@@ -44,6 +44,26 @@
 | ini를 미리 쓴 실행 | `[settings] loaded`, `render scale 2`. Widescreen으로 창과 화면이 16:9. 메뉴를 닫은 채 FPS 패널(60.0, 60·30·0 눈금과 설명) |
 | 게임패드 토글, 메뉴 중 게임 입력 차단, 전체화면·VSync 체크박스 | 미검증(사용자 플레이) |
 
+## 추가: Stats 창, 그래프 안정화, 게임패드 단축키 (사용자 요청, 설계 §2.7)
+
+* 메뉴: 높이를 탭 내용에 맞춘다(`SetNextWindowSizeConstraints`로 너비 고정, `AlwaysAutoResize`).
+* `settings_ui`
+  * 기록을 절대 시간의 0.5초 칸으로 바꿨다(`Record`, `Sample`). 끝난 칸에서 FPS·메모리·VRAM을 확정한다. 프레임이 없던 칸은 0 FPS다.
+  * `DrawStatsWindow`: 세 섹션, 공통 `DrawGraph`, 메모리 축 `MemoryAxisMax`. 위치는 비율로 매 프레임 놓고, 누른 뒤 놓을 때까지는 ImGui가 옮기게 둔다. 놓을 때 저장한다. X는 세 섹션을 끈다.
+  * Graphics 탭: "Stats window"의 FPS·Memory·Video memory 체크박스. 단축키 안내에 게임패드 조합을 넣었다.
+* `settings`: `ShowFps`(옛 `ShowFpsOverlay`도 읽는다), `ShowMemory`, `ShowVideoMemory`, `StatsX`, `StatsY`.
+* 플랫폼: `PollGamepadShortcuts`가 LT+RT+Y(눌리는 순간 토글)와 LT+RT+L3+R3 1초(닫기 요청)를 본다.
+* 가이드 문구를 갱신했다.
+
+| 검증 | 결과 |
+|---|---|
+| Release 빌드 | 경고·오류 없음 |
+| 세 섹션을 켠 ini로 실행 | Stats 창에 세 섹션이 이어 붙음. 2초 간격 두 캡처에서 그래프 모양이 같고 4칸만큼 왼쪽으로 밀림(지난 값 고정) |
+| 메뉴 Info 탭 | 스크롤 없이 Memory(187 MiB 사용, 주소 공간 1022/4096 MiB, Xbox 63.8/128 MiB)와 Video memory(4168/24564 MiB, 렌더 타깃 2.3 MiB, 텍스처 70.7 MiB 115개)까지 보임 |
+| 마우스 끌기 | 창이 옮겨지고 놓을 때 `StatsX = 0.660937`, `StatsY = 0.305208` 저장. 다음 실행이 그 자리에서 시작 |
+| X | 세 섹션이 꺼지고 즉시 저장 |
+| 게임패드 LT+RT+Y, LT+RT+L3+R3 | 미검증(게임패드 필요) |
+
 ## 추가: Info 탭에 메모리와 VRAM (사용자 요청)
 
 * 플랫폼: `system_info.h`의 `QueryProcessMemory`(Win32: `GetProcessMemoryInfo`, `GlobalMemoryStatusEx`).
@@ -104,6 +124,26 @@ Design: [20261017-i084](../design/20261017-i084-settings-overlay.md) · Work ord
 | Visible window (keys sent by a program) | Tab opened the menu (`[overlay] menu opened (Tab)`); the Info tab showed version, build, commit, game, driver (NVIDIA RTX 4090, GL 3.3, GLSL 3.30) and display state; after clicking the Graphics tab and pressing Ctrl+2 the dropdown read `2X (1280x960)` and `rejsrf.ini` held `RenderScale = 2` at once |
 | A run with a prepared ini | `[settings] loaded`, `render scale 2`; widescreen made the window and picture 16:9; the FPS panel (60.0, the 60/30/0 ticks and labels) showed with the menu closed |
 | Gamepad toggle, game input blocked by the menu, Fullscreen and VSync checkboxes | not verified (user play) |
+
+## Added: stats window, steady graphs, gamepad shortcuts (user request, design §2.7)
+
+* Menu: the height fits the tab (width fixed through `SetNextWindowSizeConstraints`, `AlwaysAutoResize`).
+* `settings_ui`
+  * The history is kept in 0.5 s bins fixed in absolute time (`Record`, `Sample`); FPS, memory and VRAM are final when a bin finishes, and a bin with no frame is 0 FPS.
+  * `DrawStatsWindow`: three sections, a shared `DrawGraph`, the memory axis `MemoryAxisMax`. It is placed from the fractions every frame, and left to ImGui from a press on it until the release, when the place is saved; the close box turns the three sections off.
+  * Graphics tab: the "Stats window" FPS, Memory and Video memory checkboxes; the shortcut note names the gamepad combinations.
+* `settings`: `ShowFps` (the old `ShowFpsOverlay` is still read), `ShowMemory`, `ShowVideoMemory`, `StatsX`, `StatsY`.
+* Platform: `PollGamepadShortcuts` watches LT+RT+Y (toggles as it goes down) and LT+RT+L3+R3 held for a second (a close request).
+* The guide's wording is updated.
+
+| Check | Result |
+|---|---|
+| Release build | no warnings or errors |
+| A run with all three sections on | the stats window stacks the three; two captures 2 s apart show the same graph shapes moved left by four bins (past values fixed) |
+| Menu Info tab | shows through Memory (187 MiB in use, address space 1022/4096 MiB, Xbox 63.8/128 MiB) and Video memory (4168/24564 MiB, render targets 2.3 MiB, 115 textures in 70.7 MiB) without scrolling |
+| Mouse drag | the window moves, and on release `StatsX = 0.660937`, `StatsY = 0.305208` are saved; the next run starts there |
+| Close box | the three sections go off and are saved at once |
+| Gamepad LT+RT+Y, LT+RT+L3+R3 | not verified (needs a gamepad) |
 
 ## Added: memory and VRAM in the Info tab (user request)
 

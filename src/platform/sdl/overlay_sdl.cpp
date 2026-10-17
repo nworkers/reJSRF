@@ -55,10 +55,13 @@ void FollowWindowSize(SDL_Window* window)
     style.FontScaleMain = scale;
 }
 
-// Back+Start: when both went down, and whether this hold already toggled.
-constexpr uint64_t kGamepadHoldMs = 1000;
-uint64_t g_combo_since = 0;
-bool g_combo_fired = false;
+// Gamepad shortcuts: LT+RT+Y toggles the menu as it goes down; LT+RT with
+// both stick clicks held for a second quits. A trigger counts past half way.
+constexpr int16_t kTriggerDown = 16384;
+constexpr uint64_t kQuitHoldMs = 1000;
+bool g_menu_combo_held = false;
+uint64_t g_quit_since = 0;
+bool g_quit_fired = false;
 
 void Toggle(const char* how)
 {
@@ -163,34 +166,48 @@ bool OverlayProcessEvent(const SDL_Event& event)
     return false;
 }
 
-void PollOverlayGamepadToggle()
+bool PollGamepadShortcuts()
 {
-    bool held = false;
+    bool menu = false;
+    bool quit = false;
     int count = 0;
     SDL_JoystickID* ids = SDL_GetGamepads(&count);
-    for (int i = 0; ids != nullptr && i < count && !held; ++i)
+    for (int i = 0; ids != nullptr && i < count; ++i)
     {
         SDL_Gamepad* gamepad = SDL_GetGamepadFromID(ids[i]);  // only gamepads already open
-        held = gamepad != nullptr && SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_BACK) &&
-               SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_START);
+        if (gamepad == nullptr || SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER) < kTriggerDown ||
+            SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) < kTriggerDown)
+        {
+            continue;
+        }
+        menu = menu || SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_NORTH);
+        quit = quit || (SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_LEFT_STICK) &&
+                        SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_RIGHT_STICK));
     }
     SDL_free(ids);
-    if (!held)
+    if (menu && !g_menu_combo_held)
     {
-        g_combo_since = 0;
-        g_combo_fired = false;
-        return;
+        Toggle("LT+RT+Y");
+    }
+    g_menu_combo_held = menu;
+    if (!quit)
+    {
+        g_quit_since = 0;
+        g_quit_fired = false;
+        return false;
     }
     const uint64_t now = SDL_GetTicks();
-    if (g_combo_since == 0)
+    if (g_quit_since == 0)
     {
-        g_combo_since = now;
+        g_quit_since = now;
     }
-    if (!g_combo_fired && now - g_combo_since >= kGamepadHoldMs)
+    if (!g_quit_fired && now - g_quit_since >= kQuitHoldMs)
     {
-        g_combo_fired = true;
-        Toggle("Back+Start");
+        g_quit_fired = true;
+        std::fprintf(stderr, "[overlay] quit requested (LT+RT+L3+R3)\n");
+        return true;
     }
+    return false;
 }
 
 void ShutdownOverlay()

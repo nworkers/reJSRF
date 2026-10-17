@@ -18,8 +18,9 @@ bool DisplayIsEs();
 // overlay_sdl.cpp: an event for the overlay; true when it was the menu
 // toggle (Tab) and must go no further.
 bool OverlayProcessEvent(const SDL_Event& event);
-// Back+Start held for a second on a gamepad toggles the menu.
-void PollOverlayGamepadToggle();
+// Gamepad shortcuts: LT+RT+Y toggles the menu; true once LT+RT+L3+R3 has
+// been held for a second (a quit, reported like closing the window).
+bool PollGamepadShortcuts();
 // Releases the ImGui context and backends; called with the display's lock
 // held, before the GL context goes.
 void ShutdownOverlay();

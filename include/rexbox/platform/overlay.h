@@ -23,8 +23,9 @@ void SetOverlayBuilder(std::function<void()> builder);
 // call creates the ImGui context; GL state is restored afterwards.
 void RenderOverlay();
 
-// Whether the menu is open. Tab toggles it in the window, and so does
-// holding Back+Start on a gamepad for a second (seen by PumpDisplayEvents).
+// Whether the menu is open. Tab toggles it in the window, and LT+RT+Y on a
+// gamepad (seen by PumpDisplayEvents, which also reports LT+RT+L3+R3 held
+// for a second as a close request).
 // While it is open the game reads no input (ReadGamepad reports a connected
 // controller with nothing pressed) and the input goes to the overlay.
 bool OverlayVisible();
