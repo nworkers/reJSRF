@@ -60,8 +60,10 @@ private:
     void Record(double now);
     void TakeMemorySnapshot();
     void DrawMenu();
+    void DrawTab(void (SettingsUi::*draw)());
     void DrawInfoTab();
     void DrawGraphicsTab();
+    void DrawAntiAliasing();
     void DrawStatsWindow();
 
     BuildInfo build_;
@@ -70,8 +72,12 @@ private:
     bool observed_ = false;
     Tracked<uint32_t> render_scale_;
     Tracked<bool> fullscreen_;
+    Tracked<uint32_t> window_scale_;
     Tracked<bool> widescreen_;
     Tracked<bool> vsync_;
+    float tab_height_ = 0.0f;  // the tallest tab's content, divided by the OSD scale
+    bool menu_was_open_ = false;
+    int menu_frames_ = 0;  // frames since the menu opened
 
     // Stats: the bin being filled (index = floor(seconds / 0.5)) and the
     // finished ones, newest last.

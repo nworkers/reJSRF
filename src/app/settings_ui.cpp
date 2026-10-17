@@ -170,6 +170,7 @@ void SettingsUi::ObserveActualState()
     rexbox::platform::GetDisplayInfo(&info);
     const uint32_t scale = rexbox::hle::d3d8::RenderScale();
     const bool fullscreen = rexbox::platform::IsFullscreen();
+    const uint32_t window_scale = rexbox::platform::WindowScale();
     const bool widescreen = rexbox::hle::d3d8::Widescreen();
     const bool vsync = info.swap_interval != 0;
     if (!observed_)
@@ -179,12 +180,18 @@ void SettingsUi::ObserveActualState()
         observed_ = true;
         render_scale_ = {scale, scale};
         fullscreen_ = {fullscreen, fullscreen};
+        window_scale_ = {window_scale, window_scale};
         widescreen_ = {widescreen, widescreen};
         vsync_ = {vsync, vsync};
         return;
     }
     bool changed = Follow(scale, &render_scale_.seen, &render_scale_.expected, &settings_.render_scale);
     changed |= Follow(fullscreen, &fullscreen_.seen, &fullscreen_.expected, &settings_.fullscreen);
+    // A window resized by hand (0) keeps the last preset for the next start.
+    if (window_scale != 0)
+    {
+        changed |= Follow(window_scale, &window_scale_.seen, &window_scale_.expected, &settings_.window_scale);
+    }
     changed |= Follow(widescreen, &widescreen_.seen, &widescreen_.expected, &settings_.widescreen);
     changed |= Follow(vsync, &vsync_.seen, &vsync_.expected, &settings_.vsync);
     if (changed)
@@ -254,9 +261,18 @@ void SettingsUi::Build()
 {
     Record(std::chrono::duration<double>(std::chrono::steady_clock::now() - start_).count());
     ObserveActualState();
-    if (rexbox::platform::OverlayVisible())
+    const bool menu = rexbox::platform::OverlayVisible();
+    if (menu && !menu_was_open_)
+    {
+        // Measured afresh each time it opens (see DrawTab).
+        tab_height_ = 0.0f;
+        menu_frames_ = 0;
+    }
+    menu_was_open_ = menu;
+    if (menu)
     {
         DrawMenu();
+        ++menu_frames_;
     }
     DrawStatsWindow();
 }
@@ -282,12 +298,12 @@ void SettingsUi::DrawMenu()
         {
             if (ImGui::BeginTabItem("Info"))
             {
-                DrawInfoTab();
+                DrawTab(&SettingsUi::DrawInfoTab);
                 ImGui::EndTabItem();
             }
             if (ImGui::BeginTabItem("Graphics"))
             {
-                DrawGraphicsTab();
+                DrawTab(&SettingsUi::DrawGraphicsTab);
                 ImGui::EndTabItem();
             }
             ImGui::EndTabBar();
@@ -297,6 +313,28 @@ void SettingsUi::DrawMenu()
     if (!open)
     {
         rexbox::platform::SetOverlayVisible(false);
+    }
+}
+
+// Every tab is as tall as the tallest seen since the menu opened, so the
+// menu keeps one size whichever tab is open. Heights are kept divided by the
+// OSD scale, so they still fit after the window changes size. Info, the
+// tallest, is the tab shown first. A window's first frames are laid out
+// before it has its width (wrapped text then runs very tall), so they are
+// not measured, nor is any frame narrower than the menu's width.
+void SettingsUi::DrawTab(void (SettingsUi::*draw)())
+{
+    const float scale = ImGui::GetStyle().FontScaleMain;
+    const float top = ImGui::GetCursorPosY();
+    (this->*draw)();
+    const float height = ImGui::GetCursorPosY() - top;
+    if (menu_frames_ >= 2 && ImGui::GetWindowWidth() >= 560.0f * scale - 1.0f)
+    {
+        tab_height_ = std::max(tab_height_, height / scale);
+    }
+    if (height < tab_height_ * scale)
+    {
+        ImGui::Dummy(ImVec2(0.0f, tab_height_ * scale - height));
     }
 }
 
@@ -373,13 +411,53 @@ void SettingsUi::DrawInfoTab()
 
 void SettingsUi::DrawGraphicsTab()
 {
+    // Window size: the Alt+1/2/3 presets (docs/design/20261017-i090-window-size.md).
+    {
+        uint32_t picture_width = 0;
+        uint32_t picture_height = 0;
+        rexbox::platform::GetPictureSize(&picture_width, &picture_height);
+        const uint32_t current = rexbox::platform::WindowScale();
+        const auto label = [&](uint32_t scale) {
+            return Printf("%ux (%ux%u)", scale, picture_width * scale, picture_height * scale);
+        };
+        const std::string preview = current != 0       ? label(current)
+                                    : fullscreen_.seen ? std::string("Fullscreen")
+                                                       : std::string("Custom");
+        if (ImGui::BeginCombo("Window Size", preview.c_str()))
+        {
+            for (uint32_t scale = 1; scale <= rexbox::platform::kMaxWindowScale; ++scale)
+            {
+                const bool selected = scale == current;
+                if (ImGui::Selectable(label(scale).c_str(), selected) && !selected)
+                {
+                    settings_.window_scale = scale;
+                    window_scale_.expected = scale;
+                    // Leaving fullscreen is part of the preset.
+                    settings_.fullscreen = false;
+                    fullscreen_.expected = false;
+                    rexbox::platform::SetWindowScale(scale);
+                    Save();
+                }
+                if (selected)
+                {
+                    ImGui::SetItemDefaultFocus();
+                }
+            }
+            ImGui::EndCombo();
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("(?)");
+        ImGui::SetItemTooltip("The window at 1x-3x the picture (Alt+1/2/3 in the window).\n"
+                              "The last preset is the window's size at the next start.");
+    }
+
     // Rendering resolution.
     static std::vector<std::string> labels;
     if (labels.empty())
     {
         for (uint32_t scale = 1; scale <= kMaxScale; ++scale)
         {
-            labels.push_back(Printf("%uX (%ux%u)", scale, kGuestWidth * scale, kGuestHeight * scale));
+            labels.push_back(Printf("%ux (%ux%u)", scale, kGuestWidth * scale, kGuestHeight * scale));
         }
     }
     const uint32_t current = std::clamp<uint32_t>(render_scale_.expected, 1, kMaxScale);
@@ -448,6 +526,8 @@ void SettingsUi::DrawGraphicsTab()
         ImGui::TextDisabled("(REXBOX_VSYNC set at start)");
     }
 
+    DrawAntiAliasing();
+
     ImGui::SeparatorText("Stats window");
     bool changed = ImGui::Checkbox("FPS", &settings_.show_fps);
     ImGui::SameLine();
@@ -464,6 +544,75 @@ void SettingsUi::DrawGraphicsTab()
     ImGui::TextDisabled("Shortcuts: Ctrl+1..8 resolution, Alt+Enter or double click fullscreen,\n"
                         "Alt+1/2/3 window size, F9 diagnostic capture.\n"
                         "Gamepad: LT+RT+Y menu, LT+RT+L3+R3 held 1 s quits.");
+}
+
+// Anti-aliasing (MSAA or SMAA, never both) and anisotropic filtering
+// (docs/design/20261017-i089-anti-aliasing.md). Values over the driver's
+// limits cannot be picked.
+void SettingsUi::DrawAntiAliasing()
+{
+    namespace d3d8 = rexbox::hle::d3d8;
+    ImGui::SeparatorText("Image quality");
+
+    // One list: Off, MSAA 2x..16x, SMAA 1x. The menu's own value, since an
+    // MSAA change applies only after the next present.
+    static const uint32_t kMsaa[] = {2, 4, 8, 16};
+    const std::string preview = settings_.msaa != 0   ? Printf("MSAA %ux", settings_.msaa)
+                                : settings_.smaa != 0 ? std::string("SMAA 1x")
+                                                      : std::string("Off");
+    if (ImGui::BeginCombo("Anti-aliasing", preview.c_str()))
+    {
+        // {msaa, smaa} per entry.
+        const auto choose = [&](const char* name, uint32_t msaa, uint32_t smaa, bool enabled) {
+            const bool selected = settings_.msaa == msaa && settings_.smaa == smaa;
+            ImGui::BeginDisabled(!enabled);
+            if (ImGui::Selectable(name, selected) && !selected)
+            {
+                settings_.msaa = msaa;
+                settings_.smaa = smaa;
+                d3d8::SetMsaaSamples(msaa);
+                d3d8::SetSmaa(smaa != 0 ? d3d8::SmaaMode::k1x : d3d8::SmaaMode::kOff);
+                Save();
+            }
+            ImGui::EndDisabled();
+        };
+        choose("Off", 0, 0, true);
+        for (const uint32_t samples : kMsaa)
+        {
+            choose(Printf("MSAA %ux", samples).c_str(), samples, 0, samples <= d3d8::MaxMsaaSamples());
+        }
+        choose("SMAA 1x", 0, 1, true);
+        ImGui::EndCombo();
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("(?)");
+    ImGui::SetItemTooltip("MSAA: multisampling on every render target (up to %ux on this GPU); it costs\n"
+                          "video memory, multiplied by the rendering resolution.\n"
+                          "SMAA: post-process anti-aliasing (Jimenez et al.) on the final picture,\n"
+                          "finding edges by color. Lighter than MSAA, slightly softer.",
+                          d3d8::MaxMsaaSamples());
+
+    uint32_t anisotropy = d3d8::Anisotropy();
+    if (ImGui::BeginCombo("Anisotropic filtering", anisotropy <= 1 ? "Off" : Printf("%ux", anisotropy).c_str()))
+    {
+        static const uint32_t kRatios[] = {1, 2, 4, 8, 16};
+        for (const uint32_t ratio : kRatios)
+        {
+            const std::string name = ratio == 1 ? std::string("Off") : Printf("%ux", ratio);
+            ImGui::BeginDisabled(ratio > d3d8::MaxAnisotropy() && ratio != 1);
+            if (ImGui::Selectable(name.c_str(), ratio == anisotropy) && ratio != anisotropy)
+            {
+                settings_.anisotropy = ratio;
+                d3d8::SetAnisotropy(ratio);
+                Save();
+            }
+            ImGui::EndDisabled();
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("(?)");
+    ImGui::SetItemTooltip("Sharper textures at grazing angles (up to %ux on this GPU).", d3d8::MaxAnisotropy());
 }
 
 void SettingsUi::DrawStatsWindow()

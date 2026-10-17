@@ -148,6 +148,40 @@ Settings SettingsFile::Load()
                 settings.render_scale = static_cast<uint32_t>(scale);
             }
         }
+        else if (key == "windowscale")
+        {
+            char* end = nullptr;
+            const long scale = std::strtol(value.c_str(), &end, 10);
+            if (end != value.c_str() && *end == '\0' && scale >= 1 && scale <= 3)
+            {
+                settings.window_scale = static_cast<uint32_t>(scale);
+            }
+        }
+        else if (key == "msaa" || key == "anisotropy")
+        {
+            char* end = nullptr;
+            const long count = std::strtol(value.c_str(), &end, 10);
+            const bool power_of_two = count > 0 && (count & (count - 1)) == 0;
+            if (end != value.c_str() && *end == '\0' && count >= 0 && count <= 16 && (count == 0 || power_of_two))
+            {
+                if (key == "msaa")
+                {
+                    settings.msaa = count >= 2 ? static_cast<uint32_t>(count) : 0;
+                }
+                else
+                {
+                    settings.anisotropy = count >= 1 ? static_cast<uint32_t>(count) : 1;
+                }
+            }
+        }
+        else if (key == "smaa")
+        {
+            const std::string mode = Lower(value);
+            if (mode == "off" || mode == "1x")
+            {
+                settings.smaa = mode == "1x" ? 1 : 0;
+            }
+        }
         else if (key == "fullscreen")
         {
             ParseBool(value, &settings.fullscreen);
@@ -182,6 +216,10 @@ Settings SettingsFile::Load()
             }
         }
     }
+    if (settings.msaa != 0)
+    {
+        settings.smaa = 0;  // they exclude each other
+    }
     std::fprintf(stderr, "[settings] loaded %s\n", path_.c_str());
     return settings;
 }
@@ -193,12 +231,18 @@ bool SettingsFile::Save(const Settings& settings)
     text << "; reJSRF settings, written by the settings menu (Tab opens it).\n"
          << "; Environment variables (REXBOX_RENDER_SCALE, REXBOX_VSYNC) override these for a run.\n"
          << "[Graphics]\n"
-         << "; RenderScale: 1..8 (1: 640x480). Widescreen: 16:9, stretched for now.\n"
+         << "; WindowScale: 1..3 (the window at start). RenderScale: 1..8 (1: 640x480).\n"
+         << "; Widescreen: 16:9, stretched for now.\n"
          << "; VSync: true for adaptive vsync, false for none.\n"
+         << "WindowScale = " << settings.window_scale << "\n"
          << "RenderScale = " << settings.render_scale << "\n"
          << "Fullscreen = " << flag(settings.fullscreen) << "\n"
          << "Widescreen = " << flag(settings.widescreen) << "\n"
          << "VSync = " << flag(settings.vsync) << "\n"
+         << "; Msaa: 0, 2, 4, 8, 16. Smaa: off, 1x (not with Msaa). Anisotropy: 1, 2, 4, 8, 16.\n"
+         << "Msaa = " << settings.msaa << "\n"
+         << "Smaa = " << (settings.smaa == 1 ? "1x" : "off") << "\n"
+         << "Anisotropy = " << settings.anisotropy << "\n"
          << "; The stats window: its sections, and its top-right corner as fractions of the window.\n"
          << "ShowFps = " << flag(settings.show_fps) << "\n"
          << "ShowMemory = " << flag(settings.show_memory) << "\n"

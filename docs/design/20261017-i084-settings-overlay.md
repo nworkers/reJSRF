@@ -84,7 +84,7 @@ ShowFpsOverlay = false
     * 메모리(사용자 요청으로 추가, 0.5초마다 갱신)
       * 프로세스 working set·committed, 주소 공간 사용량(32비트 프로세스의 4 GiB가 실제 한계다), Xbox 메모리(게스트 힙에서 할당된 양 / 128 MiB). 플랫폼 계약은 `system_info.h`(`QueryProcessMemory`)다.
       * VRAM: 드라이버 보고값이다. NVIDIA는 `GL_NVX_gpu_memory_info`로 사용량/전체(다른 프로그램 포함), AMD는 `GL_ATI_meminfo`로 여유량을 알 수 있고, 그 밖의 드라이버는 "보고 안 함"으로 표시한다. HLE가 만든 GL 리소스(렌더 타깃: 배율이 곱해진 색·샘플링 사본·깊이, 텍스처: 올린 RGBA8 레벨 합)도 함께 보인다(`GetVideoMemoryInfo`).
-  * **Graphics**: Rendering Resolution 드롭다운(`1X (640x480)` … `8X (5120x3840)`), Fullscreen, Widescreen(툴팁: 지금은 늘리기, Hor+ 예정), VSync, Show FPS overlay.
+  * **Graphics**: Rendering Resolution 드롭다운(`1x (640x480)` … `8x (5120x3840)`), Fullscreen, Widescreen(툴팁: 지금은 늘리기, Hor+ 예정), VSync, Show FPS overlay.
 * FPS 패널(우측 상단, 입력 없음, 반투명)
   * 현재 FPS: 최근 1초 평균. 최근 60초를 0.5초 단위 120칸으로 그린다.
   * 세로축은 0~70 FPS다. 60 기준선(녹색), 30·0 눈금(회색)을 두고 오른쪽에 설명을 붙인다: `60 full speed`, `30 half speed`, `0 stopped`.
@@ -97,7 +97,7 @@ ShowFpsOverlay = false
 
 ### 2.7 사용자 확인 뒤 바꾼 것 (앞의 FPS 패널·게임패드 토글을 대체한다)
 
-* 메뉴 높이는 탭 내용에 맞춘다(너비는 비율 고정, 높이는 자동). Info 탭이 스크롤 없이 다 보인다.
+* 메뉴 높이는 가장 긴 탭에 맞춰 고정한다(너비는 비율 고정). 탭마다 내용 높이를 OSD 배율로 나눈 값의 최댓값을 기억하고, 짧은 탭은 그만큼 빈 공간을 둔다. 탭을 바꿔도 창 크기가 변하지 않고, Info 탭이 스크롤 없이 다 보인다(사용자 요청).
 * **Stats 창**이 FPS 패널을 대체한다.
   * FPS, Memory, Video memory 세 섹션이 있고, Graphics 탭의 "Stats window" 체크박스로 각각 켠다(`ShowFps`, `ShowMemory`, `ShowVideoMemory`). 켠 섹션만 한 창에 위에서부터 이어 붙인다.
   * 창은 하나라도 켜져 있으면 메뉴와 상관없이 보인다. 제목 표시줄을 끌어 옮길 수 있고, X는 세 섹션을 모두 끈다.
@@ -205,7 +205,7 @@ ShowFpsOverlay = false
     * Memory (added at the user's request, refreshed twice a second)
       * The process's working set and committed memory, its address space use (the 4 GiB of a 32-bit process is the real limit), and Xbox memory (allocated from the guest heap, of 128 MiB). The platform contract is `system_info.h` (`QueryProcessMemory`).
       * VRAM as the driver reports it: NVIDIA gives used/total through `GL_NVX_gpu_memory_info` (all programs), AMD gives free memory through `GL_ATI_meminfo`, and other drivers show "not reported". The GL resources this HLE made are listed too (render targets: scaled color, sampling copies and depth; textures: the RGBA8 levels uploaded), through `GetVideoMemoryInfo`.
-  * **Graphics**: the Rendering Resolution dropdown (`1X (640x480)` … `8X (5120x3840)`), Fullscreen, Widescreen (tooltip: stretched for now, Hor+ planned), VSync, Show FPS overlay.
+  * **Graphics**: the Rendering Resolution dropdown (`1x (640x480)` … `8x (5120x3840)`), Fullscreen, Widescreen (tooltip: stretched for now, Hor+ planned), VSync, Show FPS overlay.
 * FPS panel (top right, no input, translucent)
   * The current FPS is the average over the last second. The last 60 seconds are drawn as 120 bins of 0.5 s.
   * The vertical axis runs 0 to 70 FPS, with a 60 reference line (green) and 30 and 0 ticks (grey), labelled on the right: `60 full speed`, `30 half speed`, `0 stopped`.
@@ -218,7 +218,7 @@ ShowFpsOverlay = false
 
 ### 2.7 Changes after the user's check (replacing the FPS panel and the gamepad toggle above)
 
-* The menu's height fits the tab (width fixed in proportion, height automatic), so the Info tab shows without scrolling.
+* The menu's height is that of the tallest tab (width fixed in proportion): the largest content height seen, divided by the OSD scale, is kept, and shorter tabs leave the rest empty. Switching tabs does not change the window's size, and the Info tab shows without scrolling (user request).
 * A **stats window** replaces the FPS panel.
   * It has three sections, FPS, Memory and Video memory, each turned on by the Graphics tab's "Stats window" checkboxes (`ShowFps`, `ShowMemory`, `ShowVideoMemory`). Only the sections turned on are stacked in one window, top to bottom.
   * The window shows whenever any section is on, menu or not. It moves by its title bar, and its close box turns all three sections off.

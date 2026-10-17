@@ -98,8 +98,9 @@ flowchart BT
 | `d3d8_vblank.h/.cpp` | 가상 vblank 시계(디스플레이 refresh, 기본 60 Hz). 60 Hz 근처 모니터에서 vsync swap이 막히면 그 시각에 위상을 맞춘다([설계 i082](docs/design/20261017-i082-vsync.md)) |
 | `d3d8_gamma.h/.cpp` | 감마 램프(Xbox `D3DGAMMARAMP` 768바이트), CPU 적용, present용 GLSL(순수) |
 | `d3d8_gl.h/.cpp` | 쓰는 GL 함수만 담은 함수 표, `platform::GetGlProcAddress`로 채움; GL 상태 캐시의 epoch(`InvalidateGlStateCache`) |
-| `d3d8_gl_targets.h/.cpp` | 렌더 타깃: 색 서피스 = GL 텍스처, 깊이 = 렌더버퍼, 쌍마다 FBO, 모두 헤더가 아니라 표면 메모리(데이터 주소)로 찾는다([설계 i071](docs/design/20261017-i071-render-target-by-memory.md)); 내부 렌더링 배율(1~8배, `REXBOX_RENDER_SCALE`, Ctrl+1~8)만큼 크게 만들고 D3D에는 게스트 크기를 보인다([설계 i080](docs/design/20261017-i080-render-scale.md)); present(단위 램프는 blit, 아니면 감마 셰이더), BMP 덤프 |
-| `d3d8_gl_textures.h/.cpp` | 텍스처 캐시(헤더 → GL 텍스처, Lock·해시로 재업로드), 스테이지 샘플러 |
+| `d3d8_gl_targets.h/.cpp` | 렌더 타깃: 색 서피스 = GL 텍스처, 깊이 = 렌더버퍼, 쌍마다 FBO, 모두 헤더가 아니라 표면 메모리(데이터 주소)로 찾는다([설계 i071](docs/design/20261017-i071-render-target-by-memory.md)); 내부 렌더링 배율(1~8배, `REXBOX_RENDER_SCALE`, Ctrl+1~8)만큼 크게 만들고 D3D에는 게스트 크기를 보인다([설계 i080](docs/design/20261017-i080-render-scale.md)); MSAA(2~16배)면 색은 멀티샘플 렌더버퍼에 그리고 텍스처로 읽을 때·present·덤프 때 resolve한다([설계 i089](docs/design/20261017-i089-anti-aliasing.md)); present(단위 램프는 blit, 아니면 감마 셰이더, SMAA를 켜면 그 전에 적용), BMP 덤프 |
+| `d3d8_smaa.h/.cpp` | SMAA 1x(`third_party/smaa`의 `SMAA.hlsl`을 GLSL 3로, 프리셋 High): 색 에지 → 가중치 → 이웃 혼합 세 패스, 조회 텍스처(AreaTex, SearchTex). 소스는 빌드 때 `cmake/embed_text.cmake`가 바이트 배열로 넣는다([설계 i089](docs/design/20261017-i089-anti-aliasing.md)) |
+| `d3d8_gl_textures.h/.cpp` | 텍스처 캐시(헤더 → GL 텍스처, Lock·해시로 재업로드), 스테이지 샘플러(선형 필터면 비등방성 필터링 배율을 붙인다, 설계 i089). 2D DXT는 S3TC로 압축된 채 올린다(`REXBOX_DXT=cpu`면 CPU 디코드, [설계 i088](docs/design/20261017-i088-dxt-compressed.md)) |
 | `d3d8_gl_programs.h/.cpp` | 프로그램 캐시(고정 기능, 정점 프로그램 + 고정 기능 프래그먼트, 정점 프로그램 + 컴바이너; 구조체 키와 해시), 프로그램별 유니폼 캐시 |
 | `d3d8_gl_program_cache.h/.cpp` | 링크한 GL 프로그램을 드라이버 바이너리로 `cache\shaders\`에 저장하고 다음 실행에서 불러옴(드라이버 문자열과 소스가 완전히 같을 때만, 거부되면 컴파일; 저장 실패는 한 번 보고하고 임시 파일을 남기지 않음; `REXBOX_SHADER_CACHE`, 설계 i051) |
 | `d3d8_gl_buffers.h/.cpp` | 정점·인덱스 데이터: 게스트 버퍼 범위는 GL 버퍼에 두고 게스트 바이트가 바뀔 때만 다시 올림, UP 데이터와 만든 인덱스는 스트리밍 버퍼, QUADLIST 전개(설계 i040); 그리기용 VAO의 속성 상태를 기억해 바뀐 것만 보냄(설계 i050) |

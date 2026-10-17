@@ -270,6 +270,10 @@ int main(int argc, char** argv)
     display_defaults.widescreen = settings.widescreen;
     display_defaults.vsync = settings.vsync ? rexbox::platform::VsyncMode::kAdaptive : rexbox::platform::VsyncMode::kOff;
     display_defaults.fullscreen = settings.fullscreen;
+    display_defaults.window_scale = settings.window_scale;
+    display_defaults.msaa_samples = settings.msaa;
+    display_defaults.smaa = static_cast<rexbox::hle::d3d8::SmaaMode>(settings.smaa);
+    display_defaults.anisotropy = settings.anisotropy;
     rexbox::hle::d3d8::SetDisplayDefaults(display_defaults);
     rejsrf::BuildInfo build_info;
     build_info.version = REJSRF_VERSION;

@@ -33,6 +33,15 @@ using GLsizeiptr = std::ptrdiff_t;
 constexpr GLenum kGlVendor = 0x1F00;
 constexpr GLenum kGlRenderer = 0x1F01;
 constexpr GLenum kGlVersion = 0x1F02;
+constexpr GLenum kGlExtensions = 0x1F03;
+constexpr GLenum kGlNumExtensions = 0x821D;
+constexpr GLenum kGlMaxSamples = 0x8D57;
+constexpr GLenum kGlTextureMaxAnisotropy = 0x84FE;  // GL 4.6, EXT/ARB_texture_filter_anisotropic
+constexpr GLenum kGlMaxTextureMaxAnisotropy = 0x84FF;
+// GL_EXT_texture_compression_s3tc internal formats.
+constexpr GLenum kGlCompressedRgbaS3tcDxt1 = 0x83F1;
+constexpr GLenum kGlCompressedRgbaS3tcDxt3 = 0x83F2;
+constexpr GLenum kGlCompressedRgbaS3tcDxt5 = 0x83F3;
 constexpr GLenum kGlShadingLanguageVersion = 0x8B8C;
 // Video memory queries of GL_NVX_gpu_memory_info and GL_ATI_meminfo (KiB).
 constexpr GLenum kGlGpuMemoryDedicatedNvx = 0x9047;
@@ -230,6 +239,11 @@ struct GlFunctions
     void(REXBOX_GL_APIENTRY* TexImage3D)(GLenum target, GLint level, GLint internal_format, GLsizei width,
                                          GLsizei height, GLsizei depth, GLint border, GLenum format, GLenum type,
                                          const void* pixels) = nullptr;
+    // Optional: compressed (S3TC) uploads and the extension list.
+    void(REXBOX_GL_APIENTRY* CompressedTexImage2D)(GLenum target, GLint level, GLenum internal_format,
+                                                   GLsizei width, GLsizei height, GLint border, GLsizei image_size,
+                                                   const void* data) = nullptr;
+    const GLubyte*(REXBOX_GL_APIENTRY* GetStringi)(GLenum name, GLuint index) = nullptr;
     void(REXBOX_GL_APIENTRY* TexParameteri)(GLenum target, GLenum pname, GLint param) = nullptr;
     void(REXBOX_GL_APIENTRY* GenSamplers)(GLsizei count, GLuint* samplers) = nullptr;
     void(REXBOX_GL_APIENTRY* BindSampler)(GLuint unit, GLuint sampler) = nullptr;
@@ -248,6 +262,9 @@ struct GlFunctions
     void(REXBOX_GL_APIENTRY* GenRenderbuffers)(GLsizei n, GLuint* renderbuffers) = nullptr;
     void(REXBOX_GL_APIENTRY* DeleteRenderbuffers)(GLsizei n, const GLuint* renderbuffers) = nullptr;
     void(REXBOX_GL_APIENTRY* BindRenderbuffer)(GLenum target, GLuint renderbuffer) = nullptr;
+    // Optional: MSAA render targets.
+    void(REXBOX_GL_APIENTRY* RenderbufferStorageMultisample)(GLenum target, GLsizei samples, GLenum internal_format,
+                                                             GLsizei width, GLsizei height) = nullptr;
     void(REXBOX_GL_APIENTRY* RenderbufferStorage)(GLenum target, GLenum internal_format, GLsizei width,
                                                   GLsizei height) = nullptr;
     void(REXBOX_GL_APIENTRY* BlitFramebuffer)(GLint src_x0, GLint src_y0, GLint src_x1, GLint src_y1, GLint dst_x0,
@@ -265,6 +282,16 @@ GlFunctions& Gl();
 // Whether the context is OpenGL ES (shader version, optional entry points).
 bool GlIsEs();
 void SetGlIsEs(bool es);
+
+// Whether DXT textures can go up compressed: GL_EXT_texture_compression_s3tc
+// and glCompressedTexImage2D (found when the functions are loaded).
+bool GlHasS3tc();
+
+// The largest MSAA sample count for render targets (0 without MSAA) and the
+// largest anisotropy (1 without anisotropic filtering), read when the
+// functions are loaded (docs/design/20261017-i089-anti-aliasing.md).
+int GlMaxSamples();
+int GlMaxAnisotropy();
 
 // Helpers over the float/double pairs.
 void GlClearDepth(float depth);

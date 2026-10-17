@@ -4,6 +4,7 @@
 #include "d3d8_gl.h"
 #include "d3d8_internal.h"
 #include "d3d8_resource.h"
+#include "d3d8_smaa.h"
 #include "d3d8_trace.h"
 #include "d3d8_vblank.h"
 
@@ -76,12 +77,52 @@ uint32_t ActiveScale()
     return g_render_scale;
 }
 
+// MSAA: render targets draw into multisample renderbuffers and are resolved
+// into their textures when read (docs/design/20261017-i089-anti-aliasing.md).
+// 0 is off; a change waits for the end of a present, like the scale.
+uint32_t g_msaa_samples = 0xFFFFFFFFu;  // read from the defaults on first use
+uint32_t g_pending_msaa_samples = 0xFFFFFFFFu;  // none waiting
+
+uint32_t ClampSamples(uint32_t samples)
+{
+    const uint32_t limit = static_cast<uint32_t>(GlMaxSamples());
+    if (samples < 2 || limit < 2)
+    {
+        return 0;
+    }
+    uint32_t result = 2;
+    while (result * 2 <= samples && result * 2 <= limit)
+    {
+        result *= 2;
+    }
+    return result;
+}
+
+uint32_t ActiveSamples()
+{
+    if (g_msaa_samples == 0xFFFFFFFFu)
+    {
+        g_msaa_samples = ClampSamples(CurrentDisplayDefaults().msaa_samples);
+        if (g_msaa_samples != 0)
+        {
+            std::fprintf(stderr, "[d3d8] MSAA %ux\n", g_msaa_samples);
+        }
+    }
+    return g_msaa_samples;
+}
+
 struct ColorTarget
 {
     GLuint texture = 0;
     uint32_t width = 0;  // guest size; the GL texture is scale times this
     uint32_t height = 0;
     uint32_t scale = 1;
+    // MSAA: the multisample renderbuffer drawn into, the framebuffer holding
+    // `texture` that it resolves to, and whether it was drawn since.
+    uint32_t samples = 0;
+    GLuint msaa = 0;
+    GLuint resolve_framebuffer = 0;
+    bool unresolved = false;
     // The header last bound over this memory, for reports.
     GuestAddress header = 0;
     // For sampling (SampleRenderTarget): a copy in D3D's row order, the
@@ -100,6 +141,7 @@ struct DepthTarget
     uint32_t width = 0;  // guest size
     uint32_t height = 0;
     uint32_t scale = 1;
+    uint32_t samples = 0;
 };
 
 // Keyed by surface memory (SurfaceMemory); framebuffers by the memory pair.
@@ -172,6 +214,8 @@ void DropFramebuffers(uint32_t color, uint32_t depth)
 
 // The color target at `surface`'s memory, made (or remade, when a surface of
 // another size came to the same memory) as needed.
+void ResolveColor(uint32_t memory, ColorTarget& target);
+
 ColorTarget& Color(GuestAddress surface)
 {
     const uint32_t memory = SurfaceMemory(surface);
@@ -189,12 +233,14 @@ ColorTarget& Color(GuestAddress surface)
     if (it != g_colors.end())
     {
         ColorTarget& old = it->second;
-        if (old.width == width && old.height == height && old.scale == ActiveScale())
+        if (old.width == width && old.height == height && old.scale == ActiveScale() &&
+            old.samples == ActiveSamples())
         {
             return old;
         }
         if (old.width == width && old.height == height)
         {
+            ResolveColor(memory, old);  // the multisample pixels into the texture first
             rescaled = old.texture;
             rescaled_width = old.width * old.scale;
             rescaled_height = old.height * old.scale;
@@ -209,6 +255,14 @@ ColorTarget& Color(GuestAddress surface)
             gl.DeleteTextures(1, &old.copy);
             gl.DeleteFramebuffers(1, &old.copy_framebuffer);
         }
+        if (old.msaa != 0)
+        {
+            gl.DeleteRenderbuffers(1, &old.msaa);
+        }
+        if (old.resolve_framebuffer != 0)
+        {
+            gl.DeleteFramebuffers(1, &old.resolve_framebuffer);
+        }
         g_colors.erase(it);
         DropFramebuffers(memory, kNoSurface);
     }
@@ -216,6 +270,7 @@ ColorTarget& Color(GuestAddress surface)
     target.width = width;
     target.height = height;
     target.scale = ActiveScale();
+    target.samples = ActiveSamples();
     target.header = surface;
     target.sampleable = sampleable;
     InvalidateGlStateCache();  // binds on the active texture unit
@@ -226,6 +281,18 @@ ColorTarget& Color(GuestAddress surface)
     gl.TexParameteri(kGlTexture2D, kGlTextureMinFilter, static_cast<GLint>(kGlLinear));
     gl.TexParameteri(kGlTexture2D, kGlTextureMagFilter, static_cast<GLint>(kGlLinear));
     gl.TexParameteri(kGlTexture2D, kGlTextureMaxLevel, 0);
+    if (target.samples != 0)
+    {
+        gl.GenRenderbuffers(1, &target.msaa);
+        gl.BindRenderbuffer(kGlRenderbuffer, target.msaa);
+        gl.RenderbufferStorageMultisample(kGlRenderbuffer, static_cast<GLsizei>(target.samples), kGlRgba8,
+                                          static_cast<GLsizei>(target.width * target.scale),
+                                          static_cast<GLsizei>(target.height * target.scale));
+        gl.GenFramebuffers(1, &target.resolve_framebuffer);
+        gl.BindFramebuffer(kGlFramebuffer, target.resolve_framebuffer);
+        gl.FramebufferTexture2D(kGlFramebuffer, kGlColorAttachment0, kGlTexture2D, target.texture, 0);
+        gl.BindFramebuffer(kGlFramebuffer, 0);
+    }
     const HostResource* host = FindResource(surface);
     if (host == nullptr || (host->kind != ResourceKind::kBackBuffer))
     {
@@ -266,7 +333,8 @@ const DepthTarget& Depth(GuestAddress surface)
     if (it != g_depths.end())
     {
         // Depth is cleared each frame; a new scale needs no copy.
-        if (it->second.width == width && it->second.height == height && it->second.scale == ActiveScale())
+        if (it->second.width == width && it->second.height == height && it->second.scale == ActiveScale() &&
+            it->second.samples == ActiveSamples())
         {
             return it->second;
         }
@@ -278,10 +346,20 @@ const DepthTarget& Depth(GuestAddress surface)
     target.width = width;
     target.height = height;
     target.scale = ActiveScale();
+    target.samples = ActiveSamples();
     gl.GenRenderbuffers(1, &target.renderbuffer);
     gl.BindRenderbuffer(kGlRenderbuffer, target.renderbuffer);
-    gl.RenderbufferStorage(kGlRenderbuffer, kGlDepth24Stencil8, static_cast<GLsizei>(target.width * target.scale),
-                           static_cast<GLsizei>(target.height * target.scale));
+    if (target.samples != 0)
+    {
+        gl.RenderbufferStorageMultisample(kGlRenderbuffer, static_cast<GLsizei>(target.samples), kGlDepth24Stencil8,
+                                          static_cast<GLsizei>(target.width * target.scale),
+                                          static_cast<GLsizei>(target.height * target.scale));
+    }
+    else
+    {
+        gl.RenderbufferStorage(kGlRenderbuffer, kGlDepth24Stencil8, static_cast<GLsizei>(target.width * target.scale),
+                               static_cast<GLsizei>(target.height * target.scale));
+    }
     return g_depths.emplace(memory, target).first->second;
 }
 
@@ -300,7 +378,11 @@ GLuint FramebufferAt(uint32_t color, uint32_t depth)
     InvalidateGlStateCache();  // binds the new framebuffer
     gl.BindFramebuffer(kGlFramebuffer, framebuffer);
     const auto color_it = g_colors.find(color);
-    if (color_it != g_colors.end())
+    if (color_it != g_colors.end() && color_it->second.msaa != 0)
+    {
+        gl.FramebufferRenderbuffer(kGlFramebuffer, kGlColorAttachment0, kGlRenderbuffer, color_it->second.msaa);
+    }
+    else if (color_it != g_colors.end())
     {
         gl.FramebufferTexture2D(kGlFramebuffer, kGlColorAttachment0, kGlTexture2D, color_it->second.texture, 0);
     }
@@ -316,6 +398,14 @@ GLuint FramebufferAt(uint32_t color, uint32_t depth)
         ReportOnce(Format("fbo %08X %08X", color, depth),
                    Format("framebuffer for color memory %08X depth memory %08X is incomplete (status %04X)", color,
                           depth, status));
+        if (ActiveSamples() != 0)
+        {
+            // The driver refused the multisample buffers (memory, say): MSAA
+            // goes off from the next frame.
+            ReportOnce("msaa off", Format("MSAA %ux turned off: a multisample framebuffer is incomplete",
+                                          ActiveSamples()));
+            g_pending_msaa_samples = 0;
+        }
     }
     g_framebuffers.emplace(key, framebuffer);
     return framebuffer;
@@ -340,6 +430,39 @@ GLuint Framebuffer(GuestAddress color, GuestAddress depth)
 void RebindCurrentTarget()
 {
     Gl().BindFramebuffer(kGlFramebuffer, FramebufferAt(g_bound_color, g_bound_depth));
+}
+
+// Brings a multisample target's pixels into its texture if it was drawn since
+// the last resolve (a target still bound may be drawn again, so it stays
+// unresolved). Leaves the framebuffer bindings to the caller.
+void ResolveColor(uint32_t memory, ColorTarget& target)
+{
+    if (target.samples == 0 || !target.unresolved)
+    {
+        return;
+    }
+    GlFunctions& gl = Gl();
+    const GLint w = static_cast<GLint>(target.width * target.scale);
+    const GLint h = static_cast<GLint>(target.height * target.scale);
+    gl.BindFramebuffer(kGlReadFramebuffer, FramebufferAt(memory, kNoSurface));
+    gl.BindFramebuffer(kGlDrawFramebuffer, target.resolve_framebuffer);
+    gl.Disable(kGlScissorTest);
+    gl.ColorMask(1, 1, 1, 1);
+    gl.BlitFramebuffer(0, 0, w, h, 0, 0, w, h, kGlColorBufferBit, kGlNearest);
+    InvalidateGlStateCache();
+    target.unresolved = memory == g_bound_color;
+}
+
+// A framebuffer whose color attachment is `target`'s texture, resolved: what
+// copies, present and reads take pixels from.
+GLuint ReadableFramebuffer(uint32_t memory, ColorTarget& target)
+{
+    if (target.samples != 0)
+    {
+        ResolveColor(memory, target);
+        return target.resolve_framebuffer;
+    }
+    return FramebufferAt(memory, kNoSurface);
 }
 
 struct RampPresenter
@@ -486,6 +609,7 @@ bool BindRenderTarget(GuestAddress color, GuestAddress depth)
             ColorTarget& target = Color(color);
             target.header = color;
             target.bound_since_copy = true;
+            target.unresolved = true;
             target.sampleable = true;
             width = target.width;
             height = target.height;
@@ -554,7 +678,7 @@ GLuint SampleRenderTarget(GuestAddress data, GuestAddress* surface, uint32_t* wi
     {
         const GLint w = static_cast<GLint>(target.width * target.scale);
         const GLint h = static_cast<GLint>(target.height * target.scale);
-        gl.BindFramebuffer(kGlReadFramebuffer, FramebufferAt(memory, kNoSurface));
+        gl.BindFramebuffer(kGlReadFramebuffer, ReadableFramebuffer(memory, target));
         gl.BindFramebuffer(kGlDrawFramebuffer, target.copy_framebuffer);
         gl.Disable(kGlScissorTest);
         gl.ColorMask(1, 1, 1, 1);
@@ -607,13 +731,27 @@ void PresentRenderTarget(GuestAddress color, const GammaRamp& ramp)
     const GLint x = static_cast<GLint>((window_width - width) / 2);
     const GLint y = static_cast<GLint>((window_height - height) / 2);
 
-    gl.BindFramebuffer(kGlReadFramebuffer, Framebuffer(color, 0));
+    // The picture: the back buffer resolved, then SMAA on it when chosen
+    // (at the render-scale size, before it is stretched to the window).
+    GLuint picture_framebuffer = ReadableFramebuffer(SurfaceMemory(color), Color(color));
+    GLuint picture_texture = source.texture;
+    if (Smaa() == SmaaMode::k1x)
+    {
+        const SmaaOutput smaa = ApplySmaa(source.texture, source.width * source.scale, source.height * source.scale);
+        if (smaa.texture != 0)
+        {
+            picture_framebuffer = smaa.framebuffer;
+            picture_texture = smaa.texture;
+        }
+        InvalidateGlStateCache();
+    }
+    gl.BindFramebuffer(kGlReadFramebuffer, picture_framebuffer);
     gl.BindFramebuffer(kGlDrawFramebuffer, 0);
     gl.Disable(kGlScissorTest);
     gl.ColorMask(1, 1, 1, 1);
     gl.ClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     gl.Clear(kGlColorBufferBit);
-    if (ramp.IsIdentity() || !DrawThroughRamp(source.texture, ramp, x, y, width, height))
+    if (ramp.IsIdentity() || !DrawThroughRamp(picture_texture, ramp, x, y, width, height))
     {
         gl.BlitFramebuffer(0, 0, static_cast<GLint>(source.width * source.scale),
                            static_cast<GLint>(source.height * source.scale), x, y, x + static_cast<GLint>(width),
@@ -647,6 +785,14 @@ void PresentRenderTarget(GuestAddress color, const GammaRamp& ramp)
     {
         SetRenderScale(requested);
     }
+    if (g_pending_msaa_samples != 0xFFFFFFFFu && g_pending_msaa_samples != ActiveSamples())
+    {
+        g_msaa_samples = g_pending_msaa_samples;
+        g_resolved_target.valid = false;
+        InvalidateGlStateCache();
+        std::fprintf(stderr, "[d3d8] MSAA %s\n", g_msaa_samples != 0 ? Format("%ux", g_msaa_samples).c_str() : "off");
+    }
+    g_pending_msaa_samples = 0xFFFFFFFFu;
     if (g_pending_render_scale != 0 && g_pending_render_scale != ActiveScale())
     {
         g_render_scale = g_pending_render_scale;
@@ -666,10 +812,11 @@ void ReadPixelsAt(GuestAddress color, bool guest_size, std::vector<uint8_t>* rgb
                   uint32_t* height)
 {
     GlFunctions& gl = Gl();
-    const ColorTarget& source = Color(color);
+    ColorTarget& source = Color(color);
     const GLint physical_width = static_cast<GLint>(source.width * source.scale);
     const GLint physical_height = static_cast<GLint>(source.height * source.scale);
-    const GLuint framebuffer = Framebuffer(color, 0);
+    Framebuffer(color, 0);  // made if new
+    const GLuint framebuffer = ReadableFramebuffer(SurfaceMemory(color), source);
     const bool shrink = guest_size && source.scale != 1;
     *width = guest_size ? source.width : static_cast<uint32_t>(physical_width);
     *height = guest_size ? source.height : static_cast<uint32_t>(physical_height);
@@ -727,12 +874,13 @@ RenderTargetUse RenderTargetBytes()
     {
         const uint64_t bytes = static_cast<uint64_t>(target.width * target.scale) * (target.height * target.scale) * 4;
         ++use.count;
-        use.bytes += bytes * (target.copy != 0 ? 2 : 1);
+        use.bytes += bytes * ((target.copy != 0 ? 2 : 1) + target.samples);
     }
     for (const auto& [memory, target] : g_depths)
     {
         ++use.count;
-        use.bytes += static_cast<uint64_t>(target.width * target.scale) * (target.height * target.scale) * 4;
+        use.bytes += static_cast<uint64_t>(target.width * target.scale) * (target.height * target.scale) * 4 *
+                     std::max<uint32_t>(target.samples, 1);
     }
     return use;
 }
@@ -740,6 +888,21 @@ RenderTargetUse RenderTargetBytes()
 void SetRenderScale(uint32_t scale)
 {
     g_pending_render_scale = std::clamp<uint32_t>(scale, 1, kMaxRenderScale);
+}
+
+uint32_t MsaaSamples()
+{
+    return ActiveSamples();
+}
+
+void SetMsaaSamples(uint32_t samples)
+{
+    g_pending_msaa_samples = ClampSamples(samples);
+}
+
+uint32_t MaxMsaaSamples()
+{
+    return static_cast<uint32_t>(GlMaxSamples());
 }
 
 bool DumpRenderTarget(GuestAddress color, const std::string& path, const GammaRamp& ramp)

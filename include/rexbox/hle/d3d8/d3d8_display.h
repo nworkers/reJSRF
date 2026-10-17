@@ -13,12 +13,23 @@
 namespace rexbox::hle::d3d8
 {
 
+// SMAA modes (docs/design/20261017-i089-anti-aliasing.md).
+enum class SmaaMode
+{
+    kOff,
+    k1x,
+};
+
 struct DisplayDefaults
 {
     uint32_t render_scale = 1;  // 1..8 (docs/design/20261017-i080-render-scale.md)
     bool widescreen = false;    // 16:9, stretched for now (issue #85)
     platform::VsyncMode vsync = platform::VsyncMode::kAdaptive;
     bool fullscreen = false;
+    uint32_t window_scale = 2;  // 1..3, the window's size at start (docs/design/20261017-i090-window-size.md)
+    uint32_t msaa_samples = 0;  // 0 (off), 2, 4, 8, 16
+    SmaaMode smaa = SmaaMode::kOff;
+    uint32_t anisotropy = 1;  // 1 (off), 2, 4, 8, 16
 };
 
 // The settings to start with; call before the title creates its device.
@@ -29,6 +40,22 @@ void SetDisplayDefaults(const DisplayDefaults& defaults);
 // present.
 uint32_t RenderScale();
 void SetRenderScale(uint32_t scale);
+
+// Anti-aliasing and texture filtering (docs/design/20261017-i089-anti-aliasing.md).
+// MSAA: a change takes effect after the next present; values are rounded
+// down to a power of two the driver supports (0 when it has none). The
+// limits are known once the device exists.
+uint32_t MsaaSamples();
+void SetMsaaSamples(uint32_t samples);
+uint32_t MaxMsaaSamples();
+// SMAA on the presented picture.
+SmaaMode Smaa();
+void SetSmaa(SmaaMode mode);
+// Anisotropic filtering on linear-filtered textures (1: off), at most
+// MaxAnisotropy().
+uint32_t Anisotropy();
+void SetAnisotropy(uint32_t anisotropy);
+uint32_t MaxAnisotropy();
 
 // Shows the picture at 16:9 instead of 4:3 (stretched). Call on the thread
 // that presents (the overlay's builder runs there).

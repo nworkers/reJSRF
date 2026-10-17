@@ -6,6 +6,7 @@
 #include "d3d8_gl_textures.h"
 #include "d3d8_internal.h"
 
+#include <algorithm>
 #include <atomic>
 #include <mutex>
 
@@ -19,6 +20,8 @@ std::mutex g_mutex;
 DisplayDefaults g_defaults;
 RendererInfo g_renderer;
 std::atomic<bool> g_widescreen{false};
+std::atomic<uint32_t> g_anisotropy{1};
+std::atomic<int> g_smaa{0};
 
 std::string GlString(GlFunctions& gl, GLenum name)
 {
@@ -33,6 +36,8 @@ void SetDisplayDefaults(const DisplayDefaults& defaults)
     std::lock_guard<std::mutex> lock(g_mutex);
     g_defaults = defaults;
     g_widescreen.store(defaults.widescreen);
+    g_anisotropy.store(defaults.anisotropy);
+    g_smaa.store(static_cast<int>(defaults.smaa));
 }
 
 DisplayDefaults CurrentDisplayDefaults()
@@ -106,6 +111,38 @@ VideoMemoryInfo GetVideoMemoryInfo()
     {
     }
     return info;
+}
+
+SmaaMode Smaa()
+{
+    return static_cast<SmaaMode>(g_smaa.load());
+}
+
+void SetSmaa(SmaaMode mode)
+{
+    g_smaa.store(static_cast<int>(mode));
+}
+
+uint32_t Anisotropy()
+{
+    // A power of two up to what the driver allows.
+    const uint32_t limit = static_cast<uint32_t>(GlMaxAnisotropy());
+    uint32_t result = 1;
+    while (result * 2 <= g_anisotropy.load() && result * 2 <= limit)
+    {
+        result *= 2;
+    }
+    return result;
+}
+
+void SetAnisotropy(uint32_t anisotropy)
+{
+    g_anisotropy.store(std::max<uint32_t>(anisotropy, 1));
+}
+
+uint32_t MaxAnisotropy()
+{
+    return static_cast<uint32_t>(GlMaxAnisotropy());
 }
 
 bool Widescreen()
