@@ -22,6 +22,9 @@ struct Settings
     uint32_t msaa = 0;        // 0 (off), 2, 4, 8, 16
     uint32_t smaa = 0;        // 0 off, 1 1x
     uint32_t anisotropy = 1;  // 1 (off), 2, 4, 8, 16
+    // [Input] (docs/design/20261018-i094-gamepad-vibration.md).
+    bool vibration = true;
+    uint32_t vibration_strength = 100;  // percent, 10..100
     // The stats window's sections (shown while any is on) and where its
     // top-right corner sits, as fractions of the window (negative: the
     // default, top right).

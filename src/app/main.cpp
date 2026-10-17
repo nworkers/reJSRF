@@ -18,6 +18,7 @@
 #include "rexbox/hle/xapi/xapi_hle.h"
 #include "rexbox/hle/xinput/xinput_hle.h"
 #include "rexbox/platform/display.h"
+#include "rexbox/platform/input.h"
 #include "rexbox/platform/overlay.h"
 #include "rexbox/recomp/recomp_runtime.h"
 #include "rexbox/runtime/environment.h"
@@ -275,6 +276,7 @@ int main(int argc, char** argv)
     display_defaults.smaa = static_cast<rexbox::hle::d3d8::SmaaMode>(settings.smaa);
     display_defaults.anisotropy = settings.anisotropy;
     rexbox::hle::d3d8::SetDisplayDefaults(display_defaults);
+    rexbox::platform::SetRumbleStrength(settings.vibration ? settings.vibration_strength : 0);
     rejsrf::BuildInfo build_info;
     build_info.version = REJSRF_VERSION;
     build_info.build_time = REJSRF_BUILD_TIME;

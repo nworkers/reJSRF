@@ -82,8 +82,10 @@ void XInputClose()
     const GuestAddress handle = call.Arg(0);
     XinputState& state = State();
     std::lock_guard<std::mutex> lock(state.mutex);
-    if (state.handles.erase(handle) != 0)
+    if (const OpenDevice* device = FindDevice(handle))
     {
+        platform::SetGamepadRumble(device->port, 0, 0);
+        state.handles.erase(handle);
         Heap().Free(handle);
     }
     call.Return(0, 1);
@@ -148,7 +150,9 @@ void XInputGetState()
 }
 
 // DWORD XInputSetState(HANDLE hDevice, PXINPUT_FEEDBACK pFeedback)
-// Rumble is not applied yet; the request completes at once.
+// The rumble goes to the host controller of the device's port
+// (docs/design/20261018-i094-gamepad-vibration.md); the request completes at
+// once.
 void XInputSetState()
 {
     HleCall call;
@@ -156,13 +160,24 @@ void XInputSetState()
     const GuestAddress feedback = call.Arg(1);
     XinputState& state = State();
     std::lock_guard<std::mutex> lock(state.mutex);
-    if (FindDevice(handle) == nullptr)
+    const OpenDevice* device = FindDevice(handle);
+    if (device == nullptr)
     {
         call.Return(kErrorDeviceNotConnected, 2);
         return;
     }
     if (feedback != 0)
     {
+        const uint16_t left = Memory().Read16(feedback + layout::kFeedbackLeftMotor);
+        const uint16_t right = Memory().Read16(feedback + layout::kFeedbackRightMotor);
+        platform::SetGamepadRumble(device->port, left, right);
+        static bool reported = false;
+        if (!reported && (left != 0 || right != 0))
+        {
+            reported = true;
+            std::fprintf(stderr, "[xinput] rumble on port %u: left %u, right %u (first request)\n", device->port,
+                         left, right);
+        }
         Memory().Write32(feedback + layout::kFeedbackStatus, kErrorSuccess);
         static bool warned = false;
         if (!warned && Memory().Read32(feedback + layout::kFeedbackEvent) != 0)
