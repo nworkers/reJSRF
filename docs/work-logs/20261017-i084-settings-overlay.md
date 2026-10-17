@@ -48,6 +48,10 @@
 
 * `SettingsUi::DrawTab`: 탭 내용 높이를 재고, OSD 배율로 나눈 최댓값(`tab_height_`)을 기억한다. 짧은 탭은 `Dummy`로 그 높이까지 채운다. 메뉴를 열면 처음 보이는 탭이 가장 긴 Info라, 열자마자 높이가 정해진다.
 * 확인: Debug 빌드 경고 없음. 사용자가 실행 중이던 게임이 Release 실행 파일을 잡고 있어 Release는 다시 링크하지 못했다. 화면은 아직 확인하지 않았다.
+* 사용자 확인: Info 탭이 매우 길어졌다.
+  * 원인: ImGui는 창이 나타나는 첫 프레임에 실제 폭을 모르는 채로 배치한다. 그때 줄바꿈 글이 아주 좁은 폭으로 잘려 높이가 크게 측정됐다. 그 값이 "지금까지의 최댓값"으로 남았다.
+  * 수정: 메뉴를 열 때마다 최댓값을 비운다. 열린 뒤 처음 두 프레임과 창 폭이 메뉴 폭에 못 미치는 프레임은 재지 않는다.
+  * 확인: Release 빌드 경고 없음. 실제 창에서 Info와 Graphics 탭의 메뉴 크기가 같고, Info는 내용에 맞는 높이다.
 
 ## 추가: Stats 창, 그래프 안정화, 게임패드 단축키 (사용자 요청, 설계 §2.7)
 
@@ -134,6 +138,10 @@ Design: [20261017-i084](../design/20261017-i084-settings-overlay.md) · Work ord
 
 * `SettingsUi::DrawTab` measures each tab's content and keeps the largest height divided by the OSD scale (`tab_height_`); shorter tabs are filled to it with `Dummy`. The tab shown first when the menu opens is Info, the tallest, so the height is set at once.
 * Checked: Debug build without warnings; a game the user was running held the Release executable, so Release was not relinked; the screen is not checked yet.
+* The user's check: the Info tab became very long.
+  * Cause: ImGui lays out a window's first frame before it knows its width, so wrapped text was cut very narrow and measured very tall, and that value stayed as "the largest so far".
+  * Fix: the largest height is cleared each time the menu opens, and the first two frames after it opens, and any frame narrower than the menu's width, are not measured.
+  * Checked: Release build without warnings; in a real window the menu has the same size on the Info and Graphics tabs, and Info's height fits its content.
 
 ## Added: stats window, steady graphs, gamepad shortcuts (user request, design §2.7)
 

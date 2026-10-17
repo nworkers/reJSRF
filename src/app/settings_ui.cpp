@@ -254,9 +254,18 @@ void SettingsUi::Build()
 {
     Record(std::chrono::duration<double>(std::chrono::steady_clock::now() - start_).count());
     ObserveActualState();
-    if (rexbox::platform::OverlayVisible())
+    const bool menu = rexbox::platform::OverlayVisible();
+    if (menu && !menu_was_open_)
+    {
+        // Measured afresh each time it opens (see DrawTab).
+        tab_height_ = 0.0f;
+        menu_frames_ = 0;
+    }
+    menu_was_open_ = menu;
+    if (menu)
     {
         DrawMenu();
+        ++menu_frames_;
     }
     DrawStatsWindow();
 }
@@ -300,17 +309,22 @@ void SettingsUi::DrawMenu()
     }
 }
 
-// Every tab is as tall as the tallest seen so far, so the menu keeps one
-// size whichever tab is open. Heights are kept divided by the OSD scale, so
-// they still fit after the window changes size. Info, the tallest, is the
-// tab shown first.
+// Every tab is as tall as the tallest seen since the menu opened, so the
+// menu keeps one size whichever tab is open. Heights are kept divided by the
+// OSD scale, so they still fit after the window changes size. Info, the
+// tallest, is the tab shown first. A window's first frames are laid out
+// before it has its width (wrapped text then runs very tall), so they are
+// not measured, nor is any frame narrower than the menu's width.
 void SettingsUi::DrawTab(void (SettingsUi::*draw)())
 {
     const float scale = ImGui::GetStyle().FontScaleMain;
     const float top = ImGui::GetCursorPosY();
     (this->*draw)();
     const float height = ImGui::GetCursorPosY() - top;
-    tab_height_ = std::max(tab_height_, height / scale);
+    if (menu_frames_ >= 2 && ImGui::GetWindowWidth() >= 560.0f * scale - 1.0f)
+    {
+        tab_height_ = std::max(tab_height_, height / scale);
+    }
     if (height < tab_height_ * scale)
     {
         ImGui::Dummy(ImVec2(0.0f, tab_height_ * scale - height));
