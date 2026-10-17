@@ -4,8 +4,11 @@
 #include "d3d8_internal.h"
 #include "d3d8_resource.h"
 #include "d3d8_trace.h"
+#include "d3d8_vblank.h"
 
 #include <algorithm>
+#include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <map>
@@ -610,7 +613,22 @@ void PresentRenderTarget(GuestAddress color, const GammaRamp& ramp)
                            static_cast<GLint>(source.height * source.scale), x, y, x + static_cast<GLint>(width),
                            y + static_cast<GLint>(height), kGlColorBufferBit, kGlLinear);
     }
+    const auto swap_start = std::chrono::steady_clock::now();
     platform::PresentDisplay();
+    const auto swap_end = std::chrono::steady_clock::now();
+    // A swap that waited for the host's blank returned at it: on a monitor
+    // near the guest refresh the virtual clock follows that phase, so no
+    // swap ever waits a blank more. A swap that did not wait (vsync ignored,
+    // frames queued) says nothing about the blank and is not followed
+    // (docs/design/20261017-i082-vsync.md).
+    if (info.swap_interval != 0 && info.refresh_hz > 0 &&
+        std::fabs(info.refresh_hz - static_cast<double>(VerticalBlankRate())) <= 1.0 &&
+        swap_end - swap_start >= std::chrono::milliseconds(1))
+    {
+        AlignVerticalBlank(swap_end);
+        ReportOnce("vblank aligned", Format("vertical blank clock follows the host's (monitor %.2f Hz)",
+                                            info.refresh_hz));
+    }
     RebindCurrentTarget();
     InvalidateGlStateCache();
     // Between frames: a requested scale takes effect (targets are remade as

@@ -29,6 +29,14 @@ enum class GlApi
     kGlEs,       // OpenGL ES 3.0 (Android, WebGL2)
 };
 
+// Host vertical sync for swaps (docs/design/20261017-i082-vsync.md).
+enum class VsyncMode
+{
+    kOff,       // swap at once (swap interval 0)
+    kOn,        // wait for the vertical blank (1)
+    kAdaptive,  // wait, but swap at once when late (-1); kOn where unsupported
+};
+
 struct DisplayConfig
 {
     // The picture's size; the window opens at `scale` times it and keeps its
@@ -40,6 +48,9 @@ struct DisplayConfig
     const char* title = "";
     GlApi api = GlApi::kDesktopGl;
     bool hidden = false;  // create the window invisible (diagnostics that still need a GL context)
+    // A hidden window always swaps at once: waiting for its blank can block
+    // on some drivers.
+    VsyncMode vsync = VsyncMode::kAdaptive;
 };
 
 struct DisplayInfo
@@ -49,6 +60,8 @@ struct DisplayInfo
     bool gl_es = false;
     uint32_t drawable_width = 0;   // in pixels (may differ from the window size)
     uint32_t drawable_height = 0;
+    int swap_interval = 0;  // as applied: 0 (no vsync), 1 (vsync), -1 (adaptive)
+    double refresh_hz = 0;  // the refresh of the monitor showing the window; 0 if unknown
 };
 
 // Sets the window title's fixed part (the application's name, version and

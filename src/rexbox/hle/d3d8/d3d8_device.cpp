@@ -98,6 +98,17 @@ bool OpenDisplay(const PresentParameters& pp, std::string* error)
     // REXBOX_DISPLAY=hidden: a GL context without a visible window (frame dumps in unattended runs).
     const char* display = std::getenv("REXBOX_DISPLAY");
     config.hidden = display != nullptr && std::strcmp(display, "hidden") == 0;
+    // REXBOX_VSYNC=off|on|adaptive (default adaptive): host vsync for a
+    // visible window (docs/design/20261017-i082-vsync.md).
+    const char* vsync = std::getenv("REXBOX_VSYNC");
+    if (vsync != nullptr && std::strcmp(vsync, "off") == 0)
+    {
+        config.vsync = platform::VsyncMode::kOff;
+    }
+    else if (vsync != nullptr && std::strcmp(vsync, "on") == 0)
+    {
+        config.vsync = platform::VsyncMode::kOn;
+    }
     if (!platform::CreateDisplay(config, error))
     {
         return false;
@@ -113,6 +124,7 @@ bool OpenDisplay(const PresentParameters& pp, std::string* error)
     platform::DisplayInfo info;
     platform::GetDisplayInfo(&info);
     SetGlIsEs(info.gl_es);
+    std::fprintf(stderr, "[d3d8] vsync: swap interval %d, monitor %.2f Hz\n", info.swap_interval, info.refresh_hz);
     std::fprintf(stderr, "[d3d8] display %ux%u, %s %d.%d, %s / %s\n", info.drawable_width, info.drawable_height,
                  info.gl_es ? "OpenGL ES" : "OpenGL", info.gl_major, info.gl_minor,
                  reinterpret_cast<const char*>(gl.GetString(kGlRenderer)),

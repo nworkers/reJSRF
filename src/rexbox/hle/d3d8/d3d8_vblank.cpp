@@ -20,7 +20,12 @@ constexpr uint32_t kIntervalImmediate = 0x80000000u;
 constexpr double kBlankFraction = 45.0 / 525.0;
 
 const Clock::time_point g_start = Clock::now();
+// Added to g_start by AlignVerticalBlank (Clock ticks).
+std::atomic<int64_t> g_phase{0};
 std::atomic<uint32_t> g_hertz{60};
+// How far a tick leads the host's blank once aligned: Swap's wait must wake
+// in time for the blit and the swap request to make that blank.
+constexpr auto kAlignLead = std::chrono::milliseconds(3);
 std::atomic<uint64_t> g_last_present{0};
 
 Clock::duration Period()
@@ -28,9 +33,19 @@ Clock::duration Period()
     return std::chrono::duration_cast<Clock::duration>(std::chrono::duration<double>(1.0 / g_hertz.load()));
 }
 
+Clock::time_point Base()
+{
+    return g_start + Clock::duration(g_phase.load());
+}
+
 Clock::time_point TickTime(uint64_t tick)
 {
-    return g_start + Period() * static_cast<int64_t>(tick);
+    return Base() + Period() * static_cast<int64_t>(tick);
+}
+
+uint64_t CountAt(Clock::time_point time)
+{
+    return time > Base() ? static_cast<uint64_t>((time - Base()) / Period()) : 0;
 }
 
 }  // namespace
@@ -40,9 +55,23 @@ void SetVerticalBlankRate(uint32_t hertz)
     g_hertz.store(hertz != 0 ? hertz : 60);
 }
 
+uint32_t VerticalBlankRate()
+{
+    return g_hertz.load();
+}
+
 uint64_t VerticalBlankCount()
 {
-    return static_cast<uint64_t>((Clock::now() - g_start) / Period());
+    return CountAt(Clock::now());
+}
+
+void AlignVerticalBlank(Clock::time_point host_blank)
+{
+    // Tick n (the current one) starts kAlignLead before host_blank, so tick
+    // n + 1 comes kAlignLead before the host's next blank.
+    const uint64_t n = CountAt(host_blank);
+    const Clock::time_point base = host_blank - kAlignLead - Period() * static_cast<int64_t>(n);
+    g_phase.store((base - g_start).count());
 }
 
 void WaitForVerticalBlank()
@@ -75,7 +104,7 @@ void WaitForPresentInterval(uint32_t interval)
 void RasterPosition(bool* in_vblank, uint32_t* scan_line, uint32_t lines)
 {
     const Clock::duration period = Period();
-    const double phase = std::chrono::duration<double>((Clock::now() - g_start) % period).count() /
+    const double phase = std::chrono::duration<double>((Clock::now() - Base()) % period).count() /
                          std::chrono::duration<double>(period).count();
     const double active = 1.0 - kBlankFraction;
     *in_vblank = phase >= active;
