@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <cstring>
 #include <vector>
 
 namespace rexbox::hle::d3d8
@@ -11,6 +12,7 @@ namespace
 {
 
 GlFunctions g_gl;
+bool g_s3tc = false;  // GL_EXT_texture_compression_s3tc usable
 bool g_es = false;
 uint32_t g_state_epoch = 1;
 
@@ -169,6 +171,8 @@ bool LoadGlFunctions(GlFunctions* functions, std::string* missing)
     LoadOptional<__LINE__>(&f.DepthRangef, "glDepthRangef");
     LoadOptional<__LINE__>(&f.DepthRange, "glDepthRange");
     LoadOptional<__LINE__>(&f.PolygonMode, "glPolygonMode");
+    LoadOptional<__LINE__>(&f.CompressedTexImage2D, "glCompressedTexImage2D");
+    LoadOptional<__LINE__>(&f.GetStringi, "glGetStringi");
     if (ok && f.ClearDepthf == nullptr && f.ClearDepth == nullptr)
     {
         first_missing = "glClearDepth";
@@ -189,7 +193,24 @@ bool LoadGlFunctions(GlFunctions* functions, std::string* missing)
     }
     *functions = f;
     g_gl = f;
+    // The extension list (core profiles list them one by one).
+    g_s3tc = false;
+    if (f.CompressedTexImage2D != nullptr && f.GetStringi != nullptr)
+    {
+        GLint count = 0;
+        f.GetIntegerv(kGlNumExtensions, &count);
+        for (GLint i = 0; i < count && !g_s3tc; ++i)
+        {
+            const auto* name = reinterpret_cast<const char*>(f.GetStringi(kGlExtensions, static_cast<GLuint>(i)));
+            g_s3tc = name != nullptr && std::strcmp(name, "GL_EXT_texture_compression_s3tc") == 0;
+        }
+    }
     return true;
+}
+
+bool GlHasS3tc()
+{
+    return g_s3tc;
 }
 
 GlFunctions& Gl()

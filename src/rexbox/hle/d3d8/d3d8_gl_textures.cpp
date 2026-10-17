@@ -10,6 +10,9 @@
 #include "d3d8_trace.h"
 
 #include <algorithm>
+#include <cstring>
+#include <cstdlib>
+#include <cstdio>
 #include <unordered_map>
 #include <vector>
 
@@ -43,6 +46,36 @@ struct CachedTexture
 };
 
 std::unordered_map<GuestAddress, CachedTexture> g_textures;
+
+// Whether DXT goes up compressed: S3TC on the host, unless REXBOX_DXT=cpu
+// asks for the CPU decode (for comparison). Reported once.
+bool DxtCompressedPath()
+{
+    static const bool compressed = [] {
+        const char* setting = std::getenv("REXBOX_DXT");
+        const bool forced_cpu = setting != nullptr && std::strcmp(setting, "cpu") == 0;
+        const bool result = GlHasS3tc() && !forced_cpu;
+        std::fprintf(stderr, "[d3d8] DXT textures: %s\n",
+                     result       ? "uploaded compressed (S3TC)"
+                     : forced_cpu ? "decoded on the CPU (REXBOX_DXT=cpu)"
+                                  : "decoded on the CPU (no S3TC on this host)");
+        return result;
+    }();
+    return compressed;
+}
+
+GLenum DxtInternalFormat(uint32_t format)
+{
+    switch (format)
+    {
+    case fmt::kDxt1:
+        return kGlCompressedRgbaS3tcDxt1;  // index 3 transparent black when c0 <= c1, as on the Xbox
+    case fmt::kDxt3:
+        return kGlCompressedRgbaS3tcDxt3;
+    default:
+        return kGlCompressedRgbaS3tcDxt5;
+    }
+}
 
 // One sampler object per combination of address modes and filters, so a
 // draw binds one instead of changing a shared sampler's parameters.
@@ -122,6 +155,10 @@ bool Upload(GuestAddress header, CachedTexture* cached)
     gl.ActiveTexture(kGlTexture0);
     gl.BindTexture(target, cached->bound.texture);
     gl.PixelStorei(kGlUnpackAlignment, 1);
+    // DXT goes up as it is (the GPU decodes it, as the NV2A did) when the host
+    // has S3TC; volume DXT and hosts without it decode on the CPU
+    // (docs/design/20261017-i088-dxt-compressed.md).
+    const bool compressed = info.layout == PixelLayout::kCompressed && target == kGlTexture2D && DxtCompressedPath();
     std::vector<uint8_t> rgba;
     uint32_t uploaded = 0;
     cached->gl_bytes = 0;
@@ -144,6 +181,20 @@ bool Upload(GuestAddress header, CachedTexture* cached)
                        Format("texture %08X level %u data %08X+%X is outside guest memory", header, level, address,
                               bytes));
             break;
+        }
+        if (compressed)
+        {
+            gl.CompressedTexImage2D(target, static_cast<GLint>(level), DxtInternalFormat(format),
+                                    static_cast<GLsizei>(width), static_cast<GLsizei>(height), 0,
+                                    static_cast<GLsizei>(bytes), memory.Translate(address));
+            if (level == 0)
+            {
+                cached->bound.width = width;
+                cached->bound.height = height;
+            }
+            cached->gl_bytes += bytes;
+            ++uploaded;
+            continue;
         }
         // Compressed levels smaller than a block decode from the padded block.
         const uint32_t decode_width = info.layout == PixelLayout::kCompressed ? std::max(width, 4u) : width;
