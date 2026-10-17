@@ -8,6 +8,9 @@
 
 #include "rejsrf/jsrf_profile.h"
 #include "rejsrf_build_stamp.h"
+#include "settings.h"
+#include "settings_ui.h"
+#include "rexbox/hle/d3d8/d3d8_display.h"
 #include "rexbox/hle/d3d8/d3d8_hle.h"
 #include "rexbox/hle/dsound/dsound_hle.h"
 #include "rexbox/hle/kernel/kernel_exports.h"
@@ -15,6 +18,7 @@
 #include "rexbox/hle/xapi/xapi_hle.h"
 #include "rexbox/hle/xinput/xinput_hle.h"
 #include "rexbox/platform/display.h"
+#include "rexbox/platform/overlay.h"
 #include "rexbox/recomp/recomp_runtime.h"
 #include "rexbox/runtime/environment.h"
 #include "rexbox/runtime/guest_heap.h"
@@ -256,6 +260,27 @@ int main(int argc, char** argv)
         return 1;
     }
     std::printf("xbe: %s (%s)\n", variant->label, options.xbe.c_str());
+
+    // The settings menu (Tab) and rejsrf.ini: the display starts from the
+    // saved settings (docs/design/20261017-i084-settings-overlay.md).
+    static rejsrf::SettingsFile settings_file;
+    const rejsrf::Settings settings = settings_file.Load();
+    rexbox::hle::d3d8::DisplayDefaults display_defaults;
+    display_defaults.render_scale = settings.render_scale;
+    display_defaults.widescreen = settings.widescreen;
+    display_defaults.vsync = settings.vsync ? rexbox::platform::VsyncMode::kAdaptive : rexbox::platform::VsyncMode::kOff;
+    display_defaults.fullscreen = settings.fullscreen;
+    rexbox::hle::d3d8::SetDisplayDefaults(display_defaults);
+    rejsrf::BuildInfo build_info;
+    build_info.version = REJSRF_VERSION;
+    build_info.build_time = REJSRF_BUILD_TIME;
+    build_info.identity = BuildIdentity();
+    build_info.commit = REJSRF_GIT_COMMIT;
+    char title_id[64];
+    std::snprintf(title_id, sizeof(title_id), " (title ID %08X)", image->certificate().title_id);
+    build_info.xbe = options.xbe + title_id;
+    static rejsrf::SettingsUi settings_ui(build_info, settings, &settings_file);
+    rexbox::platform::SetOverlayBuilder([] { settings_ui.Build(); });
 
     rexbox::runtime::GuestMemory memory;
     if (!memory.Initialize(rexbox::runtime::GuestMemory::kAddressSpaceSize))

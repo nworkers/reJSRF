@@ -1,11 +1,12 @@
-add_executable(rejsrf main.cpp)
-target_link_libraries(rejsrf PRIVATE rejsrf_game rexbox_hle)
+add_executable(rejsrf main.cpp settings.cpp settings_ui.cpp)
+target_link_libraries(rejsrf PRIVATE rejsrf_game rexbox_hle rexbox_platform imgui)
 target_compile_definitions(rejsrf PRIVATE REJSRF_VERSION="${REJSRF_VERSION}" REJSRF_BUILD_CONFIG="$<CONFIG>")
 
 # The build time in the window title, refreshed on every build.
 set(REJSRF_BUILD_STAMP "${CMAKE_CURRENT_BINARY_DIR}/generated/rejsrf_build_stamp.h")
 add_custom_target(rejsrf_build_stamp
-    COMMAND "${CMAKE_COMMAND}" "-DOUTPUT=${REJSRF_BUILD_STAMP}" -P "${CMAKE_CURRENT_SOURCE_DIR}/build_stamp.cmake"
+    COMMAND "${CMAKE_COMMAND}" "-DOUTPUT=${REJSRF_BUILD_STAMP}" "-DSOURCE_DIR=${PROJECT_SOURCE_DIR}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/build_stamp.cmake"
     BYPRODUCTS "${REJSRF_BUILD_STAMP}"
     VERBATIM)
 add_dependencies(rejsrf rejsrf_build_stamp)

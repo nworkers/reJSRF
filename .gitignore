@@ -19,6 +19,7 @@ tools/downloads/
 third_party/refs/
 
 # Per-user state written at run time.
+rejsrf.ini
 cfg/
 saves/
 hdd/

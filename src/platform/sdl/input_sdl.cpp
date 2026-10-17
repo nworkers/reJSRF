@@ -7,6 +7,7 @@
 
 #include "rexbox/platform/display.h"
 #include "rexbox/platform/input.h"
+#include "rexbox/platform/overlay.h"
 
 #include <SDL3/SDL.h>
 
@@ -121,6 +122,12 @@ bool InitializeInput(std::string* error)
 void ReadGamepad(uint32_t index, GamepadSnapshot* snapshot)
 {
     *snapshot = GamepadSnapshot{};
+    // The settings menu has the input; the title sees its controller idle.
+    if (OverlayVisible())
+    {
+        snapshot->connected = index == 0;
+        return;
+    }
     std::lock_guard<std::mutex> lock(g_mutex);
     if (g_available)
     {

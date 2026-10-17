@@ -51,6 +51,7 @@ struct DisplayConfig
     // A hidden window always swaps at once: waiting for its blank can block
     // on some drivers.
     VsyncMode vsync = VsyncMode::kAdaptive;
+    bool fullscreen = false;  // open borderless fullscreen (ignored for a hidden window)
 };
 
 struct DisplayInfo
@@ -94,6 +95,21 @@ void PumpDisplayEvents(bool* close_requested);
 // True once after the user pressed F9 (a diagnostic capture request; the
 // caller decides what to capture). Seen by PumpDisplayEvents.
 bool ConsumeCaptureRequest();
+
+// Borderless fullscreen at the desktop resolution, as the double click and
+// Alt+Enter toggle it. Call on the thread that pumps events.
+void SetFullscreen(bool fullscreen);
+bool IsFullscreen();
+
+// Changes host vsync while running (a hidden window keeps swapping at once).
+// Call on the thread that owns the GL context; DisplayInfo.swap_interval
+// reports the result.
+void SetVsync(VsyncMode mode);
+
+// The picture's shape: the window keeps this aspect ratio when resized, and
+// Alt+1/2/3 size it to 1x-3x this size (854x480 for a 16:9 picture shown
+// from a 640x480 one).
+void SetPictureAspect(uint32_t width, uint32_t height);
 
 // The render scale the user asked for with Ctrl+1..8 since the last call
 // (1..8), or 0. Seen by PumpDisplayEvents; the caller applies it.

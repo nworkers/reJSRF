@@ -33,6 +33,7 @@ using GLsizeiptr = std::ptrdiff_t;
 constexpr GLenum kGlVendor = 0x1F00;
 constexpr GLenum kGlRenderer = 0x1F01;
 constexpr GLenum kGlVersion = 0x1F02;
+constexpr GLenum kGlShadingLanguageVersion = 0x8B8C;
 constexpr GLenum kGlNoError = 0;
 constexpr GLbitfield kGlDepthBufferBit = 0x00000100;
 constexpr GLbitfield kGlStencilBufferBit = 0x00000400;

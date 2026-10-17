@@ -14,6 +14,7 @@
 #include "d3d8_resource.h"
 #include "d3d8_state.h"
 #include "d3d8_trace.h"
+#include "d3d8_display_state.h"
 #include "d3d8_vblank.h"
 #include "rexbox/platform/display.h"
 #include "rexbox/runtime/environment.h"
@@ -98,8 +99,12 @@ bool OpenDisplay(const PresentParameters& pp, std::string* error)
     // REXBOX_DISPLAY=hidden: a GL context without a visible window (frame dumps in unattended runs).
     const char* display = std::getenv("REXBOX_DISPLAY");
     config.hidden = display != nullptr && std::strcmp(display, "hidden") == 0;
-    // REXBOX_VSYNC=off|on|adaptive (default adaptive): host vsync for a
-    // visible window (docs/design/20261017-i082-vsync.md).
+    // The application's settings, then REXBOX_VSYNC=off|on|adaptive for the
+    // run: host vsync for a visible window (docs/design/20261017-i082-vsync.md,
+    // docs/design/20261017-i084-settings-overlay.md).
+    const DisplayDefaults defaults = CurrentDisplayDefaults();
+    config.vsync = defaults.vsync;
+    config.fullscreen = defaults.fullscreen;
     const char* vsync = std::getenv("REXBOX_VSYNC");
     if (vsync != nullptr && std::strcmp(vsync, "off") == 0)
     {
@@ -108,6 +113,10 @@ bool OpenDisplay(const PresentParameters& pp, std::string* error)
     else if (vsync != nullptr && std::strcmp(vsync, "on") == 0)
     {
         config.vsync = platform::VsyncMode::kOn;
+    }
+    else if (vsync != nullptr && std::strcmp(vsync, "adaptive") == 0)
+    {
+        config.vsync = platform::VsyncMode::kAdaptive;
     }
     if (!platform::CreateDisplay(config, error))
     {
@@ -124,6 +133,7 @@ bool OpenDisplay(const PresentParameters& pp, std::string* error)
     platform::DisplayInfo info;
     platform::GetDisplayInfo(&info);
     SetGlIsEs(info.gl_es);
+    RecordRendererInfo(gl);
     std::fprintf(stderr, "[d3d8] vsync: swap interval %d, monitor %.2f Hz\n", info.swap_interval, info.refresh_hz);
     std::fprintf(stderr, "[d3d8] display %ux%u, %s %d.%d, %s / %s\n", info.drawable_width, info.drawable_height,
                  info.gl_es ? "OpenGL ES" : "OpenGL", info.gl_major, info.gl_minor,
@@ -267,6 +277,7 @@ void Direct3D_CreateDevice()
             return;
         }
         state.display_created = true;
+        ApplyPictureAspect();  // 16:9 when the settings ask for widescreen
     }
 
     const auto device = Heap().Allocate(kDeviceObjectSize, runtime::GuestHeap::kPageSize, false);
