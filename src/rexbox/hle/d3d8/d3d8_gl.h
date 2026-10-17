@@ -33,6 +33,11 @@ using GLsizeiptr = std::ptrdiff_t;
 constexpr GLenum kGlVendor = 0x1F00;
 constexpr GLenum kGlRenderer = 0x1F01;
 constexpr GLenum kGlVersion = 0x1F02;
+constexpr GLenum kGlShadingLanguageVersion = 0x8B8C;
+// Video memory queries of GL_NVX_gpu_memory_info and GL_ATI_meminfo (KiB).
+constexpr GLenum kGlGpuMemoryDedicatedNvx = 0x9047;
+constexpr GLenum kGlGpuMemoryAvailableNvx = 0x9049;
+constexpr GLenum kGlTextureFreeMemoryAti = 0x87FC;
 constexpr GLenum kGlNoError = 0;
 constexpr GLbitfield kGlDepthBufferBit = 0x00000100;
 constexpr GLbitfield kGlStencilBufferBit = 0x00000400;

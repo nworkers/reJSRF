@@ -88,6 +88,7 @@ add_library(rexbox_hle_d3d8 STATIC
     hle/d3d8/d3d8_caps.cpp
     hle/d3d8/d3d8_capture.cpp
     hle/d3d8/d3d8_device.cpp
+    hle/d3d8/d3d8_display.cpp
     hle/d3d8/d3d8_ff_shader.cpp
     hle/d3d8/d3d8_fvf.cpp
     hle/d3d8/d3d8_gamma.cpp

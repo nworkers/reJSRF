@@ -30,7 +30,7 @@ flowchart TD
 ```powershell
 git clone --recurse-submodules https://github.com/nworkers/reJSRF.git
 cd reJSRF
-.\scripts\build_win32_x86.ps1
+.\scripts\build_win32_x86.ps1          # 실행 정책이 막으면 scripts\build_win32_x86.bat
 .\build\win32_x86\src\app\Debug\rejsrf.exe "roms\Jet Set Radio Future"
 ```
 

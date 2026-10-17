@@ -1,10 +1,13 @@
 #include "d3d8_gl_targets.h"
 
+#include "d3d8_display_state.h"
 #include "d3d8_gl.h"
 #include "d3d8_internal.h"
 #include "d3d8_resource.h"
 #include "d3d8_trace.h"
 #include "d3d8_vblank.h"
+
+#include "rexbox/platform/overlay.h"
 
 #include <algorithm>
 #include <chrono>
@@ -44,7 +47,8 @@ uint32_t InitialRenderScale()
     const char* setting = std::getenv("REXBOX_RENDER_SCALE");
     if (setting == nullptr || *setting == '\0')
     {
-        return 1;
+        // The application's settings (docs/design/20261017-i084-settings-overlay.md).
+        return std::clamp<uint32_t>(CurrentDisplayDefaults().render_scale, 1, kMaxRenderScale);
     }
     const long value = std::strtol(setting, nullptr, 10);
     const uint32_t scale = static_cast<uint32_t>(std::clamp<long>(value, 1, kMaxRenderScale));
@@ -590,13 +594,15 @@ void PresentRenderTarget(GuestAddress color, const GammaRamp& ramp)
     platform::GetDisplayInfo(&info);
     const uint32_t window_width = info.drawable_width;
     const uint32_t window_height = info.drawable_height;
-    // Fit with the aspect ratio kept; the rest of the window is black.
+    // Fit with the picture's aspect ratio kept (16:9 when widescreen
+    // stretches it); the rest of the window is black.
+    const uint32_t picture_width = Widescreen() ? (source.height * 16 + 8) / 9 : source.width;
     uint32_t width = window_width;
-    uint32_t height = source.height * window_width / (source.width != 0 ? source.width : 1);
+    uint32_t height = source.height * window_width / (picture_width != 0 ? picture_width : 1);
     if (height > window_height)
     {
         height = window_height;
-        width = source.width * window_height / (source.height != 0 ? source.height : 1);
+        width = picture_width * window_height / (source.height != 0 ? source.height : 1);
     }
     const GLint x = static_cast<GLint>((window_width - width) / 2);
     const GLint y = static_cast<GLint>((window_height - height) / 2);
@@ -613,6 +619,9 @@ void PresentRenderTarget(GuestAddress color, const GammaRamp& ramp)
                            static_cast<GLint>(source.height * source.scale), x, y, x + static_cast<GLint>(width),
                            y + static_cast<GLint>(height), kGlColorBufferBit, kGlLinear);
     }
+    // The settings overlay goes over the picture, into the window's
+    // framebuffer (still bound for drawing).
+    platform::RenderOverlay();
     const auto swap_start = std::chrono::steady_clock::now();
     platform::PresentDisplay();
     const auto swap_end = std::chrono::steady_clock::now();
@@ -709,6 +718,23 @@ void ReadRenderTarget(GuestAddress color, std::vector<uint8_t>* rgba, uint32_t* 
 uint32_t RenderScale()
 {
     return ActiveScale();
+}
+
+RenderTargetUse RenderTargetBytes()
+{
+    RenderTargetUse use;
+    for (const auto& [memory, target] : g_colors)
+    {
+        const uint64_t bytes = static_cast<uint64_t>(target.width * target.scale) * (target.height * target.scale) * 4;
+        ++use.count;
+        use.bytes += bytes * (target.copy != 0 ? 2 : 1);
+    }
+    for (const auto& [memory, target] : g_depths)
+    {
+        ++use.count;
+        use.bytes += static_cast<uint64_t>(target.width * target.scale) * (target.height * target.scale) * 4;
+    }
+    return use;
 }
 
 void SetRenderScale(uint32_t scale)

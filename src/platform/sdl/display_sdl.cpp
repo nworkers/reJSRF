@@ -9,6 +9,8 @@
 
 #include "rexbox/platform/display.h"
 
+#include "display_sdl_internal.h"
+
 #include <SDL3/SDL.h>
 
 #include <atomic>
@@ -26,6 +28,7 @@ struct SdlDisplay
 {
     SDL_Window* window = nullptr;
     SDL_GLContext context = nullptr;
+    bool hidden = false;
     DisplayInfo info;
     bool sdl_video_initialized = false;
     uint32_t picture_width = 0;  // DisplayConfig width/height, the base of the fixed scales
@@ -116,6 +119,7 @@ void ToggleFullscreen(SDL_Window* window)
 
 void ReleaseLocked()
 {
+    sdl_internal::ShutdownOverlay();
     if (g_display.context != nullptr)
     {
         SDL_GL_DestroyContext(g_display.context);
@@ -182,6 +186,7 @@ bool CreateDisplay(const DisplayConfig& config, std::string* error)
         ReleaseLocked();
         return false;
     }
+    g_display.hidden = config.hidden;
     g_display.picture_width = config.width;
     g_display.picture_height = config.height;
     if (config.width != 0 && config.height != 0)
@@ -229,6 +234,10 @@ bool CreateDisplay(const DisplayConfig& config, std::string* error)
     g_display.info.gl_minor = value;
     SDL_GL_GetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, &value);
     g_display.info.gl_es = (value & SDL_GL_CONTEXT_PROFILE_ES) != 0;
+    if (config.fullscreen && !config.hidden && SDL_SetWindowFullscreen(g_display.window, true))
+    {
+        std::fprintf(stderr, "[display] fullscreen (desktop resolution)\n");
+    }
     UpdateDrawableSizeLocked();
     UpdateRefreshLocked();
     SDL_SetWindowTitle(g_display.window, FullTitleLocked(config.title, 0.0).c_str());
@@ -291,6 +300,12 @@ void PumpDisplayEvents(bool* close_requested)
         {
             continue;
         }
+        // Tab (the menu toggle) stops here; everything else also reaches the
+        // overlay.
+        if (sdl_internal::OverlayProcessEvent(event))
+        {
+            continue;
+        }
         if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat && (event.key.mod & SDL_KMOD_ALT) != 0)
         {
             switch (event.key.key)
@@ -330,11 +345,110 @@ void PumpDisplayEvents(bool* close_requested)
             UpdateRefreshLocked();
         }
     }
+    if (window != nullptr)
+    {
+        close = sdl_internal::PollGamepadShortcuts() || close;
+    }
     if (close_requested != nullptr)
     {
         *close_requested = close;
     }
 }
+
+void SetFullscreen(bool fullscreen)
+{
+    SDL_Window* window = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        window = g_display.hidden ? nullptr : g_display.window;
+    }
+    if (window != nullptr && ((SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN) != 0) != fullscreen)
+    {
+        ToggleFullscreen(window);
+    }
+}
+
+bool IsFullscreen()
+{
+    std::lock_guard<std::mutex> lock(g_mutex);
+    return g_display.window != nullptr && (SDL_GetWindowFlags(g_display.window) & SDL_WINDOW_FULLSCREEN) != 0;
+}
+
+void SetVsync(VsyncMode mode)
+{
+    std::lock_guard<std::mutex> lock(g_mutex);
+    if (g_display.window == nullptr || g_display.hidden)
+    {
+        return;
+    }
+    int interval = 0;
+    if (mode == VsyncMode::kAdaptive && SDL_GL_SetSwapInterval(-1))
+    {
+        interval = -1;
+    }
+    else if (mode != VsyncMode::kOff && SDL_GL_SetSwapInterval(1))
+    {
+        interval = 1;
+    }
+    else
+    {
+        SDL_GL_SetSwapInterval(0);
+    }
+    if (interval != g_display.info.swap_interval)
+    {
+        std::fprintf(stderr, "[display] swap interval %d\n", interval);
+    }
+    g_display.info.swap_interval = interval;
+}
+
+void SetPictureAspect(uint32_t width, uint32_t height)
+{
+    std::lock_guard<std::mutex> lock(g_mutex);
+    if (width == 0 || height == 0 || (width == g_display.picture_width && height == g_display.picture_height))
+    {
+        return;
+    }
+    g_display.picture_width = width;
+    g_display.picture_height = height;
+    if (g_display.window == nullptr)
+    {
+        return;
+    }
+    const float aspect = static_cast<float>(width) / static_cast<float>(height);
+    SDL_SetWindowAspectRatio(g_display.window, aspect, aspect);
+    // A plain window takes the new shape at its current height.
+    if ((SDL_GetWindowFlags(g_display.window) & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_MAXIMIZED)) == 0)
+    {
+        int window_width = 0;
+        int window_height = 0;
+        SDL_GetWindowSize(g_display.window, &window_width, &window_height);
+        SDL_SetWindowSize(g_display.window, static_cast<int>(static_cast<float>(window_height) * aspect + 0.5f),
+                          window_height);
+    }
+}
+
+namespace sdl_internal
+{
+
+SDL_Window* OverlayWindow()
+{
+    std::lock_guard<std::mutex> lock(g_mutex);
+    return g_display.hidden ? nullptr : g_display.window;
+}
+
+SDL_GLContext OverlayContext()
+{
+    std::lock_guard<std::mutex> lock(g_mutex);
+    return g_display.context;
+}
+
+bool DisplayIsEs()
+{
+    std::lock_guard<std::mutex> lock(g_mutex);
+    return g_display.info.gl_es;
+}
+
+}  // namespace sdl_internal
 
 bool ConsumeCaptureRequest()
 {

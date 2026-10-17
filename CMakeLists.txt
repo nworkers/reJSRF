@@ -114,6 +114,21 @@ foreach(subsystem IN ITEMS GPU RENDER CAMERA HAPTIC SENSOR DIALOG TRAY)
 endforeach()
 add_subdirectory(third_party/SDL EXCLUDE_FROM_ALL)
 
+# Dear ImGui (MIT): the settings overlay (docs/design/20261017-i084-settings-overlay.md).
+# The core is a library the app builds its screens with; the SDL3 and OpenGL3
+# backends compile inside rexbox_platform, which owns SDL.
+set(REJSRF_IMGUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/imgui")
+if(NOT EXISTS "${REJSRF_IMGUI_DIR}/imgui.h")
+    message(FATAL_ERROR "third_party/imgui is missing; run: git submodule update --init")
+endif()
+add_library(imgui STATIC
+    "${REJSRF_IMGUI_DIR}/imgui.cpp"
+    "${REJSRF_IMGUI_DIR}/imgui_draw.cpp"
+    "${REJSRF_IMGUI_DIR}/imgui_tables.cpp"
+    "${REJSRF_IMGUI_DIR}/imgui_widgets.cpp")
+target_include_directories(imgui PUBLIC "${REJSRF_IMGUI_DIR}")
+target_compile_definitions(imgui PUBLIC IMGUI_DISABLE_OBSOLETE_FUNCTIONS)
+
 # Lifted C for the primary variant, produced by scripts/recomp/regenerate.py.
 # Without it the game links no recompiled code and the app stops after load.
 set(REJSRF_RECOMP_GEN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/gen/jsrf_us/gen" CACHE PATH
