@@ -544,28 +544,26 @@ void SettingsUi::DrawAntiAliasing()
                           "Costs video memory: it multiplies with the rendering resolution.",
                           d3d8::MaxMsaaSamples());
 
-    static const char* const kSmaaNames[] = {"Off", "1x", "T2x", "S2x", "4x"};
-    const uint32_t smaa = std::min<uint32_t>(static_cast<uint32_t>(d3d8::Smaa()), 4);
+    static const char* const kSmaaNames[] = {"Off", "1x"};
+    const uint32_t smaa = d3d8::Smaa() == d3d8::SmaaMode::k1x ? 1 : 0;
     if (ImGui::BeginCombo("SMAA", kSmaaNames[smaa]))
     {
-        for (uint32_t i = 0; i < 5; ++i)
+        for (uint32_t i = 0; i < 2; ++i)
         {
-            const auto mode = static_cast<d3d8::SmaaMode>(i);
-            ImGui::BeginDisabled(!d3d8::SmaaModeAvailable(mode));
             if (ImGui::Selectable(kSmaaNames[i], i == smaa) && i != smaa)
             {
                 settings_.smaa = i;
-                d3d8::SetSmaa(mode);
+                d3d8::SetSmaa(static_cast<d3d8::SmaaMode>(i));
                 Save();
             }
-            ImGui::EndDisabled();
         }
         ImGui::EndCombo();
     }
     ImGui::SameLine();
     ImGui::TextDisabled("(?)");
     ImGui::SetItemTooltip("Post-process anti-aliasing (SMAA by Jimenez et al.) on the final picture.\n"
-                          "T2x, S2x and 4x need temporal and multisample variants that come later.");
+                          "Edges are found by color, so flat areas of equal brightness keep their borders.\n"
+                          "Combines with MSAA.");
 
     uint32_t anisotropy = settings_.anisotropy;
     if (multiples("Anisotropic filtering", d3d8::Anisotropy(), 1, d3d8::MaxAnisotropy(), &anisotropy))

@@ -18,12 +18,12 @@
 4. SMAA 1x(`d3d8_smaa`, 새 파일)
    * `third_party/smaa`(iryoku/smaa, MIT) 서브모듈을 넣었다. `cmake/embed_text.cmake`가 `SMAA.hlsl`을 바이트 배열 헤더로 만든다.
    * 파일의 비 ASCII 바이트(주석 속 문자)는 실행 때 공백으로 바꾼다. MSVC C4828을 피하려고 문자열 리터럴이 아니라 바이트로 넣었다.
-   * GLSL 3, 프리셋 High. 루마 에지 검출(RG8) → 가중치 계산(RGBA8, AreaTex RG8과 SearchTex R8) → 이웃 혼합의 세 패스다. 화면 크기 텍스처는 크기가 바뀔 때 다시 만든다.
+   * GLSL 3, 프리셋 High. 색 에지 검출(RG8, 카툰 렌더링의 같은 밝기·다른 색상 경계를 잡으려고 휘도 대신 RGB 차이) → 가중치 계산(RGBA8, AreaTex RG8과 SearchTex R8) → 이웃 혼합의 세 패스다. 화면 크기 텍스처는 크기가 바뀔 때 다시 만든다.
    * present에서 감마 램프·blit 앞에 건다. 셰이더 오류는 한 번 보고하고 SMAA 없이 그린다.
 5. 설정(`d3d8_display`, 앱)
    * `DisplayDefaults`와 접근자 `MsaaSamples`/`Smaa`/`Anisotropy`, 그리고 각각의 `Set*`·최댓값 함수를 더했다.
    * `rejsrf.ini` 키 `Msaa`, `Smaa`, `Anisotropy`를 더했다.
-   * Graphics 탭의 Anti-aliasing 구역에 콤보 세 개를 두었다. GPU 한계를 넘는 값과 아직 없는 SMAA 모드(T2x, S2x, 4x)는 비활성이고, 바꾸면 바로 저장된다.
+   * Graphics 탭의 Anti-aliasing 구역에 콤보 세 개를 두었다. SMAA는 Off/1x다. GPU 한계를 넘는 값은 비활성이고, 바꾸면 바로 저장된다.
 6. 문서: `ARCHITECTURE.md`, 가이드, `THIRD_PARTY_NOTICES.md`(SMAA).
 
 ## 검증
@@ -39,7 +39,7 @@
 
 ## 남은 일
 
-* SMAA T2x(시간 재투영, 서브픽셀 지터), S2x(MSAA 2x + SMAA), 4x(둘 다)는 다음 단계다. 지터를 위해 투영 행렬 경로에 오프셋을 넣어야 한다.
+* SMAA T2x, S2x, 4x는 넣지 않기로 했다. T2x·4x는 속도 버퍼 없이 재투영해 카툰 렌더링의 외곽선에 잔상이 생기고, S2x는 MSAA 2x + SMAA 1x 조합으로 대신한다(설계 2.3).
 
 ---
 
@@ -63,12 +63,12 @@ Design: [20261017-i089](../design/20261017-i089-anti-aliasing.md) · Work order:
 4. SMAA 1x (`d3d8_smaa`, new)
    * The `third_party/smaa` submodule (iryoku/smaa, MIT) is added. `cmake/embed_text.cmake` turns `SMAA.hlsl` into a byte-array header.
    * The file's non-ASCII bytes (characters in comments) become spaces at run time. Bytes rather than a string literal avoid MSVC C4828.
-   * GLSL 3, preset High, in three passes: luma edge detection (RG8), then weight calculation (RGBA8, with AreaTex RG8 and SearchTex R8), then neighborhood blending. The screen-sized textures are remade when the size changes.
+   * GLSL 3, preset High, in three passes: color edge detection (RG8; RGB difference rather than luma, to catch the cel-shaded borders between areas of equal brightness and different hue), then weight calculation (RGBA8, with AreaTex RG8 and SearchTex R8), then neighborhood blending. The screen-sized textures are remade when the size changes.
    * It runs at present, before the gamma ramp and blit. A shader error is reported once and the frame is drawn without SMAA.
 5. Settings (`d3d8_display`, app)
    * `DisplayDefaults` and the accessors `MsaaSamples`/`Smaa`/`Anisotropy`, with a `Set*` and a maximum function for each.
    * `rejsrf.ini` keys `Msaa`, `Smaa`, `Anisotropy`.
-   * Three combos in the Graphics tab's Anti-aliasing section. Values over the GPU's limits and the SMAA modes not built yet (T2x, S2x, 4x) are disabled, and a change is saved at once.
+   * Three combos in the Graphics tab's Anti-aliasing section. SMAA is Off/1x. Values over the GPU's limits are disabled, and a change is saved at once.
 6. Documents: `ARCHITECTURE.md`, the guide, `THIRD_PARTY_NOTICES.md` (SMAA).
 
 ## Verification
@@ -84,4 +84,4 @@ Design: [20261017-i089](../design/20261017-i089-anti-aliasing.md) · Work order:
 
 ## Remaining
 
-* SMAA T2x (temporal reprojection with subpixel jitter), S2x (MSAA 2x plus SMAA) and 4x (both) are the next phase. The jitter needs an offset in the projection path.
+* SMAA T2x, S2x and 4x are dropped. T2x and 4x reproject without a velocity buffer and would ghost the cel-shaded outlines; S2x is covered by MSAA 2x plus SMAA 1x (design 2.3).

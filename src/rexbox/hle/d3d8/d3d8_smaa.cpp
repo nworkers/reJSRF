@@ -63,7 +63,7 @@ const std::string kEdgeVertex = std::string("out vec2 v_texcoord;\nout vec4 v_of
                                 kTriangle + "    SMAAEdgeDetectionVS(v_texcoord, v_offset);\n}\n";
 constexpr const char* kEdgeFragment =
     "in vec2 v_texcoord;\nin vec4 v_offset[3];\nuniform sampler2D u_color;\nout vec4 o_color;\n"
-    "void main()\n{\n    o_color = vec4(SMAALumaEdgeDetectionPS(v_texcoord, v_offset, u_color), 0.0, 0.0);\n}\n";
+    "void main()\n{\n    o_color = vec4(SMAAColorEdgeDetectionPS(v_texcoord, v_offset, u_color), 0.0, 0.0);\n}\n";
 
 const std::string kWeightVertex =
     std::string("out vec2 v_texcoord;\nout vec2 v_pixcoord;\nout vec4 v_offset[3];\nvoid main()\n{\n") + kTriangle +

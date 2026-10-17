@@ -168,13 +168,9 @@ Settings SettingsFile::Load()
         else if (key == "smaa")
         {
             const std::string mode = Lower(value);
-            const char* const names[] = {"off", "1x", "t2x", "s2x", "4x"};
-            for (uint32_t i = 0; i < 5; ++i)
+            if (mode == "off" || mode == "1x")
             {
-                if (mode == names[i])
-                {
-                    settings.smaa = i;
-                }
+                settings.smaa = mode == "1x" ? 1 : 0;
             }
         }
         else if (key == "fullscreen")
@@ -230,8 +226,7 @@ bool SettingsFile::Save(const Settings& settings)
          << "VSync = " << flag(settings.vsync) << "\n"
          << "; Msaa: 0, 2, 4, 8, 16. Smaa: off, 1x. Anisotropy: 1, 2, 4, 8, 16.\n"
          << "Msaa = " << settings.msaa << "\n"
-         << "Smaa = " << (settings.smaa == 1 ? "1x" : settings.smaa == 2 ? "t2x" : settings.smaa == 3 ? "s2x"
-                          : settings.smaa == 4 ? "4x" : "off") << "\n"
+         << "Smaa = " << (settings.smaa == 1 ? "1x" : "off") << "\n"
          << "Anisotropy = " << settings.anisotropy << "\n"
          << "; The stats window: its sections, and its top-right corner as fractions of the window.\n"
          << "ShowFps = " << flag(settings.show_fps) << "\n"

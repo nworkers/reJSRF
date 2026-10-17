@@ -13,15 +13,11 @@
 namespace rexbox::hle::d3d8
 {
 
-// SMAA modes (docs/design/20261017-i089-anti-aliasing.md); T2x, S2x and 4x
-// are not available yet.
+// SMAA modes (docs/design/20261017-i089-anti-aliasing.md).
 enum class SmaaMode
 {
     kOff,
     k1x,
-    kT2x,
-    kS2x,
-    k4x,
 };
 
 struct DisplayDefaults
@@ -51,10 +47,9 @@ void SetRenderScale(uint32_t scale);
 uint32_t MsaaSamples();
 void SetMsaaSamples(uint32_t samples);
 uint32_t MaxMsaaSamples();
-// SMAA on the presented picture; only modes SmaaModeAvailable accepts apply.
+// SMAA on the presented picture.
 SmaaMode Smaa();
 void SetSmaa(SmaaMode mode);
-bool SmaaModeAvailable(SmaaMode mode);
 // Anisotropic filtering on linear-filtered textures (1: off), at most
 // MaxAnisotropy().
 uint32_t Anisotropy();

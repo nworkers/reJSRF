@@ -37,7 +37,7 @@ void SetDisplayDefaults(const DisplayDefaults& defaults)
     g_defaults = defaults;
     g_widescreen.store(defaults.widescreen);
     g_anisotropy.store(defaults.anisotropy);
-    g_smaa.store(SmaaModeAvailable(defaults.smaa) ? static_cast<int>(defaults.smaa) : 0);
+    g_smaa.store(static_cast<int>(defaults.smaa));
 }
 
 DisplayDefaults CurrentDisplayDefaults()
@@ -120,15 +120,7 @@ SmaaMode Smaa()
 
 void SetSmaa(SmaaMode mode)
 {
-    if (SmaaModeAvailable(mode))
-    {
-        g_smaa.store(static_cast<int>(mode));
-    }
-}
-
-bool SmaaModeAvailable(SmaaMode mode)
-{
-    return mode == SmaaMode::kOff || mode == SmaaMode::k1x;
+    g_smaa.store(static_cast<int>(mode));
 }
 
 uint32_t Anisotropy()

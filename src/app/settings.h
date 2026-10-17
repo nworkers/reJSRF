@@ -18,7 +18,7 @@ struct Settings
     bool vsync = true;  // adaptive vsync; false: off
     // Anti-aliasing and filtering (docs/design/20261017-i089-anti-aliasing.md).
     uint32_t msaa = 0;        // 0 (off), 2, 4, 8, 16
-    uint32_t smaa = 0;        // 0 off, 1 1x, 2 T2x, 3 S2x, 4 4x
+    uint32_t smaa = 0;        // 0 off, 1 1x
     uint32_t anisotropy = 1;  // 1 (off), 2, 4, 8, 16
     // The stats window's sections (shown while any is on) and where its
     // top-right corner sits, as fractions of the window (negative: the

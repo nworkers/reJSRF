@@ -7,7 +7,7 @@
 설정 메뉴에서 고르는 그래픽 개선 옵션.
 
 1. MSAA: 2x, 4x, 8x, 16x
-2. SMAA: 1x, T2x, S2x, 4x
+2. SMAA: 1x (T2x, S2x, 4x는 빼기로 함, 2.3 참고)
 3. 이방성 필터링(AF): 2x, 4x, 8x, 16x
 
 게임이 보는 값(D3D 상태, 렌더 타깃 크기)은 바꾸지 않는다. 드라이버가 지원하지 않는 값은 메뉴에서 고를 수 없다.
@@ -32,23 +32,23 @@
 
 * 구현: 공식 SMAA(iryoku/smaa, MIT, submodule `third_party/smaa`)의 `SMAA.hlsl`을 `SMAA_GLSL_3`, `SMAA_PRESET_HIGH`로 컴파일한다. 빌드할 때 CMake가 파일을 문자열 헤더로 만든다. `AreaTex.h`(160×560 RG8)와 `SearchTex.h`(64×16 R8)는 텍스처로 올린다.
 * 위치: present에서 보여 줄 백 버퍼를 resolve한 텍스처(렌더 배율 크기)에 세 단계를 건다. 결과는 같은 크기의 텍스처이고, present는 그것을 창으로 늘려(감마 램프 포함) 보인다.
-  1. 휘도 엣지 검출 → RG8 엣지 텍스처
+  1. 색 엣지 검출 → RG8 엣지 텍스처. 카툰 렌더링 화면에는 밝기는 비슷하고 색상만 다른 면이 많아, 휘도가 아니라 RGB 차이로 찾는다.
   2. 블렌딩 가중치 계산 → RGBA8 가중치 텍스처
   3. 이웃 블렌딩 → RGBA8 결과
 * 모드
-  * **1x**(이번 단계): 위의 세 단계다.
-  * **T2x, S2x, 4x**(다음 단계, 메뉴에서는 비활성): T2x는 프레임마다 서브픽셀 지터(정점 셰이더 에필로그에서 clip 좌표를 옮김)와 이전 프레임 재투영 해석이 필요하다. 이 게임에는 속도 버퍼가 없어 움직일 때 잔상 위험이 있다. S2x는 정해진 샘플 위치의 2x MSAA와 샘플별 엣지 검출이 필요하다. 4x는 둘의 조합이다.
+  * **1x**: 위의 세 단계다.
+  * **T2x, S2x, 4x는 넣지 않는다.** T2x와 4x는 이전 프레임을 재투영해 섞는데, 이 게임에는 속도 버퍼가 없어 굵은 외곽선에 잔상이 생기고 단색 면이 번진다. 카툰 렌더링에 맞지 않는다. S2x(2x MSAA + 샘플별 SMAA)의 효과는 메뉴에서 MSAA 2x와 SMAA 1x를 함께 고르는 것으로 대신한다.
 * MSAA와 함께 쓸 수 있다(MSAA resolve 뒤에 SMAA).
 
 ### 2.4 설정
 
-* 메뉴 Graphics 탭의 "Anti-aliasing" 절에 드롭다운 세 개를 둔다: MSAA(Off, 2x, 4x, 8x, 16x), SMAA(Off, 1x, T2x, S2x, 4x), Anisotropic filtering(Off, 2x, 4x, 8x, 16x). 상한을 넘는 값과 다음 단계의 SMAA 모드는 비활성이다.
+* 메뉴 Graphics 탭의 "Anti-aliasing" 절에 드롭다운 세 개를 둔다: MSAA(Off, 2x, 4x, 8x, 16x), SMAA(Off, 1x), Anisotropic filtering(Off, 2x, 4x, 8x, 16x). 상한을 넘는 값과 다음 단계의 SMAA 모드는 비활성이다.
 * `rejsrf.ini`의 `Msaa`, `Smaa`, `Anisotropy`. 공개 헤더 `d3d8_display.h`의 `DisplayDefaults`에 더하고 `Set/Get` 함수를 둔다.
 * Info 탭의 VRAM 집계에 멀티샘플 렌더버퍼를 더한다.
 
 ### 2.5 하지 않는 것
 
-* SMAA T2x/S2x/4x(다음 단계), FXAA, 텍스처 업스케일링.
+* SMAA T2x/S2x/4x, FXAA, 텍스처 업스케일링.
 
 ## 3. 검증
 
@@ -68,7 +68,7 @@ Related: [i080 render scale](20261017-i080-render-scale.md), [i084 settings over
 Graphics options chosen in the settings menu:
 
 1. MSAA: 2x, 4x, 8x, 16x
-2. SMAA: 1x, T2x, S2x, 4x
+2. SMAA: 1x (T2x, S2x and 4x dropped, see 2.3)
 3. Anisotropic filtering (AF): 2x, 4x, 8x, 16x
 
 What the title sees (D3D state, render-target sizes) does not change, and values the driver does not support cannot be chosen.
@@ -93,23 +93,23 @@ What the title sees (D3D state, render-target sizes) does not change, and values
 
 * Implementation: the official SMAA (iryoku/smaa, MIT, submodule `third_party/smaa`); `SMAA.hlsl` compiled with `SMAA_GLSL_3` and `SMAA_PRESET_HIGH`, made into a string header by CMake at build time. `AreaTex.h` (160×560 RG8) and `SearchTex.h` (64×16 R8) are uploaded as textures.
 * Where: in present, on the resolved texture of the back buffer being shown (at the render-scale size), three passes. The result is a texture of the same size, which present stretches to the window (with the gamma ramp).
-  1. Luma edge detection → RG8 edges texture
+  1. Color edge detection → RG8 edges texture. The cel-shaded picture has many flat areas of similar brightness and different hue, so edges are found by RGB difference rather than luma.
   2. Blending weight calculation → RGBA8 weights texture
   3. Neighborhood blending → RGBA8 result
 * Modes
-  * **1x** (this step): the three passes above.
-  * **T2x, S2x, 4x** (next step, disabled in the menu): T2x needs a sub-pixel jitter per frame (moving the clip position in the vertex-shader epilogue) and resolving against the previous frame by reprojection; the title has no velocity buffer, so motion risks ghosting. S2x needs 2x MSAA with set sample positions and per-sample edge detection. 4x combines both.
+  * **1x**: the three passes above.
+  * **T2x, S2x and 4x are not included.** T2x and 4x blend in the reprojected previous frame; the title has no velocity buffer, so the thick outlines would ghost and flat areas smear, which does not suit cel shading. S2x (2x MSAA plus per-sample SMAA) is approximated by picking MSAA 2x together with SMAA 1x in the menu.
 * It combines with MSAA (SMAA after the MSAA resolve).
 
 ### 2.4 Settings
 
-* An "Anti-aliasing" section in the menu's Graphics tab with three dropdowns: MSAA (Off, 2x, 4x, 8x, 16x), SMAA (Off, 1x, T2x, S2x, 4x), Anisotropic filtering (Off, 2x, 4x, 8x, 16x). Values over the limit and the next-step SMAA modes are disabled.
+* An "Anti-aliasing" section in the menu's Graphics tab with three dropdowns: MSAA (Off, 2x, 4x, 8x, 16x), SMAA (Off, 1x), Anisotropic filtering (Off, 2x, 4x, 8x, 16x). Values over the limit and the next-step SMAA modes are disabled.
 * `Msaa`, `Smaa`, `Anisotropy` in `rejsrf.ini`; added to `DisplayDefaults` in the public `d3d8_display.h`, with `Set/Get` functions.
 * The Info tab's VRAM figures include the multisample renderbuffers.
 
 ### 2.5 Not done
 
-* SMAA T2x/S2x/4x (next step), FXAA, texture upscaling.
+* SMAA T2x/S2x/4x, FXAA, texture upscaling.
 
 ## 3. Verification
 
