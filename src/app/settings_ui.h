@@ -60,6 +60,7 @@ private:
     void Record(double now);
     void TakeMemorySnapshot();
     void DrawMenu();
+    void DrawTab(void (SettingsUi::*draw)());
     void DrawInfoTab();
     void DrawGraphicsTab();
     void DrawStatsWindow();
@@ -72,6 +73,7 @@ private:
     Tracked<bool> fullscreen_;
     Tracked<bool> widescreen_;
     Tracked<bool> vsync_;
+    float tab_height_ = 0.0f;  // the tallest tab's content, divided by the OSD scale
 
     // Stats: the bin being filled (index = floor(seconds / 0.5)) and the
     // finished ones, newest last.

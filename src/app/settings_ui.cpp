@@ -282,12 +282,12 @@ void SettingsUi::DrawMenu()
         {
             if (ImGui::BeginTabItem("Info"))
             {
-                DrawInfoTab();
+                DrawTab(&SettingsUi::DrawInfoTab);
                 ImGui::EndTabItem();
             }
             if (ImGui::BeginTabItem("Graphics"))
             {
-                DrawGraphicsTab();
+                DrawTab(&SettingsUi::DrawGraphicsTab);
                 ImGui::EndTabItem();
             }
             ImGui::EndTabBar();
@@ -297,6 +297,23 @@ void SettingsUi::DrawMenu()
     if (!open)
     {
         rexbox::platform::SetOverlayVisible(false);
+    }
+}
+
+// Every tab is as tall as the tallest seen so far, so the menu keeps one
+// size whichever tab is open. Heights are kept divided by the OSD scale, so
+// they still fit after the window changes size. Info, the tallest, is the
+// tab shown first.
+void SettingsUi::DrawTab(void (SettingsUi::*draw)())
+{
+    const float scale = ImGui::GetStyle().FontScaleMain;
+    const float top = ImGui::GetCursorPosY();
+    (this->*draw)();
+    const float height = ImGui::GetCursorPosY() - top;
+    tab_height_ = std::max(tab_height_, height / scale);
+    if (height < tab_height_ * scale)
+    {
+        ImGui::Dummy(ImVec2(0.0f, tab_height_ * scale - height));
     }
 }
 

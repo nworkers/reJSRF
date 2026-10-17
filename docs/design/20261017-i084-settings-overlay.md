@@ -97,7 +97,7 @@ ShowFpsOverlay = false
 
 ### 2.7 사용자 확인 뒤 바꾼 것 (앞의 FPS 패널·게임패드 토글을 대체한다)
 
-* 메뉴 높이는 탭 내용에 맞춘다(너비는 비율 고정, 높이는 자동). Info 탭이 스크롤 없이 다 보인다.
+* 메뉴 높이는 가장 긴 탭에 맞춰 고정한다(너비는 비율 고정). 탭마다 내용 높이를 OSD 배율로 나눈 값의 최댓값을 기억하고, 짧은 탭은 그만큼 빈 공간을 둔다. 탭을 바꿔도 창 크기가 변하지 않고, Info 탭이 스크롤 없이 다 보인다(사용자 요청).
 * **Stats 창**이 FPS 패널을 대체한다.
   * FPS, Memory, Video memory 세 섹션이 있고, Graphics 탭의 "Stats window" 체크박스로 각각 켠다(`ShowFps`, `ShowMemory`, `ShowVideoMemory`). 켠 섹션만 한 창에 위에서부터 이어 붙인다.
   * 창은 하나라도 켜져 있으면 메뉴와 상관없이 보인다. 제목 표시줄을 끌어 옮길 수 있고, X는 세 섹션을 모두 끈다.
@@ -218,7 +218,7 @@ ShowFpsOverlay = false
 
 ### 2.7 Changes after the user's check (replacing the FPS panel and the gamepad toggle above)
 
-* The menu's height fits the tab (width fixed in proportion, height automatic), so the Info tab shows without scrolling.
+* The menu's height is that of the tallest tab (width fixed in proportion): the largest content height seen, divided by the OSD scale, is kept, and shorter tabs leave the rest empty. Switching tabs does not change the window's size, and the Info tab shows without scrolling (user request).
 * A **stats window** replaces the FPS panel.
   * It has three sections, FPS, Memory and Video memory, each turned on by the Graphics tab's "Stats window" checkboxes (`ShowFps`, `ShowMemory`, `ShowVideoMemory`). Only the sections turned on are stacked in one window, top to bottom.
   * The window shows whenever any section is on, menu or not. It moves by its title bar, and its close box turns all three sections off.

@@ -44,6 +44,11 @@
 | ini를 미리 쓴 실행 | `[settings] loaded`, `render scale 2`. Widescreen으로 창과 화면이 16:9. 메뉴를 닫은 채 FPS 패널(60.0, 60·30·0 눈금과 설명) |
 | 게임패드 토글, 메뉴 중 게임 입력 차단, 전체화면·VSync 체크박스 | 미검증(사용자 플레이) |
 
+## 추가: 탭을 바꿔도 메뉴 크기 고정 (사용자 요청, v0.0.37 뒤)
+
+* `SettingsUi::DrawTab`: 탭 내용 높이를 재고, OSD 배율로 나눈 최댓값(`tab_height_`)을 기억한다. 짧은 탭은 `Dummy`로 그 높이까지 채운다. 메뉴를 열면 처음 보이는 탭이 가장 긴 Info라, 열자마자 높이가 정해진다.
+* 확인: Debug 빌드 경고 없음. 사용자가 실행 중이던 게임이 Release 실행 파일을 잡고 있어 Release는 다시 링크하지 못했다. 화면은 아직 확인하지 않았다.
+
 ## 추가: Stats 창, 그래프 안정화, 게임패드 단축키 (사용자 요청, 설계 §2.7)
 
 * 메뉴: 높이를 탭 내용에 맞춘다(`SetNextWindowSizeConstraints`로 너비 고정, `AlwaysAutoResize`).
@@ -124,6 +129,11 @@ Design: [20261017-i084](../design/20261017-i084-settings-overlay.md) · Work ord
 | Visible window (keys sent by a program) | Tab opened the menu (`[overlay] menu opened (Tab)`); the Info tab showed version, build, commit, game, driver (NVIDIA RTX 4090, GL 3.3, GLSL 3.30) and display state; after clicking the Graphics tab and pressing Ctrl+2 the dropdown read `2X (1280x960)` and `rejsrf.ini` held `RenderScale = 2` at once |
 | A run with a prepared ini | `[settings] loaded`, `render scale 2`; widescreen made the window and picture 16:9; the FPS panel (60.0, the 60/30/0 ticks and labels) showed with the menu closed |
 | Gamepad toggle, game input blocked by the menu, Fullscreen and VSync checkboxes | not verified (user play) |
+
+## Added: the menu keeps one size across tabs (user request, after v0.0.37)
+
+* `SettingsUi::DrawTab` measures each tab's content and keeps the largest height divided by the OSD scale (`tab_height_`); shorter tabs are filled to it with `Dummy`. The tab shown first when the menu opens is Info, the tallest, so the height is set at once.
+* Checked: Debug build without warnings; a game the user was running held the Release executable, so Release was not relinked; the screen is not checked yet.
 
 ## Added: stats window, steady graphs, gamepad shortcuts (user request, design §2.7)
 

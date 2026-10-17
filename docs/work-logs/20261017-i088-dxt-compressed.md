@@ -24,7 +24,7 @@
 | 숨긴 창 데모, `REXBOX_DXT=cpu` | `decoded on the CPU (REXBOX_DXT=cpu)`. 프레임 1500, 3000, 4650 BMP가 변경 전과 바이트 단위로 같음 |
 | 숨긴 창 데모, 기본 | `uploaded compressed (S3TC)`. 변경 전과의 차이(채널 최대 / 평균 / 바뀐 픽셀 / 8 초과): 1500은 2 / 0.027 / 2.6% / 0, 3000은 4 / 0.253 / 24.2% / 0, 4650은 5 / 0.287 / 26.5% / 0. GPU와 우리 디코더의 반올림 차이다 |
 | 텍스처 VRAM(설정 메뉴, 첫 프레임 후 약 45초, 텍스처 115개) | 12.8 MiB. CPU 디코드 때 같은 115개가 70.7 MiB(i084 작업 로그)였으니 약 5.5배 줄었다 |
-| 사용자 플레이(텍스처 모양, DXT1 구멍, 알파) | 미검증 |
+| 사용자 플레이(텍스처 모양, DXT1 구멍, 알파) | 사용자 확인: 잘 동작한다 |
 
 ---
 
@@ -54,4 +54,4 @@ Design: [20261017-i088](../design/20261017-i088-dxt-compressed.md) · Work order
 | Hidden-window demo, `REXBOX_DXT=cpu` | `decoded on the CPU (REXBOX_DXT=cpu)`; frames 1500, 3000 and 4650 byte-identical to before |
 | Hidden-window demo, default | `uploaded compressed (S3TC)`. Difference from before (largest channel / mean / pixels changed / over 8): 1500: 2 / 0.027 / 2.6% / 0; 3000: 4 / 0.253 / 24.2% / 0; 4650: 5 / 0.287 / 26.5% / 0. Rounding differs between the GPU and our decoder |
 | Texture VRAM (settings menu, about 45 s after the first frame, 115 textures) | 12.8 MiB; the same 115 took 70.7 MiB with the CPU decode (i084 work log), about 5.5x less |
-| User play (texture look, DXT1 holes, alpha) | not verified |
+| User play (texture look, DXT1 holes, alpha) | the user's check: it works |
