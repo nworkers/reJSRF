@@ -68,6 +68,21 @@ void UpdateDrawableSizeLocked()
     g_display.info.drawable_height = static_cast<uint32_t>(height);
 }
 
+// The refresh of the monitor the window is on (it can move or go fullscreen).
+void UpdateRefreshLocked()
+{
+    g_display.info.refresh_hz = 0;
+    const SDL_DisplayID id = SDL_GetDisplayForWindow(g_display.window);
+    const SDL_DisplayMode* mode = id != 0 ? SDL_GetCurrentDisplayMode(id) : nullptr;
+    if (mode == nullptr)
+    {
+        return;
+    }
+    g_display.info.refresh_hz = mode->refresh_rate_numerator > 0 && mode->refresh_rate_denominator > 0
+                                    ? static_cast<double>(mode->refresh_rate_numerator) / mode->refresh_rate_denominator
+                                    : static_cast<double>(mode->refresh_rate);
+}
+
 // Alt+1/2/3: the picture at a fixed scale, leaving fullscreen or a maximized
 // window first.
 void ApplyScale(SDL_Window* window, uint32_t picture_width, uint32_t picture_height, uint32_t scale)
@@ -187,10 +202,25 @@ bool CreateDisplay(const DisplayConfig& config, std::string* error)
         ReleaseLocked();
         return false;
     }
-    // No vsync: the title paces itself by the emulated vertical blank (the
-    // HLE's virtual clock), whatever the monitor's refresh; waiting for a
-    // hidden window's blank can also block indefinitely on some drivers.
-    SDL_GL_SetSwapInterval(0);
+    // The title paces itself by the emulated vertical blank (the HLE's
+    // virtual clock) whatever the monitor's refresh; host vsync only keeps
+    // swaps out of the scan-out (no tearing). A hidden window swaps at once:
+    // waiting for its blank can block indefinitely on some drivers
+    // (docs/design/20261017-i082-vsync.md).
+    int interval = 0;
+    if (!config.hidden && config.vsync == VsyncMode::kAdaptive && SDL_GL_SetSwapInterval(-1))
+    {
+        interval = -1;
+    }
+    else if (!config.hidden && config.vsync != VsyncMode::kOff && SDL_GL_SetSwapInterval(1))
+    {
+        interval = 1;
+    }
+    else
+    {
+        SDL_GL_SetSwapInterval(0);
+    }
+    g_display.info.swap_interval = interval;
 
     int value = 0;
     SDL_GL_GetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, &value);
@@ -200,6 +230,7 @@ bool CreateDisplay(const DisplayConfig& config, std::string* error)
     SDL_GL_GetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, &value);
     g_display.info.gl_es = (value & SDL_GL_CONTEXT_PROFILE_ES) != 0;
     UpdateDrawableSizeLocked();
+    UpdateRefreshLocked();
     SDL_SetWindowTitle(g_display.window, FullTitleLocked(config.title, 0.0).c_str());
     g_display.fps_presents = 0;
     return true;
@@ -291,10 +322,12 @@ void PumpDisplayEvents(bool* close_requested)
         {
             ToggleFullscreen(window);
         }
-        else if (event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED || event.type == SDL_EVENT_WINDOW_RESIZED)
+        else if (event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED || event.type == SDL_EVENT_WINDOW_RESIZED ||
+                 event.type == SDL_EVENT_WINDOW_DISPLAY_CHANGED)
         {
             std::lock_guard<std::mutex> lock(g_mutex);
             UpdateDrawableSizeLocked();
+            UpdateRefreshLocked();
         }
     }
     if (close_requested != nullptr)

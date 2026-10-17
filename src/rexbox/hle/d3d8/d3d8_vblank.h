@@ -7,6 +7,7 @@
 #ifndef REXBOX_HLE_D3D8_D3D8_VBLANK_H
 #define REXBOX_HLE_D3D8_D3D8_VBLANK_H
 
+#include <chrono>
 #include <cstdint>
 
 namespace rexbox::hle::d3d8
@@ -14,6 +15,14 @@ namespace rexbox::hle::d3d8
 
 // Sets the refresh rate in Hz (0 keeps 60).
 void SetVerticalBlankRate(uint32_t hertz);
+uint32_t VerticalBlankRate();
+
+// The host's vertical blank happened at `host_blank` (a swap with vsync
+// returned then): moves the clock's phase so its next tick falls a little
+// before the host's next blank, keeping the current tick number. Called each
+// frame on monitors near the guest refresh, it locks the clock to the host
+// (docs/design/20261017-i082-vsync.md).
+void AlignVerticalBlank(std::chrono::steady_clock::time_point host_blank);
 
 // Vertical blanks since the clock started.
 uint64_t VerticalBlankCount();
