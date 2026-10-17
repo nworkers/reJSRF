@@ -44,6 +44,12 @@
 | ini를 미리 쓴 실행 | `[settings] loaded`, `render scale 2`. Widescreen으로 창과 화면이 16:9. 메뉴를 닫은 채 FPS 패널(60.0, 60·30·0 눈금과 설명) |
 | 게임패드 토글, 메뉴 중 게임 입력 차단, 전체화면·VSync 체크박스 | 미검증(사용자 플레이) |
 
+## 추가: OSD 크기를 화면에 비례하게 (사용자 요청)
+
+* 처음 구현은 창 높이 720 기준으로 0.25 단위, 최소 1배였다. 메뉴 크기도 처음 열 때만 정해서, 창 크기를 바꾸면 비율이 달라졌다.
+* 이제 배율은 `min(너비/960, 높이/720)`의 연속 값(0.25~8)이다. 메뉴는 기준 560×450 × 배율로 가운데에 고정했다(이동·크기 변경 없음). FPS 패널의 여백도 배율을 따른다.
+* 확인: 1280×960 창과 Alt+1 뒤 640×480 창에서 메뉴가 창 너비의 약 58%로 가운데에 놓이고, FPS 패널도 같은 비율이었다. Release 빌드 경고 없음.
+
 ---
 
 # Work log: settings overlay and rejsrf.ini (issue #84)
@@ -91,3 +97,9 @@ Design: [20261017-i084](../design/20261017-i084-settings-overlay.md) · Work ord
 | Visible window (keys sent by a program) | Tab opened the menu (`[overlay] menu opened (Tab)`); the Info tab showed version, build, commit, game, driver (NVIDIA RTX 4090, GL 3.3, GLSL 3.30) and display state; after clicking the Graphics tab and pressing Ctrl+2 the dropdown read `2X (1280x960)` and `rejsrf.ini` held `RenderScale = 2` at once |
 | A run with a prepared ini | `[settings] loaded`, `render scale 2`; widescreen made the window and picture 16:9; the FPS panel (60.0, the 60/30/0 ticks and labels) showed with the menu closed |
 | Gamepad toggle, game input blocked by the menu, Fullscreen and VSync checkboxes | not verified (user play) |
+
+## Added: OSD size in proportion to the screen (user request)
+
+* The first version scaled on a 720-pixel-high base in 0.25 steps with a minimum of 1x, and set the menu size only when first opened, so resizing the window changed the proportions.
+* The scale is now the continuous `min(width/960, height/720)` (0.25 to 8). The menu is fixed at 560×450 × scale, centered (no moving or resizing), and the FPS panel's margin follows the scale.
+* Checked: in a 1280×960 window and in 640×480 after Alt+1, the menu sat centered at about 58% of the window's width, and the FPS panel kept the same proportion. No Release build warnings.

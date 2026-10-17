@@ -30,8 +30,10 @@ std::atomic<bool> g_visible{false};
 bool g_initialized = false;
 bool g_failed = false;
 
-// The overlay grows with the window: sizes are for a 720-pixel-high window,
-// scaled in quarter steps (the style is rebuilt from the base when it changes).
+// The overlay keeps its size in proportion to the window: sizes are for a
+// 960x720 window and scale with the smaller of the two ratios, so it fits a
+// 4:3 or 16:9 window alike (the style is rebuilt from the base when the
+// scale changes; fonts render at any size).
 ImGuiStyle g_base_style;
 float g_ui_scale = 0.0f;
 
@@ -40,8 +42,9 @@ void FollowWindowSize(SDL_Window* window)
     int width = 0;
     int height = 0;
     SDL_GetWindowSizeInPixels(window, &width, &height);
-    const float scale = std::clamp(std::round(static_cast<float>(height) / 720.0f * 4.0f) / 4.0f, 1.0f, 4.0f);
-    if (scale == g_ui_scale)
+    const float scale = std::clamp(std::min(static_cast<float>(width) / 960.0f, static_cast<float>(height) / 720.0f),
+                                   0.25f, 8.0f);
+    if (std::fabs(scale - g_ui_scale) < 0.001f)
     {
         return;
     }

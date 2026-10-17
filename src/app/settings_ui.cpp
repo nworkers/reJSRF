@@ -135,14 +135,16 @@ void SettingsUi::Build()
 void SettingsUi::DrawMenu()
 {
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    // The menu keeps its size in proportion to the window, centered (the
+    // platform scales the style with the window).
     ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f,
                                    viewport->WorkPos.y + viewport->WorkSize.y * 0.5f),
-                            ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
-    // Sizes follow the overlay's scale (the platform scales the style with the window).
+                            ImGuiCond_Always, ImVec2(0.5f, 0.5f));
     const float scale = ImGui::GetStyle().FontScaleMain;
-    ImGui::SetNextWindowSize(ImVec2(560.0f * scale, 450.0f * scale), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(560.0f * scale, 450.0f * scale), ImGuiCond_Always);
     bool open = true;
-    if (ImGui::Begin("reJSRF Settings", &open, ImGuiWindowFlags_NoCollapse))
+    if (ImGui::Begin("reJSRF Settings", &open,
+                     ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove))
     {
         ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
         ImGui::TextWrapped("Tab (or holding Back+Start) closes this menu. The game keeps running without input.");
@@ -334,7 +336,8 @@ void SettingsUi::DrawFpsPanel()
     const double current_fps = recent_time > 0.0 ? recent_frames / recent_time : 0.0;
 
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x - 10.0f, viewport->WorkPos.y + 10.0f),
+    const float margin = 10.0f * ImGui::GetStyle().FontScaleMain;
+    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x - margin, viewport->WorkPos.y + margin),
                             ImGuiCond_Always, ImVec2(1.0f, 0.0f));
     ImGui::SetNextWindowBgAlpha(0.65f);
     const ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |

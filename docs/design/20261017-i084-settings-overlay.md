@@ -42,6 +42,7 @@
   * Tab(반복 아님)으로 토글한다. Tab은 ImGui로 넘기지 않는다.
   * 게임패드는 Back+Start를 1초 누르면 토글한다.
 * 이벤트: `PumpDisplayEvents`가 모든 SDL 이벤트를 ImGui 백엔드에 넘긴다. 키보드·게임패드 탐색을 켠다.
+* 크기(사용자 요청으로 추가): OSD는 창 크기에 비례해 같은 비율을 유지한다. 기준은 960×720 창이고, 배율은 `min(너비/960, 높이/720)`이다(4:3이든 16:9든 창 안에 들어간다). 스타일 크기와 글꼴 배율(`FontScaleMain`)에 연속 값으로 적용한다. 메뉴는 창 가운데에 기준 560×450 × 배율 크기로 고정되고, 사용자가 옮기거나 크기를 바꿀 수 없다.
 * 입력 차단: 메뉴가 열려 있으면 `ReadGamepad`가 연결된 채 아무것도 누르지 않은 상태를 돌려준다. 게임이 컨트롤러가 빠졌다고 여기지 않게 하기 위해서다.
 
 ### 2.3 표시 제어
@@ -144,6 +145,7 @@ Agreed with the user:
   * Tab (not repeats) toggles it; Tab is not passed to ImGui.
   * On a gamepad, Back+Start held for one second toggles it.
 * Events: `PumpDisplayEvents` passes every SDL event to the ImGui backend. Keyboard and gamepad navigation are on.
+* Size (added at the user's request): the OSD keeps the same proportion to the window. The base is a 960×720 window and the scale is `min(width/960, height/720)`, so it fits a 4:3 or 16:9 window alike; it applies continuously to style sizes and the font scale (`FontScaleMain`). The menu stays centered at 560×450 × scale and cannot be moved or resized.
 * Blocking input: while the menu is open, `ReadGamepad` returns a connected controller with nothing pressed, so the title does not think the controller was removed.
 
 ### 2.3 Display control
