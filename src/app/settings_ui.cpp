@@ -410,7 +410,7 @@ void SettingsUi::DrawGraphicsTab()
     {
         for (uint32_t scale = 1; scale <= kMaxScale; ++scale)
         {
-            labels.push_back(Printf("%uX (%ux%u)", scale, kGuestWidth * scale, kGuestHeight * scale));
+            labels.push_back(Printf("%ux (%ux%u)", scale, kGuestWidth * scale, kGuestHeight * scale));
         }
     }
     const uint32_t current = std::clamp<uint32_t>(render_scale_.expected, 1, kMaxScale);
