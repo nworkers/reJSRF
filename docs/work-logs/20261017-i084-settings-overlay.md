@@ -44,6 +44,13 @@
 | ini를 미리 쓴 실행 | `[settings] loaded`, `render scale 2`. Widescreen으로 창과 화면이 16:9. 메뉴를 닫은 채 FPS 패널(60.0, 60·30·0 눈금과 설명) |
 | 게임패드 토글, 메뉴 중 게임 입력 차단, 전체화면·VSync 체크박스 | 미검증(사용자 플레이) |
 
+## 추가: Info 탭에 메모리와 VRAM (사용자 요청)
+
+* 플랫폼: `system_info.h`의 `QueryProcessMemory`(Win32: `GetProcessMemoryInfo`, `GlobalMemoryStatusEx`).
+* D3D8: 텍스처 업로드가 RGBA8 바이트를 센다(`TextureCacheBytes`). 렌더 타깃은 배율이 곱해진 저장 크기를 센다(`RenderTargetBytes`). `GetVideoMemoryInfo`는 여기에 드라이버 값을 더한다. NVIDIA는 `GL_NVX_gpu_memory_info`, AMD는 `GL_ATI_meminfo`이고, 질의가 낼 수 있는 GL 오류는 지운다.
+* 앱: "Memory"·"Video memory" 섹션을 0.5초마다 갱신한다. Xbox 메모리는 게스트 힙(`Env().heap`)에서 읽는다.
+* 확인: Debug 빌드 경고 없음. 사용자가 실행 중이던 게임이 Release 실행 파일을 잡고 있어 Release는 다시 링크하지 못했다. 실행 화면은 아직 확인하지 않았다.
+
 ## 추가: OSD 크기를 화면에 비례하게 (사용자 요청)
 
 * 처음 구현은 창 높이 720 기준으로 0.25 단위, 최소 1배였다. 메뉴 크기도 처음 열 때만 정해서, 창 크기를 바꾸면 비율이 달라졌다.
@@ -97,6 +104,13 @@ Design: [20261017-i084](../design/20261017-i084-settings-overlay.md) · Work ord
 | Visible window (keys sent by a program) | Tab opened the menu (`[overlay] menu opened (Tab)`); the Info tab showed version, build, commit, game, driver (NVIDIA RTX 4090, GL 3.3, GLSL 3.30) and display state; after clicking the Graphics tab and pressing Ctrl+2 the dropdown read `2X (1280x960)` and `rejsrf.ini` held `RenderScale = 2` at once |
 | A run with a prepared ini | `[settings] loaded`, `render scale 2`; widescreen made the window and picture 16:9; the FPS panel (60.0, the 60/30/0 ticks and labels) showed with the menu closed |
 | Gamepad toggle, game input blocked by the menu, Fullscreen and VSync checkboxes | not verified (user play) |
+
+## Added: memory and VRAM in the Info tab (user request)
+
+* Platform: `system_info.h` with `QueryProcessMemory` (Win32: `GetProcessMemoryInfo`, `GlobalMemoryStatusEx`).
+* D3D8: texture uploads count their RGBA8 bytes (`TextureCacheBytes`), render targets their scaled storage (`RenderTargetBytes`). `GetVideoMemoryInfo` adds the driver's figures from `GL_NVX_gpu_memory_info` (NVIDIA) or `GL_ATI_meminfo` (AMD), clearing the GL error the query may raise.
+* App: "Memory" and "Video memory" sections, refreshed every 0.5 s; Xbox memory from the guest heap (`Env().heap`).
+* Checked: Debug build without warnings (a game the user was running held the Release executable, so Release was not relinked); runtime display not checked yet.
 
 ## Added: OSD size in proportion to the screen (user request)
 

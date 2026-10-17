@@ -720,6 +720,23 @@ uint32_t RenderScale()
     return ActiveScale();
 }
 
+RenderTargetUse RenderTargetBytes()
+{
+    RenderTargetUse use;
+    for (const auto& [memory, target] : g_colors)
+    {
+        const uint64_t bytes = static_cast<uint64_t>(target.width * target.scale) * (target.height * target.scale) * 4;
+        ++use.count;
+        use.bytes += bytes * (target.copy != 0 ? 2 : 1);
+    }
+    for (const auto& [memory, target] : g_depths)
+    {
+        ++use.count;
+        use.bytes += static_cast<uint64_t>(target.width * target.scale) * (target.height * target.scale) * 4;
+    }
+    return use;
+}
+
 void SetRenderScale(uint32_t scale)
 {
     g_pending_render_scale = std::clamp<uint32_t>(scale, 1, kMaxRenderScale);

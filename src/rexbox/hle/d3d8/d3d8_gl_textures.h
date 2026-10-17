@@ -29,6 +29,14 @@ struct BoundTexture
     uint32_t format = 0xFFFFFFFF;  // D3DFORMAT of the header; unknown for render targets
 };
 
+// The GL textures made from guest textures: how many and their RGBA8 bytes.
+struct TextureCacheUse
+{
+    uint32_t count = 0;
+    uint64_t bytes = 0;
+};
+TextureCacheUse TextureCacheBytes();
+
 // The GL texture for the header bound to a stage (uploaded as needed).
 BoundTexture ResolveTexture(GuestAddress header);
 

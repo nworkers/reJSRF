@@ -39,6 +39,7 @@ struct CachedTexture
     uint32_t hash = 0;
     uint32_t checked_frame = 0xFFFFFFFF;
     bool written = false;
+    uint64_t gl_bytes = 0;  // RGBA8 levels uploaded (for the settings menu)
 };
 
 std::unordered_map<GuestAddress, CachedTexture> g_textures;
@@ -123,6 +124,7 @@ bool Upload(GuestAddress header, CachedTexture* cached)
     gl.PixelStorei(kGlUnpackAlignment, 1);
     std::vector<uint8_t> rgba;
     uint32_t uploaded = 0;
+    cached->gl_bytes = 0;
     for (uint32_t level = 0; level < levels; ++level)
     {
         const LevelLayout layout = HeaderLevelLayout(header, level);
@@ -178,6 +180,7 @@ bool Upload(GuestAddress header, CachedTexture* cached)
             cached->bound.width = width;
             cached->bound.height = height;
         }
+        cached->gl_bytes += static_cast<uint64_t>(width) * height * std::max(depth, 1u) * 4;
         ++uploaded;
     }
     if (uploaded == 0)
@@ -332,6 +335,20 @@ void BindStageTexture(uint32_t stage, const BoundTexture& texture)
         gl.BindSampler(stage, sampler);
         unit.sampler = sampler;
     }
+}
+
+TextureCacheUse TextureCacheBytes()
+{
+    TextureCacheUse use;
+    for (const auto& [header, cached] : g_textures)
+    {
+        if (cached.bound.texture != 0)
+        {
+            ++use.count;
+            use.bytes += cached.gl_bytes;
+        }
+    }
+    return use;
 }
 
 void MarkTextureWritten(GuestAddress header)

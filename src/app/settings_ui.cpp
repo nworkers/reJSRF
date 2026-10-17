@@ -3,6 +3,9 @@
 #include "rexbox/hle/d3d8/d3d8_display.h"
 #include "rexbox/platform/display.h"
 #include "rexbox/platform/overlay.h"
+#include "rexbox/runtime/environment.h"
+#include "rexbox/runtime/guest_heap.h"
+#include "rexbox/runtime/guest_memory.h"
 
 #include "imgui.h"
 
@@ -56,6 +59,13 @@ void Row(const char* label, const std::string& value)
     ImGui::TextDisabled("%s", label);
     ImGui::TableSetColumnIndex(1);
     ImGui::TextWrapped("%s", value.empty() ? "-" : value.c_str());
+}
+
+std::string Mib(uint64_t bytes)
+{
+    char buffer[32];
+    std::snprintf(buffer, sizeof(buffer), "%.1f MiB", static_cast<double>(bytes) / (1024.0 * 1024.0));
+    return buffer;
 }
 
 std::string Printf(const char* format, ...)
@@ -171,6 +181,24 @@ void SettingsUi::DrawMenu()
     }
 }
 
+void SettingsUi::RefreshMemory(double now)
+{
+    if (memory_time_ >= 0.0 && now - memory_time_ < 0.5)
+    {
+        return;
+    }
+    memory_time_ = now;
+    process_memory_ = rexbox::platform::QueryProcessMemory();
+    video_memory_ = rexbox::hle::d3d8::GetVideoMemoryInfo();
+    const rexbox::runtime::GuestHeap* heap = rexbox::runtime::Env().heap;
+    guest_known_ = heap != nullptr;
+    if (guest_known_)
+    {
+        guest_total_ = rexbox::runtime::GuestMemory::kAddressSpaceSize;
+        guest_used_ = guest_total_ - heap->free_bytes();
+    }
+}
+
 void SettingsUi::DrawInfoTab()
 {
     rexbox::platform::DisplayInfo info;
@@ -212,6 +240,42 @@ void SettingsUi::DrawInfoTab()
         Row("Window", Printf("%ux%u", info.drawable_width, info.drawable_height));
         Row("Render size", Printf("%ux%u (%ux)", kGuestWidth * scale, kGuestHeight * scale, scale));
         Row("Settings file", file_ != nullptr ? file_->path() : std::string());
+        ImGui::EndTable();
+    }
+    RefreshMemory(presents_.empty() ? 0.0 : presents_.back());
+    ImGui::SeparatorText("Memory");
+    if (ImGui::BeginTable("memory", 2, ImGuiTableFlags_SizingStretchProp))
+    {
+        ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthFixed, 130.0f * ImGui::GetStyle().FontScaleMain);
+        ImGui::TableSetupColumn("value", ImGuiTableColumnFlags_WidthStretch);
+        const rexbox::platform::ProcessMemory& process = process_memory_;
+        Row("Process", process.known ? Mib(process.working_set) + " in use, " + Mib(process.private_bytes) +
+                                           " committed"
+                                     : std::string());
+        Row("Address space", process.address_space_total != 0
+                                 ? Mib(process.address_space_used) + " of " + Mib(process.address_space_total)
+                                 : std::string());
+        Row("Xbox memory", guest_known_ ? Mib(guest_used_) + " of " + Mib(guest_total_) + " allocated" : std::string());
+        ImGui::EndTable();
+    }
+    ImGui::SeparatorText("Video memory");
+    if (ImGui::BeginTable("vram", 2, ImGuiTableFlags_SizingStretchProp))
+    {
+        ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthFixed, 130.0f * ImGui::GetStyle().FontScaleMain);
+        ImGui::TableSetupColumn("value", ImGuiTableColumnFlags_WidthStretch);
+        const rexbox::hle::d3d8::VideoMemoryInfo& video = video_memory_;
+        std::string gpu = "not reported by this driver";
+        if (video.driver_total_known)
+        {
+            gpu = Mib(video.driver_total - video.driver_free) + " of " + Mib(video.driver_total) + " in use (all programs)";
+        }
+        else if (video.driver_free_known)
+        {
+            gpu = Mib(video.driver_free) + " free";
+        }
+        Row("GPU", gpu);
+        Row("Render targets", Printf("%s (%u surfaces)", Mib(video.render_target_bytes).c_str(), video.render_targets));
+        Row("Textures", Printf("%s (%u)", Mib(video.texture_bytes).c_str(), video.textures));
         ImGui::EndTable();
     }
 }

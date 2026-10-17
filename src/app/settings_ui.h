@@ -6,6 +6,9 @@
 
 #include "settings.h"
 
+#include "rexbox/hle/d3d8/d3d8_display.h"
+#include "rexbox/platform/system_info.h"
+
 #include <chrono>
 #include <cstdint>
 #include <deque>
@@ -49,6 +52,7 @@ private:
     void DrawInfoTab();
     void DrawGraphicsTab();
     void DrawFpsPanel();
+    void RefreshMemory(double now);
 
     BuildInfo build_;
     Settings settings_;  // what rejsrf.ini holds
@@ -62,6 +66,14 @@ private:
     // Present times over the last 60 s, in seconds since start_.
     std::chrono::steady_clock::time_point start_ = std::chrono::steady_clock::now();
     std::deque<double> presents_;
+
+    // The Info tab's memory figures, refreshed twice a second.
+    double memory_time_ = -1.0;
+    rexbox::platform::ProcessMemory process_memory_;
+    rexbox::hle::d3d8::VideoMemoryInfo video_memory_;
+    bool guest_known_ = false;
+    uint64_t guest_used_ = 0;
+    uint64_t guest_total_ = 0;
 };
 
 }  // namespace rejsrf

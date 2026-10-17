@@ -40,6 +40,15 @@ uint32_t RenderTargetHeight();
 uint32_t RenderScale();
 void SetRenderScale(uint32_t scale);
 
+// The GL storage of the render targets (color with its sampling copy, and
+// depth/stencil), at their scaled size: how many surfaces and their bytes.
+struct RenderTargetUse
+{
+    uint32_t count = 0;
+    uint64_t bytes = 0;
+};
+RenderTargetUse RenderTargetBytes();
+
 // Shows `color` (a back buffer) in the window through the display gamma ramp,
 // scaled to fit with its aspect ratio kept, and rebinds the current render target.
 void PresentRenderTarget(GuestAddress color, const GammaRamp& ramp);
