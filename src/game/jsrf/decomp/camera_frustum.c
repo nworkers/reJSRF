@@ -24,8 +24,6 @@
 
 extern void sub_00153A90_gen(void);
 
-float (*rejsrf_host_horizontal_view_scale)(void) = 0;
-
 /* 0x00153A90, thiscall: void (camera* this) */
 void sub_00153A90(void)
 {

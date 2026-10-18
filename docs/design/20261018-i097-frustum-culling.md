@@ -35,7 +35,7 @@
 ### 3.2 디컴파일 대체(`src/game/jsrf/decomp/camera_frustum.c`)
 
 * `void sub_00153A90(void)`를 정의한다. `scripts/recomp/regenerate.py`가 이것을 보고 원본을 `sub_00153A90_gen`으로 낸다(`adxm_lock.c`와 같은 방식). 대체는 `_gen`을 먼저 부르고(ecx 그대로, thiscall) 전역을 고친다. 디컴파일이 아니라 호스트 어댑터다.
-* `rejsrf_decomp_check`는 D3D8 HLE 없이 `rejsrf_game`만 링크하므로, 게임 코드가 HLE 함수를 직접 참조하면 안 된다. `include/rejsrf/jsrf_host.h`에 C 훅 `float (*rejsrf_host_horizontal_view_scale)(void)`을 두고(널이면 1), 앱(`main.cpp`)이 `rexbox_d3d8_horizontal_view_scale`로 채운다.
+* `rejsrf_decomp_check`는 D3D8 HLE 없이 `rejsrf_game`만 링크하므로, 게임 코드가 HLE 함수를 직접 참조하면 안 된다. `include/rejsrf/jsrf_host.h`에 C 훅 `float (*rejsrf_host_horizontal_view_scale)(void)`을 두고(널이면 1; 정의는 늘 컴파일되는 `src/game/jsrf/jsrf_host.c`에 둔다. 생성 코드가 없는 빌드(CI)에서는 `decomp/`가 컴파일되지 않는다), 앱(`main.cpp`)이 `rexbox_d3d8_horizontal_view_scale`로 채운다.
 
 ### 3.3 HLE(`d3d8_display`)
 
@@ -90,7 +90,7 @@ The vertical values and the depth stay. Nothing is written at 4:3 (`W/640 = 1`).
 ### 3.2 Decompiled replacement (`src/game/jsrf/decomp/camera_frustum.c`)
 
 * Defines `void sub_00153A90(void)`; `scripts/recomp/regenerate.py` sees it and emits the original as `sub_00153A90_gen` (as for `adxm_lock.c`). The replacement calls `_gen` first (ecx intact, thiscall) and then corrects the globals. A host adapter, not a decompilation.
-* `rejsrf_decomp_check` links `rejsrf_game` without the D3D8 HLE, so game code must not reference HLE functions directly. `include/rejsrf/jsrf_host.h` holds the C hook `float (*rejsrf_host_horizontal_view_scale)(void)` (null means 1), and the application (`main.cpp`) fills it with `rexbox_d3d8_horizontal_view_scale`.
+* `rejsrf_decomp_check` links `rejsrf_game` without the D3D8 HLE, so game code must not reference HLE functions directly. `include/rejsrf/jsrf_host.h` holds the C hook `float (*rejsrf_host_horizontal_view_scale)(void)` (null means 1; defined in `src/game/jsrf/jsrf_host.c`, which is always compiled, since `decomp/` is not compiled in a build without generated code, such as CI), and the application (`main.cpp`) fills it with `rexbox_d3d8_horizontal_view_scale`.
 
 ### 3.3 HLE (`d3d8_display`)
 
