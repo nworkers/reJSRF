@@ -10,6 +10,7 @@
 #define REXBOX_HLE_D3D8_D3D8_GL_TARGETS_H
 
 #include "d3d8_gamma.h"
+#include "rexbox/hle/d3d8/d3d8_display.h"
 
 #include "rexbox/runtime/guest_memory.h"
 
@@ -39,6 +40,30 @@ uint32_t RenderTargetHeight();
 // (docs/design/20261017-i080-render-scale.md).
 uint32_t RenderScale();
 void SetRenderScale(uint32_t scale);
+
+// Hor+ widescreen (docs/design/20261018-i085-widescreen-horplus.md). Back
+// buffers and depth stencils are stored WideWidth(aspect, height) guest
+// pixels wide (0: their own width) and draws to them scale clip x by
+// RenderTargetWideFactor() (width / wide, 1 for other targets), so the 4:3
+// picture keeps its place in the middle and the scene continues at the
+// sides. SetTargetAspect takes effect after the next present (at once before
+// any target exists).
+uint32_t WideWidth(AspectMode aspect, uint32_t height);
+void SetTargetAspect(AspectMode aspect);
+AspectMode TargetAspect();
+float RenderTargetWideFactor();
+
+// Hor+ widescreen (docs/design/20261018-i085-widescreen-horplus.md). Back
+// buffers and depth stencils are stored WideWidth(aspect, height) guest
+// pixels wide (0: their own width) and draws to them scale clip x by
+// RenderTargetWideFactor() (width / wide, 1 for other targets), so the 4:3
+// picture keeps its place in the middle and the scene continues at the
+// sides. SetTargetAspect takes effect after the next present (at once before
+// any target exists).
+uint32_t WideWidth(AspectMode aspect, uint32_t height);
+void SetTargetAspect(AspectMode aspect);
+AspectMode TargetAspect();
+float RenderTargetWideFactor();
 
 // The GL storage of the render targets (color with its sampling copy, and
 // depth/stencil), at their scaled size: how many surfaces and their bytes.

@@ -111,11 +111,18 @@ uint32_t ActiveSamples()
     return g_msaa_samples;
 }
 
+// Hor+ widescreen (docs/design/20261018-i085-widescreen-horplus.md).
+AspectMode g_aspect = AspectMode::k4x3;
+AspectMode g_pending_aspect = AspectMode::k4x3;
+bool g_aspect_pending = false;
+float g_wide_factor = 1.0f;  // of the bound color (or depth) target
+
 struct ColorTarget
 {
     GLuint texture = 0;
     uint32_t width = 0;  // guest size; the GL texture is scale times this
     uint32_t height = 0;
+    uint32_t wide = 0;  // the stored width in guest pixels when widened (back buffers), else 0
     uint32_t scale = 1;
     // MSAA: the multisample renderbuffer drawn into, the framebuffer holding
     // `texture` that it resolves to, and whether it was drawn since.
@@ -140,9 +147,30 @@ struct DepthTarget
     GLuint renderbuffer = 0;
     uint32_t width = 0;  // guest size
     uint32_t height = 0;
+    uint32_t wide = 0;
     uint32_t scale = 1;
     uint32_t samples = 0;
 };
+
+// A target's GL storage width.
+template <typename Target>
+uint32_t GlWidth(const Target& target)
+{
+    return (target.wide != 0 ? target.wide : target.width) * target.scale;
+}
+
+// The widened width for `surface`: only a back buffer or the depth stencil,
+// which the title draws its whole picture into, is wider than the guest
+// says. Texture render targets are read back by the title at their size.
+uint32_t WideFor(GuestAddress surface, uint32_t height)
+{
+    const HostResource* host = FindResource(surface);
+    if (host == nullptr || (host->kind != ResourceKind::kBackBuffer && host->kind != ResourceKind::kDepthStencil))
+    {
+        return 0;
+    }
+    return WideWidth(g_aspect, height);
+}
 
 // Keyed by surface memory (SurfaceMemory); framebuffers by the memory pair.
 std::unordered_map<uint32_t, ColorTarget> g_colors;
@@ -168,6 +196,7 @@ struct ResolvedTarget
     GLuint framebuffer = 0;
     uint32_t width = 0;
     uint32_t height = 0;
+    float wide_factor = 1.0f;
 };
 ResolvedTarget g_resolved_target;
 
@@ -222,9 +251,11 @@ ColorTarget& Color(GuestAddress surface)
     uint32_t width = 0;
     uint32_t height = 0;
     SurfaceSize(surface, &width, &height);
+    const uint32_t wide = WideFor(surface, height);
     GlFunctions& gl = Gl();
-    // Only the scale changed: the old pixels are stretched into the new
-    // texture, since a surface may be sampled before it is drawn again.
+    // Only the scale (or the widening) changed: the old pixels are stretched
+    // into the new texture, since a surface may be sampled before it is drawn
+    // again.
     GLuint rescaled = 0;
     uint32_t rescaled_width = 0;
     uint32_t rescaled_height = 0;
@@ -233,7 +264,7 @@ ColorTarget& Color(GuestAddress surface)
     if (it != g_colors.end())
     {
         ColorTarget& old = it->second;
-        if (old.width == width && old.height == height && old.scale == ActiveScale() &&
+        if (old.width == width && old.height == height && old.wide == wide && old.scale == ActiveScale() &&
             old.samples == ActiveSamples())
         {
             return old;
@@ -242,7 +273,7 @@ ColorTarget& Color(GuestAddress surface)
         {
             ResolveColor(memory, old);  // the multisample pixels into the texture first
             rescaled = old.texture;
-            rescaled_width = old.width * old.scale;
+            rescaled_width = GlWidth(old);
             rescaled_height = old.height * old.scale;
             sampleable = old.sampleable;
         }
@@ -269,6 +300,7 @@ ColorTarget& Color(GuestAddress surface)
     ColorTarget target;
     target.width = width;
     target.height = height;
+    target.wide = wide;
     target.scale = ActiveScale();
     target.samples = ActiveSamples();
     target.header = surface;
@@ -276,7 +308,7 @@ ColorTarget& Color(GuestAddress surface)
     InvalidateGlStateCache();  // binds on the active texture unit
     gl.GenTextures(1, &target.texture);
     gl.BindTexture(kGlTexture2D, target.texture);
-    gl.TexImage2D(kGlTexture2D, 0, static_cast<GLint>(kGlRgba8), static_cast<GLsizei>(target.width * target.scale),
+    gl.TexImage2D(kGlTexture2D, 0, static_cast<GLint>(kGlRgba8), static_cast<GLsizei>(GlWidth(target)),
                   static_cast<GLsizei>(target.height * target.scale), 0, kGlRgba, kGlUnsignedByte, nullptr);
     gl.TexParameteri(kGlTexture2D, kGlTextureMinFilter, static_cast<GLint>(kGlLinear));
     gl.TexParameteri(kGlTexture2D, kGlTextureMagFilter, static_cast<GLint>(kGlLinear));
@@ -286,7 +318,7 @@ ColorTarget& Color(GuestAddress surface)
         gl.GenRenderbuffers(1, &target.msaa);
         gl.BindRenderbuffer(kGlRenderbuffer, target.msaa);
         gl.RenderbufferStorageMultisample(kGlRenderbuffer, static_cast<GLsizei>(target.samples), kGlRgba8,
-                                          static_cast<GLsizei>(target.width * target.scale),
+                                          static_cast<GLsizei>(GlWidth(target)),
                                           static_cast<GLsizei>(target.height * target.scale));
         gl.GenFramebuffers(1, &target.resolve_framebuffer);
         gl.BindFramebuffer(kGlFramebuffer, target.resolve_framebuffer);
@@ -312,7 +344,7 @@ ColorTarget& Color(GuestAddress surface)
         gl.Disable(kGlScissorTest);
         gl.ColorMask(1, 1, 1, 1);
         gl.BlitFramebuffer(0, 0, static_cast<GLint>(rescaled_width), static_cast<GLint>(rescaled_height), 0, 0,
-                           static_cast<GLint>(target.width * target.scale),
+                           static_cast<GLint>(GlWidth(target)),
                            static_cast<GLint>(target.height * target.scale), kGlColorBufferBit, kGlLinear);
         gl.BindFramebuffer(kGlFramebuffer, 0);
         gl.DeleteFramebuffers(2, framebuffers);
@@ -328,13 +360,14 @@ const DepthTarget& Depth(GuestAddress surface)
     uint32_t width = 0;
     uint32_t height = 0;
     SurfaceSize(surface, &width, &height);
+    const uint32_t wide = WideFor(surface, height);
     GlFunctions& gl = Gl();
     auto it = g_depths.find(memory);
     if (it != g_depths.end())
     {
         // Depth is cleared each frame; a new scale needs no copy.
-        if (it->second.width == width && it->second.height == height && it->second.scale == ActiveScale() &&
-            it->second.samples == ActiveSamples())
+        if (it->second.width == width && it->second.height == height && it->second.wide == wide &&
+            it->second.scale == ActiveScale() && it->second.samples == ActiveSamples())
         {
             return it->second;
         }
@@ -345,6 +378,7 @@ const DepthTarget& Depth(GuestAddress surface)
     DepthTarget target;
     target.width = width;
     target.height = height;
+    target.wide = wide;
     target.scale = ActiveScale();
     target.samples = ActiveSamples();
     gl.GenRenderbuffers(1, &target.renderbuffer);
@@ -352,12 +386,12 @@ const DepthTarget& Depth(GuestAddress surface)
     if (target.samples != 0)
     {
         gl.RenderbufferStorageMultisample(kGlRenderbuffer, static_cast<GLsizei>(target.samples), kGlDepth24Stencil8,
-                                          static_cast<GLsizei>(target.width * target.scale),
+                                          static_cast<GLsizei>(GlWidth(target)),
                                           static_cast<GLsizei>(target.height * target.scale));
     }
     else
     {
-        gl.RenderbufferStorage(kGlRenderbuffer, kGlDepth24Stencil8, static_cast<GLsizei>(target.width * target.scale),
+        gl.RenderbufferStorage(kGlRenderbuffer, kGlDepth24Stencil8, static_cast<GLsizei>(GlWidth(target)),
                                static_cast<GLsizei>(target.height * target.scale));
     }
     return g_depths.emplace(memory, target).first->second;
@@ -442,7 +476,7 @@ void ResolveColor(uint32_t memory, ColorTarget& target)
         return;
     }
     GlFunctions& gl = Gl();
-    const GLint w = static_cast<GLint>(target.width * target.scale);
+    const GLint w = static_cast<GLint>(GlWidth(target));
     const GLint h = static_cast<GLint>(target.height * target.scale);
     gl.BindFramebuffer(kGlReadFramebuffer, FramebufferAt(memory, kNoSurface));
     gl.BindFramebuffer(kGlDrawFramebuffer, target.resolve_framebuffer);
@@ -598,11 +632,13 @@ bool BindRenderTarget(GuestAddress color, GuestAddress depth)
         // Neither surface: the size of the previous target stays.
         uint32_t width = g_width;
         uint32_t height = g_height;
+        float wide_factor = 1.0f;
         if (depth != 0)
         {
             const DepthTarget& target = Depth(depth);
             width = target.width;
             height = target.height;
+            wide_factor = target.wide != 0 ? static_cast<float>(target.width) / static_cast<float>(target.wide) : 1.0f;
         }
         if (color != 0)
         {
@@ -613,6 +649,7 @@ bool BindRenderTarget(GuestAddress color, GuestAddress depth)
             target.sampleable = true;
             width = target.width;
             height = target.height;
+            wide_factor = target.wide != 0 ? static_cast<float>(target.width) / static_cast<float>(target.wide) : 1.0f;
         }
         // Remaking a target above drops framebuffers and clears `resolved`.
         resolved.framebuffer = FramebufferAt(SurfaceMemory(color), SurfaceMemory(depth));
@@ -622,6 +659,7 @@ bool BindRenderTarget(GuestAddress color, GuestAddress depth)
         std::copy(depth_words, depth_words + 3, resolved.depth_words);
         resolved.width = width;
         resolved.height = height;
+        resolved.wide_factor = wide_factor;
         resolved.valid = color != 0 || depth != 0;
     }
     // Other paths that bind framebuffers (present, dumps, creation)
@@ -636,7 +674,46 @@ bool BindRenderTarget(GuestAddress color, GuestAddress depth)
     g_bound_depth = SurfaceMemory(depth);
     g_width = resolved.width;
     g_height = resolved.height;
+    g_wide_factor = resolved.wide_factor;
     return true;
+}
+
+float RenderTargetWideFactor()
+{
+    return g_wide_factor;
+}
+
+uint32_t WideWidth(AspectMode aspect, uint32_t height)
+{
+    uint32_t width = 0;
+    switch (aspect)
+    {
+    case AspectMode::k16x9:
+        width = (height * 16 + 4) / 9;
+        break;
+    case AspectMode::k21x9:
+        width = (height * 21 + 4) / 9;
+        break;
+    default:
+        return 0;
+    }
+    return (width + 1) & ~1u;  // even, as the title's sizes are
+}
+
+void SetTargetAspect(AspectMode aspect)
+{
+    if (g_colors.empty() && g_depths.empty())
+    {
+        g_aspect = aspect;  // before the first target: nothing to remake
+        return;
+    }
+    g_pending_aspect = aspect;
+    g_aspect_pending = true;
+}
+
+AspectMode TargetAspect()
+{
+    return g_aspect;
 }
 
 uint32_t RenderTargetWidth()
@@ -664,7 +741,7 @@ GLuint SampleRenderTarget(GuestAddress data, GuestAddress* surface, uint32_t* wi
         InvalidateGlStateCache();  // binds a texture and a framebuffer
         gl.GenTextures(1, &target.copy);
         gl.BindTexture(kGlTexture2D, target.copy);
-        gl.TexImage2D(kGlTexture2D, 0, static_cast<GLint>(kGlRgba8), static_cast<GLsizei>(target.width * target.scale),
+        gl.TexImage2D(kGlTexture2D, 0, static_cast<GLint>(kGlRgba8), static_cast<GLsizei>(GlWidth(target)),
                       static_cast<GLsizei>(target.height * target.scale), 0, kGlRgba, kGlUnsignedByte, nullptr);
         gl.TexParameteri(kGlTexture2D, kGlTextureMaxLevel, 0);
         gl.GenFramebuffers(1, &target.copy_framebuffer);
@@ -676,7 +753,7 @@ GLuint SampleRenderTarget(GuestAddress data, GuestAddress* surface, uint32_t* wi
     // Draws and clears write only the bound target.
     if (target.bound_since_copy)
     {
-        const GLint w = static_cast<GLint>(target.width * target.scale);
+        const GLint w = static_cast<GLint>(GlWidth(target));
         const GLint h = static_cast<GLint>(target.height * target.scale);
         gl.BindFramebuffer(kGlReadFramebuffer, ReadableFramebuffer(memory, target));
         gl.BindFramebuffer(kGlDrawFramebuffer, target.copy_framebuffer);
@@ -718,9 +795,9 @@ void PresentRenderTarget(GuestAddress color, const GammaRamp& ramp)
     platform::GetDisplayInfo(&info);
     const uint32_t window_width = info.drawable_width;
     const uint32_t window_height = info.drawable_height;
-    // Fit with the picture's aspect ratio kept (16:9 when widescreen
-    // stretches it); the rest of the window is black.
-    const uint32_t picture_width = Widescreen() ? (source.height * 16 + 8) / 9 : source.width;
+    // Fit with the picture's aspect ratio kept (a widened back buffer is
+    // already 16:9 or 21:9); the rest of the window is black.
+    const uint32_t picture_width = source.wide != 0 ? source.wide : source.width;
     uint32_t width = window_width;
     uint32_t height = source.height * window_width / (picture_width != 0 ? picture_width : 1);
     if (height > window_height)
@@ -737,7 +814,7 @@ void PresentRenderTarget(GuestAddress color, const GammaRamp& ramp)
     GLuint picture_texture = source.texture;
     if (Smaa() == SmaaMode::k1x)
     {
-        const SmaaOutput smaa = ApplySmaa(source.texture, source.width * source.scale, source.height * source.scale);
+        const SmaaOutput smaa = ApplySmaa(source.texture, GlWidth(source), source.height * source.scale);
         if (smaa.texture != 0)
         {
             picture_framebuffer = smaa.framebuffer;
@@ -753,7 +830,7 @@ void PresentRenderTarget(GuestAddress color, const GammaRamp& ramp)
     gl.Clear(kGlColorBufferBit);
     if (ramp.IsIdentity() || !DrawThroughRamp(picture_texture, ramp, x, y, width, height))
     {
-        gl.BlitFramebuffer(0, 0, static_cast<GLint>(source.width * source.scale),
+        gl.BlitFramebuffer(0, 0, static_cast<GLint>(GlWidth(source)),
                            static_cast<GLint>(source.height * source.scale), x, y, x + static_cast<GLint>(width),
                            y + static_cast<GLint>(height), kGlColorBufferBit, kGlLinear);
     }
@@ -801,6 +878,18 @@ void PresentRenderTarget(GuestAddress color, const GammaRamp& ramp)
         std::fprintf(stderr, "[d3d8] render scale %u\n", g_render_scale);
     }
     g_pending_render_scale = 0;
+    if (g_aspect_pending)
+    {
+        if (g_pending_aspect != g_aspect)
+        {
+            g_aspect = g_pending_aspect;
+            g_resolved_target.valid = false;
+            InvalidateGlStateCache();
+            std::fprintf(stderr, "[d3d8] aspect %s\n",
+                         g_aspect == AspectMode::k16x9 ? "16:9" : g_aspect == AspectMode::k21x9 ? "21:9" : "4:3");
+        }
+        g_aspect_pending = false;
+    }
 }
 
 namespace
@@ -813,12 +902,12 @@ void ReadPixelsAt(GuestAddress color, bool guest_size, std::vector<uint8_t>* rgb
 {
     GlFunctions& gl = Gl();
     ColorTarget& source = Color(color);
-    const GLint physical_width = static_cast<GLint>(source.width * source.scale);
+    const GLint physical_width = static_cast<GLint>(GlWidth(source));
     const GLint physical_height = static_cast<GLint>(source.height * source.scale);
     Framebuffer(color, 0);  // made if new
     const GLuint framebuffer = ReadableFramebuffer(SurfaceMemory(color), source);
     const bool shrink = guest_size && source.scale != 1;
-    *width = guest_size ? source.width : static_cast<uint32_t>(physical_width);
+    *width = guest_size ? (source.wide != 0 ? source.wide : source.width) : static_cast<uint32_t>(physical_width);
     *height = guest_size ? source.height : static_cast<uint32_t>(physical_height);
     rgba->resize(static_cast<size_t>(*width) * *height * 4);
     GLuint scratch_texture = 0;
@@ -872,14 +961,14 @@ RenderTargetUse RenderTargetBytes()
     RenderTargetUse use;
     for (const auto& [memory, target] : g_colors)
     {
-        const uint64_t bytes = static_cast<uint64_t>(target.width * target.scale) * (target.height * target.scale) * 4;
+        const uint64_t bytes = static_cast<uint64_t>(GlWidth(target)) * (target.height * target.scale) * 4;
         ++use.count;
         use.bytes += bytes * ((target.copy != 0 ? 2 : 1) + target.samples);
     }
     for (const auto& [memory, target] : g_depths)
     {
         ++use.count;
-        use.bytes += static_cast<uint64_t>(target.width * target.scale) * (target.height * target.scale) * 4 *
+        use.bytes += static_cast<uint64_t>(GlWidth(target)) * (target.height * target.scale) * 4 *
                      std::max<uint32_t>(target.samples, 1);
     }
     return use;

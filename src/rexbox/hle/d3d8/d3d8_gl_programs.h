@@ -63,6 +63,7 @@ struct FixedFunctionProgram
     uint32_t program = 0;
     int transform = -1;  // uniform locations, -1 when unused
     int target = -1;
+    int wide = -1;
     int tfactor = -1;
     int alpha_ref = -1;
     int tex_scale[kFixedFunctionStages] = {-1, -1, -1, -1};
@@ -99,6 +100,7 @@ struct VertexProgramGl
     uint32_t program = 0;
     uint32_t used_inputs = 0;  // bit per v register the program reads
     std::vector<int> constants;  // location of each c[] element, -1 when unused
+    int wide = -1;
     int tfactor = -1;
     int alpha_ref = -1;
     int tex_scale[kFixedFunctionStages] = {-1, -1, -1, -1};

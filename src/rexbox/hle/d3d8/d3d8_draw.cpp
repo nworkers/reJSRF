@@ -34,6 +34,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <iterator>
 #include <cstring>
 #include <vector>
 
@@ -339,13 +340,16 @@ struct FixedState
     uint32_t offset_units = 0;
     uint32_t fill = 0;
     int32_t viewport[4] = {};
+    float wide = 1.0f;  // RenderTargetWideFactor(): the viewport's x is divided by it
+    bool scissor = false;  // screen-space draws on a widened back buffer: clipped to the 4:3 middle
     float depth_range[2] = {};
 };
 
 FixedState g_applied_state;
 uint32_t g_applied_epoch = 0;
 
-FixedState CurrentFixedState(GuestAddress depth_target, bool pretransformed, uint32_t width, uint32_t height)
+FixedState CurrentFixedState(GuestAddress depth_target, bool pretransformed, bool full_screen, uint32_t width,
+                             uint32_t height)
 {
     FixedState s;
     s.depth_test = depth_target != 0 && RenderStateValue(rs::kZEnable) != 0;
@@ -390,12 +394,14 @@ FixedState CurrentFixedState(GuestAddress depth_target, bool pretransformed, uin
     }
     const uint32_t fill = RenderStateValue(rs::kFillMode);
     s.fill = fill == kGlPoint || fill == kGlLine ? fill : kGlFill;
+    s.wide = RenderTargetWideFactor();
     if (pretransformed)
     {
         // Screen-space vertices are not mapped by the viewport.
         s.viewport[2] = static_cast<int32_t>(width);
         s.viewport[3] = static_cast<int32_t>(height);
         s.depth_range[1] = 1.0f;
+        s.scissor = s.wide < 1.0f && !full_screen;
     }
     else
     {
@@ -429,9 +435,25 @@ void ApplyFixedState(const FixedState& s)
     GlFunctions& gl = Gl();
     const bool known = g_applied_epoch == GlStateEpoch();
     const FixedState& last = g_applied_state;
-    if (!known)
+    if (!known || s.scissor != last.scissor ||
+        (s.scissor && (s.wide != last.wide || std::memcmp(s.viewport, last.viewport, sizeof(s.viewport)) != 0)))
     {
-        gl.Disable(kGlScissorTest);
+        if (s.scissor)
+        {
+            // Screen-space drawing is clipped to the 4:3 picture in the middle
+            // of a widened back buffer, as the hardware clipped it at the
+            // 640-pixel edge: 2D elements the title parks just off-screen stay
+            // unseen (docs/design/20261018-i085-widescreen-horplus.md).
+            const float scale = static_cast<float>(RenderScale());
+            const GLint gl_width = static_cast<GLint>(std::lround(s.viewport[2] * scale / s.wide));
+            const GLint width = static_cast<GLint>(std::lround(s.viewport[2] * scale));
+            gl.Scissor((gl_width - width) / 2, 0, width, static_cast<GLsizei>(std::lround(s.viewport[3] * scale)));
+            gl.Enable(kGlScissorTest);
+        }
+        else
+        {
+            gl.Disable(kGlScissorTest);
+        }
     }
     if (!known || s.depth_test != last.depth_test)
     {
@@ -503,11 +525,15 @@ void ApplyFixedState(const FixedState& s)
     {
         gl.PolygonMode(kGlFrontAndBack, s.fill);
     }
-    if (!known || std::memcmp(s.viewport, last.viewport, sizeof(s.viewport)) != 0)
+    if (!known || std::memcmp(s.viewport, last.viewport, sizeof(s.viewport)) != 0 || s.wide != last.wide)
     {
-        // Guest pixels; render targets are RenderScale() times larger.
-        const int32_t scale = static_cast<int32_t>(RenderScale());
-        gl.Viewport(s.viewport[0] * scale, s.viewport[1] * scale, s.viewport[2] * scale, s.viewport[3] * scale);
+        // Guest pixels; render targets are RenderScale() times larger, and a
+        // widened back buffer wider still (docs/design/20261018-i085-widescreen-horplus.md).
+        const float scale = static_cast<float>(RenderScale());
+        const float wide = scale / s.wide;
+        gl.Viewport(static_cast<GLint>(std::lround(s.viewport[0] * wide)), static_cast<GLint>(s.viewport[1] * scale),
+                    static_cast<GLsizei>(std::lround(s.viewport[2] * wide)),
+                    static_cast<GLsizei>(s.viewport[3] * scale));
     }
     if (!known || std::memcmp(s.depth_range, last.depth_range, sizeof(s.depth_range)) != 0)
     {
@@ -894,6 +920,53 @@ void Draw(const char* name, uint32_t primitive, uint32_t count, IndexSource indi
     }
     lap.Mark(profile::Phase::kIndices);
     const uint32_t stride = source.stride != 0 ? source.stride : layout.stride;
+    // A screen-space quad that covers the whole picture and samples no texture
+    // is a full-screen effect (a fade, a shadow or tint pass): on a widened
+    // back buffer it stretches across the whole width instead of keeping to
+    // the 4:3 middle (docs/design/20261018-i085-widescreen-horplus.md).
+    bool full_screen = false;
+    if (layout.pretransformed && RenderTargetWideFactor() < 1.0f && count <= 6 &&
+        !std::any_of(std::begin(sampled), std::end(sampled), [](bool b) { return b; }))
+    {
+        runtime::GuestMemory& memory = Memory();
+        float lo = 1e9f, hi = -1e9f, ylo = 1e9f, yhi = -1e9f;
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            float x = 0.0f;
+            float y = 0.0f;
+            if (source.immediate != nullptr)
+            {
+                // Begin/End vertices: the position register (JSRF's shadow pass draws its quad so).
+                const auto& vertices = source.immediate->vertices();
+                if (i >= vertices.size())
+                {
+                    lo = 1e9f;
+                    break;
+                }
+                x = vertices[i].reg[0][0];
+                y = vertices[i].reg[0][1];
+            }
+            else
+            {
+                const uint32_t index = indices.address != 0 ? memory.Read16(indices.address + 2 * i) : i;
+                const GuestAddress v = source.base + (index + indices.base) * stride;
+                if (!memory.IsValid(v, 8))
+                {
+                    lo = 1e9f;
+                    break;
+                }
+                x = FloatBits(memory.Read32(v));
+                y = FloatBits(memory.Read32(v + 4));
+            }
+            lo = std::min(lo, x);
+            hi = std::max(hi, x);
+            ylo = std::min(ylo, y);
+            yhi = std::max(yhi, y);
+        }
+        full_screen = lo <= 1.0f && hi >= static_cast<float>(RenderTargetWidth()) - 1.0f && ylo <= 1.0f &&
+                      yhi >= static_cast<float>(RenderTargetHeight()) - 1.0f;
+    }
+    const float wide = full_screen ? 1.0f : RenderTargetWideFactor();
     const uint32_t bytes = index_data.vertex_count * stride;
     size_t vertex_offset = 0;
     if (source.immediate != nullptr)
@@ -942,6 +1015,7 @@ void Draw(const char* name, uint32_t primitive, uint32_t count, IndexSource indi
         {
             SetPixelShaderUniforms(*uniforms, *pixel_shader, vertex_program->combiner);
         }
+        uniforms->Set1f(vertex_program->wide, wide);
         tex_scale = vertex_program->tex_scale;
         tfactor_location = vertex_program->tfactor;
         alpha_ref_location = vertex_program->alpha_ref;
@@ -952,6 +1026,7 @@ void Draw(const char* name, uint32_t primitive, uint32_t count, IndexSource indi
         uniforms = &program->uniforms;
         uniforms->Set4f(program->target, static_cast<float>(width), static_cast<float>(height),
                         pipeline.screen_space_offset_x, pipeline.screen_space_offset_y);
+        uniforms->Set1f(program->wide, wide);
         const std::array<float, 16> world_view =
             Multiply(pipeline.transforms[ts::kWorld], pipeline.transforms[ts::kView]);
         const std::array<float, 16> transform = Multiply(world_view, pipeline.transforms[ts::kProjection]);
@@ -997,7 +1072,7 @@ void Draw(const char* name, uint32_t primitive, uint32_t count, IndexSource indi
     }
 
     lap.Mark(profile::Phase::kTextures);
-    ApplyFixedState(CurrentFixedState(state.depth_target, layout.pretransformed, width, height));
+    ApplyFixedState(CurrentFixedState(state.depth_target, layout.pretransformed, full_screen, width, height));
     lap.Mark(profile::Phase::kState);
     if (arrays)
     {

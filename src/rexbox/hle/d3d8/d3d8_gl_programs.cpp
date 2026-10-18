@@ -326,6 +326,7 @@ void FillFixedFunctionUniforms(GLuint program, FixedFunctionProgram* out)
     entry.program = program;
     entry.transform = gl.GetUniformLocation(program, "u_transform");
     entry.target = gl.GetUniformLocation(program, "u_target");
+    entry.wide = gl.GetUniformLocation(program, "u_wide");
     entry.tfactor = gl.GetUniformLocation(program, "u_tfactor");
     entry.alpha_ref = gl.GetUniformLocation(program, "u_alpha_ref");
     entry.world_view = gl.GetUniformLocation(program, "u_world_view");
@@ -423,6 +424,7 @@ const VertexProgramGl* GetVertexProgram(const ProgramShader& shader, const Fixed
     entry.program = program;
     entry.used_inputs = used_inputs;
     entry.constants = ConstantLocations(program);
+    entry.wide = Gl().GetUniformLocation(program, "u_wide");
     entry.tfactor = gl.GetUniformLocation(program, "u_tfactor");
     entry.alpha_ref = gl.GetUniformLocation(program, "u_alpha_ref");
     BindSamplers(program, entry.tex_scale);
@@ -460,6 +462,7 @@ const VertexProgramGl* GetVertexPixelProgram(const ProgramShader& shader, const 
     entry.program = program;
     entry.used_inputs = used_inputs;
     entry.constants = ConstantLocations(program);
+    entry.wide = Gl().GetUniformLocation(program, "u_wide");
     entry.alpha_ref = gl.GetUniformLocation(program, "u_alpha_ref");
     entry.combiner = CombinerUniforms(program);
     BindSamplers(program, entry.tex_scale);

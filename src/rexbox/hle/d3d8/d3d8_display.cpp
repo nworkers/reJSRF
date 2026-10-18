@@ -20,7 +20,7 @@ namespace
 std::mutex g_mutex;
 DisplayDefaults g_defaults;
 RendererInfo g_renderer;
-std::atomic<bool> g_widescreen{false};
+std::atomic<int> g_aspect{static_cast<int>(AspectMode::k4x3)};
 std::atomic<uint32_t> g_anisotropy{1};
 std::atomic<int> g_smaa{0};
 
@@ -36,7 +36,8 @@ void SetDisplayDefaults(const DisplayDefaults& defaults)
 {
     std::lock_guard<std::mutex> lock(g_mutex);
     g_defaults = defaults;
-    g_widescreen.store(defaults.widescreen);
+    g_aspect.store(static_cast<int>(defaults.aspect));
+    SetTargetAspect(defaults.aspect);
     SetVerticalBlankWait(defaults.vblank_wait);
     g_anisotropy.store(defaults.anisotropy);
     g_smaa.store(static_cast<int>(defaults.smaa));
@@ -147,14 +148,15 @@ uint32_t MaxAnisotropy()
     return static_cast<uint32_t>(GlMaxAnisotropy());
 }
 
-bool Widescreen()
+AspectMode Aspect()
 {
-    return g_widescreen.load();
+    return static_cast<AspectMode>(g_aspect.load());
 }
 
-void SetWidescreen(bool widescreen)
+void SetAspect(AspectMode aspect)
 {
-    g_widescreen.store(widescreen);
+    g_aspect.store(static_cast<int>(aspect));
+    SetTargetAspect(aspect);
     ApplyPictureAspect();
 }
 
@@ -175,7 +177,8 @@ void ApplyPictureAspect()
     {
         return;
     }
-    const uint32_t width = g_widescreen.load() ? (pp.back_buffer_height * 16 + 8) / 9 : pp.back_buffer_width;
+    const uint32_t wide = WideWidth(Aspect(), pp.back_buffer_height);
+    const uint32_t width = wide != 0 ? wide : pp.back_buffer_width;
     platform::SetPictureAspect(width, pp.back_buffer_height);
 }
 

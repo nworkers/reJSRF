@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
+#include <cmath>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -151,21 +152,14 @@ bool OpenDisplay(const PresentParameters& pp, std::string* error)
 
 // Applies the stored viewport to GL. D3D's origin is the top-left corner,
 // GL's the bottom-left.
+// The GL viewport itself is set per draw (d3d8_draw's fixed state, from
+// State().viewport), where the render scale and a widened back buffer are
+// applied; setting it here as well left the draw-state cache believing its
+// own value was still in effect (issue #85).
 void ApplyViewport()
 {
-    D3dState& state = State();
-    const Viewport& vp = state.viewport;
+    const Viewport& vp = State().viewport;
     WriteViewportConstants(vp.x, vp.y, vp.width, vp.height);
-    if (!HaveGl())
-    {
-        return;
-    }
-    const uint32_t target_height = RenderTargetHeight();
-    const GLint y = static_cast<GLint>(target_height) - static_cast<GLint>(vp.y + vp.height);
-    const GLint scale = static_cast<GLint>(RenderScale());
-    Gl().Viewport(static_cast<GLint>(vp.x) * scale, y * scale, static_cast<GLsizei>(vp.width) * scale,
-                  static_cast<GLsizei>(vp.height) * scale);
-    GlDepthRange(vp.min_z, vp.max_z);
 }
 
 // Creates the device's surfaces for the current presentation parameters.
@@ -479,8 +473,10 @@ void D3DDevice_Clear()
             const int32_t x2 = static_cast<int32_t>(memory.Read32(rect + layout::kRectX2));
             const int32_t y2 = static_cast<int32_t>(memory.Read32(rect + layout::kRectY2));
             const GLint scale = static_cast<GLint>(RenderScale());
-            gl.Scissor(x1 * scale, (static_cast<GLint>(target_height) - y2) * scale, (x2 - x1) * scale,
-                       (y2 - y1) * scale);
+            // A widened back buffer is wider than the guest's x (Hor+).
+            const float wide = static_cast<float>(scale) / RenderTargetWideFactor();
+            gl.Scissor(static_cast<GLint>(std::lround(x1 * wide)), (static_cast<GLint>(target_height) - y2) * scale,
+                       static_cast<GLsizei>(std::lround((x2 - x1) * wide)), (y2 - y1) * scale);
             gl.Clear(mask);
         }
         gl.Disable(kGlScissorTest);

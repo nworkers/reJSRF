@@ -268,7 +268,7 @@ int main(int argc, char** argv)
     const rejsrf::Settings settings = settings_file.Load();
     rexbox::hle::d3d8::DisplayDefaults display_defaults;
     display_defaults.render_scale = settings.render_scale;
-    display_defaults.widescreen = settings.widescreen;
+    display_defaults.aspect = static_cast<rexbox::hle::d3d8::AspectMode>(std::min<uint32_t>(settings.aspect, 2));
     display_defaults.vsync = settings.vsync ? rexbox::platform::VsyncMode::kAdaptive : rexbox::platform::VsyncMode::kOff;
     display_defaults.fullscreen = settings.fullscreen;
     display_defaults.window_scale = settings.window_scale;
