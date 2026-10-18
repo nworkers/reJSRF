@@ -2,6 +2,7 @@
 #
 #   jsrf_profile.cpp   identity of supported XBE builds, HLE address bindings
 #   jsrf_recomp.cpp    the recompiled entry point, when generated code exists
+#   jsrf_host.c        the host hooks the decompiled sources call (include/rejsrf/jsrf_host.h)
 #   decomp/            hand-decompiled functions that replace lifted ones
 #   <gen dir>          lifted C from scripts/recomp/regenerate.py (gitignored)
 file(GLOB REJSRF_DECOMP_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/decomp/*.c")
@@ -9,6 +10,7 @@ file(GLOB REJSRF_DECOMP_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/d
 add_library(rejsrf_game STATIC
     jsrf_profile.cpp
     jsrf_recomp.cpp
+    jsrf_host.c
     ${REJSRF_DECOMP_SOURCES}
 )
 target_link_libraries(rejsrf_game PUBLIC rexbox_recomp)

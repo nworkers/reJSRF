@@ -108,4 +108,10 @@ VideoMemoryInfo GetVideoMemoryInfo();
 
 }  // namespace rexbox::hle::d3d8
 
+// How much wider the picture's horizontal view is than the title's 4:3 one
+// (docs/design/20261018-i097-frustum-culling.md): the widened back buffer's
+// width over 640, or 1. C linkage so decompiled title code (C) can declare it
+// without this header, letting a title's own culling admit what Hor+ shows.
+extern "C" float rexbox_d3d8_horizontal_view_scale(void);
+
 #endif  // REXBOX_HLE_D3D8_D3D8_DISPLAY_H

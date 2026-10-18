@@ -170,6 +170,21 @@ void SetVerticalBlankWaitEnabled(bool wait)
     SetVerticalBlankWait(wait);
 }
 
+}  // namespace rexbox::hle::d3d8
+
+extern "C" float rexbox_d3d8_horizontal_view_scale(void)
+{
+    using namespace rexbox::hle::d3d8;
+    const PresentParameters& pp = State().present;
+    const uint32_t width = pp.back_buffer_width != 0 ? pp.back_buffer_width : 640;
+    const uint32_t height = pp.back_buffer_height != 0 ? pp.back_buffer_height : 480;
+    const uint32_t wide = WideWidth(TargetAspect(), height);
+    return wide != 0 ? static_cast<float>(wide) / static_cast<float>(width) : 1.0f;
+}
+
+namespace rexbox::hle::d3d8
+{
+
 void ApplyPictureAspect()
 {
     const PresentParameters& pp = State().present;
