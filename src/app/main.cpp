@@ -6,6 +6,7 @@
 //
 // Usage: rejsrf <game directory> [--xbe <file>]   (default: default.xbe)
 
+#include "rejsrf/jsrf_host.h"
 #include "rejsrf/jsrf_profile.h"
 #include "rejsrf_build_stamp.h"
 #include "settings.h"
@@ -277,6 +278,8 @@ int main(int argc, char** argv)
     display_defaults.smaa = static_cast<rexbox::hle::d3d8::SmaaMode>(settings.smaa);
     display_defaults.anisotropy = settings.anisotropy;
     rexbox::hle::d3d8::SetDisplayDefaults(display_defaults);
+    // The title's own culling follows the widened picture (#97).
+    rejsrf_host_horizontal_view_scale = &rexbox_d3d8_horizontal_view_scale;
     rexbox::platform::SetRumbleStrength(settings.vibration ? settings.vibration_strength : 0);
     rejsrf::BuildInfo build_info;
     build_info.version = REJSRF_VERSION;
