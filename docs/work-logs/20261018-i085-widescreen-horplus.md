@@ -20,7 +20,7 @@
    * F9 캡처(백버퍼)와 present 직전 창 프레임버퍼의 읽기는 모두 맞았고, 화면만 달랐다. 캡처 프레임은 소유권 추적이 매 그리기 뒤 상태 캐시를 무효화해 문제를 가렸다.
    * 일반 프레임에서 RHW 글자를 그릴 때 GL 뷰포트가 640x480이었다(캐시는 1120x480을 놓았다고 믿음). `D3DDevice_SetViewport`의 `ApplyViewport`가 GL 뷰포트를 게스트 크기×배율로 직접 놓고 캐시에 알리지 않았다. 4:3에서는 값이 같아 드러나지 않았다.
    * `ApplyViewport`는 뷰포트 상수만 쓰게 했다. 뷰포트는 그리기 경로가 매 그리기마다 놓는다.
-8. 사용자가 플레이 화면에서 가운데 4:3만 어둡고 양옆이 밝은 경계를 보고했다(그림자 처리). 화면 전체를 덮는 RHW 사각형이 가운데 640폭에만 그려지기 때문이다. 텍스처를 샘플하지 않는 전체 화면 RHW 사각형은 넓힌 백버퍼 전체로 늘리게 했다(설계 3.3). 21:9 데모의 면책 화면 페이드(프레임 1250~1450)에서 양옆 픽셀이 4:3 안쪽과 같은 회색이 되는 것으로 확인했다(전에는 클리어 색인 검정).
+8. 사용자가 플레이 화면에서 가운데 4:3만 어둡고 양옆이 밝은 경계를 보고했다(그림자 처리). 화면 전체를 덮는 RHW 사각형이 가운데 640폭에만 그려지기 때문이다. 텍스처를 샘플하지 않는 전체 화면 RHW 사각형은 넓힌 백버퍼 전체로 늘리게 했다(설계 3.3). 21:9 데모의 면책 화면 페이드(프레임 1250~1450)에서 양옆 픽셀이 4:3 안쪽과 같은 회색이 되는 것으로 확인했다(전에는 클리어 색인 검정). 사용자의 F9 캡처(프레임 5969)에서 그림자 패스는 `Begin`/`End`(즉시 모드)로 그리는 스텐실 테스트(ref 1)·블렌드·무텍스처 4정점 사각형 두 개(#171, #317)였고, 처음 규칙은 즉시 모드를 빼고 있었다. 즉시 모드 정점의 위치 레지스터도 읽도록 넓혔다.
 9. 조사용으로 남긴 것: F9 캡처에 고정 기능 3D 그리기의 투영 행렬(`proj`)을 기록한다. `REXBOX_INPUT=keyboard`는 패드가 꽂혀 있어도 키보드를 첫 컨트롤러로 쓴다(스크립트 실행).
 10. 문서: 가이드, `ARCHITECTURE.md`.
 
@@ -64,7 +64,7 @@ Design: [20261018-i085](../design/20261018-i085-widescreen-horplus.md) · Work o
    * The F9 capture (back buffer) and a readback of the window framebuffer just before present were both right; only the screen differed. Capture frames hid the problem because ownership tracking invalidates the state cache after every draw.
    * In normal frames the GL viewport at the RHW text draws was 640x480 while the cache believed it had set 1120x480: `ApplyViewport` (from `D3DDevice_SetViewport`) set the GL viewport directly at guest size times the scale without telling the cache. At 4:3 the values coincide, so it never showed.
    * `ApplyViewport` now writes only the viewport constants; the draw path sets the viewport per draw.
-8. The user reported, in play, a visible edge where only the 4:3 middle was darkened and the sides stayed bright (the shadow pass): an RHW quad covering the whole picture was drawn in the middle 640 only. Full-screen RHW quads that sample no texture are now stretched across the widened back buffer (design 3.3). Checked on the disclaimer screen's fade in the 21:9 demo (frames 1250-1450): the side pixels now equal the 4:3 interior (before: the black clear colour).
+8. The user reported, in play, a visible edge where only the 4:3 middle was darkened and the sides stayed bright (the shadow pass): an RHW quad covering the whole picture was drawn in the middle 640 only. Full-screen RHW quads that sample no texture are now stretched across the widened back buffer (design 3.3). Checked on the disclaimer screen's fade in the 21:9 demo (frames 1250-1450): the side pixels now equal the 4:3 interior (before: the black clear colour). In the user's F9 capture (frame 5969) the shadow pass is two untextured, blended, stencil-tested (ref 1) four-vertex quads drawn through `Begin`/`End` (#171, #317), which the first rule skipped as immediate mode; the rule now reads the immediate vertices' position register too.
 9. Kept for investigation: the F9 capture records the projection (`proj`) of fixed-function 3D draws, and `REXBOX_INPUT=keyboard` makes the keyboard the first controller even with a pad attached (scripted runs).
 10. Documents: the guide, `ARCHITECTURE.md`.
 

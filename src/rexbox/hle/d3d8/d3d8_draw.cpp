@@ -925,22 +925,39 @@ void Draw(const char* name, uint32_t primitive, uint32_t count, IndexSource indi
     // back buffer it stretches across the whole width instead of keeping to
     // the 4:3 middle (docs/design/20261018-i085-widescreen-horplus.md).
     bool full_screen = false;
-    if (layout.pretransformed && RenderTargetWideFactor() < 1.0f && count <= 6 && source.immediate == nullptr &&
+    if (layout.pretransformed && RenderTargetWideFactor() < 1.0f && count <= 6 &&
         !std::any_of(std::begin(sampled), std::end(sampled), [](bool b) { return b; }))
     {
         runtime::GuestMemory& memory = Memory();
         float lo = 1e9f, hi = -1e9f, ylo = 1e9f, yhi = -1e9f;
         for (uint32_t i = 0; i < count; ++i)
         {
-            const uint32_t index = indices.address != 0 ? memory.Read16(indices.address + 2 * i) : i;
-            const GuestAddress v = source.base + (index + indices.base) * stride;
-            if (!memory.IsValid(v, 8))
+            float x = 0.0f;
+            float y = 0.0f;
+            if (source.immediate != nullptr)
             {
-                lo = 1e9f;
-                break;
+                // Begin/End vertices: the position register (JSRF's shadow pass draws its quad so).
+                const auto& vertices = source.immediate->vertices();
+                if (i >= vertices.size())
+                {
+                    lo = 1e9f;
+                    break;
+                }
+                x = vertices[i].reg[0][0];
+                y = vertices[i].reg[0][1];
             }
-            const float x = FloatBits(memory.Read32(v));
-            const float y = FloatBits(memory.Read32(v + 4));
+            else
+            {
+                const uint32_t index = indices.address != 0 ? memory.Read16(indices.address + 2 * i) : i;
+                const GuestAddress v = source.base + (index + indices.base) * stride;
+                if (!memory.IsValid(v, 8))
+                {
+                    lo = 1e9f;
+                    break;
+                }
+                x = FloatBits(memory.Read32(v));
+                y = FloatBits(memory.Read32(v + 4));
+            }
             lo = std::min(lo, x);
             hi = std::max(hi, x);
             ylo = std::min(ylo, y);
