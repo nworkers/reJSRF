@@ -339,6 +339,8 @@ struct FixedState
     uint32_t offset_units = 0;
     uint32_t fill = 0;
     int32_t viewport[4] = {};
+    float wide = 1.0f;  // RenderTargetWideFactor(): the viewport's x is divided by it
+    bool scissor = false;  // screen-space draws on a widened back buffer: clipped to the 4:3 middle
     float depth_range[2] = {};
 };
 
@@ -390,12 +392,14 @@ FixedState CurrentFixedState(GuestAddress depth_target, bool pretransformed, uin
     }
     const uint32_t fill = RenderStateValue(rs::kFillMode);
     s.fill = fill == kGlPoint || fill == kGlLine ? fill : kGlFill;
+    s.wide = RenderTargetWideFactor();
     if (pretransformed)
     {
         // Screen-space vertices are not mapped by the viewport.
         s.viewport[2] = static_cast<int32_t>(width);
         s.viewport[3] = static_cast<int32_t>(height);
         s.depth_range[1] = 1.0f;
+        s.scissor = s.wide < 1.0f;
     }
     else
     {
@@ -429,9 +433,25 @@ void ApplyFixedState(const FixedState& s)
     GlFunctions& gl = Gl();
     const bool known = g_applied_epoch == GlStateEpoch();
     const FixedState& last = g_applied_state;
-    if (!known)
+    if (!known || s.scissor != last.scissor ||
+        (s.scissor && (s.wide != last.wide || std::memcmp(s.viewport, last.viewport, sizeof(s.viewport)) != 0)))
     {
-        gl.Disable(kGlScissorTest);
+        if (s.scissor)
+        {
+            // Screen-space drawing is clipped to the 4:3 picture in the middle
+            // of a widened back buffer, as the hardware clipped it at the
+            // 640-pixel edge: 2D elements the title parks just off-screen stay
+            // unseen (docs/design/20261018-i085-widescreen-horplus.md).
+            const float scale = static_cast<float>(RenderScale());
+            const GLint gl_width = static_cast<GLint>(std::lround(s.viewport[2] * scale / s.wide));
+            const GLint width = static_cast<GLint>(std::lround(s.viewport[2] * scale));
+            gl.Scissor((gl_width - width) / 2, 0, width, static_cast<GLsizei>(std::lround(s.viewport[3] * scale)));
+            gl.Enable(kGlScissorTest);
+        }
+        else
+        {
+            gl.Disable(kGlScissorTest);
+        }
     }
     if (!known || s.depth_test != last.depth_test)
     {
@@ -503,11 +523,15 @@ void ApplyFixedState(const FixedState& s)
     {
         gl.PolygonMode(kGlFrontAndBack, s.fill);
     }
-    if (!known || std::memcmp(s.viewport, last.viewport, sizeof(s.viewport)) != 0)
+    if (!known || std::memcmp(s.viewport, last.viewport, sizeof(s.viewport)) != 0 || s.wide != last.wide)
     {
-        // Guest pixels; render targets are RenderScale() times larger.
-        const int32_t scale = static_cast<int32_t>(RenderScale());
-        gl.Viewport(s.viewport[0] * scale, s.viewport[1] * scale, s.viewport[2] * scale, s.viewport[3] * scale);
+        // Guest pixels; render targets are RenderScale() times larger, and a
+        // widened back buffer wider still (docs/design/20261018-i085-widescreen-horplus.md).
+        const float scale = static_cast<float>(RenderScale());
+        const float wide = scale / s.wide;
+        gl.Viewport(static_cast<GLint>(std::lround(s.viewport[0] * wide)), static_cast<GLint>(s.viewport[1] * scale),
+                    static_cast<GLsizei>(std::lround(s.viewport[2] * wide)),
+                    static_cast<GLsizei>(s.viewport[3] * scale));
     }
     if (!known || std::memcmp(s.depth_range, last.depth_range, sizeof(s.depth_range)) != 0)
     {
@@ -942,6 +966,7 @@ void Draw(const char* name, uint32_t primitive, uint32_t count, IndexSource indi
         {
             SetPixelShaderUniforms(*uniforms, *pixel_shader, vertex_program->combiner);
         }
+        uniforms->Set1f(vertex_program->wide, RenderTargetWideFactor());
         tex_scale = vertex_program->tex_scale;
         tfactor_location = vertex_program->tfactor;
         alpha_ref_location = vertex_program->alpha_ref;
@@ -952,6 +977,7 @@ void Draw(const char* name, uint32_t primitive, uint32_t count, IndexSource indi
         uniforms = &program->uniforms;
         uniforms->Set4f(program->target, static_cast<float>(width), static_cast<float>(height),
                         pipeline.screen_space_offset_x, pipeline.screen_space_offset_y);
+        uniforms->Set1f(program->wide, RenderTargetWideFactor());
         const std::array<float, 16> world_view =
             Multiply(pipeline.transforms[ts::kWorld], pipeline.transforms[ts::kView]);
         const std::array<float, 16> transform = Multiply(world_view, pipeline.transforms[ts::kProjection]);

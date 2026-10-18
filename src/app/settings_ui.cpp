@@ -172,7 +172,7 @@ void SettingsUi::ObserveActualState()
     const uint32_t scale = rexbox::hle::d3d8::RenderScale();
     const bool fullscreen = rexbox::platform::IsFullscreen();
     const uint32_t window_scale = rexbox::platform::WindowScale();
-    const bool widescreen = rexbox::hle::d3d8::Widescreen();
+    const uint32_t aspect = static_cast<uint32_t>(rexbox::hle::d3d8::Aspect());
     const bool vsync = info.swap_interval != 0;
     if (!observed_)
     {
@@ -182,7 +182,7 @@ void SettingsUi::ObserveActualState()
         render_scale_ = {scale, scale};
         fullscreen_ = {fullscreen, fullscreen};
         window_scale_ = {window_scale, window_scale};
-        widescreen_ = {widescreen, widescreen};
+        aspect_ = {aspect, aspect};
         vsync_ = {vsync, vsync};
         return;
     }
@@ -193,7 +193,7 @@ void SettingsUi::ObserveActualState()
     {
         changed |= Follow(window_scale, &window_scale_.seen, &window_scale_.expected, &settings_.window_scale);
     }
-    changed |= Follow(widescreen, &widescreen_.seen, &widescreen_.expected, &settings_.widescreen);
+    changed |= Follow(aspect, &aspect_.seen, &aspect_.expected, &settings_.aspect);
     changed |= Follow(vsync, &vsync_.seen, &vsync_.expected, &settings_.vsync);
     if (changed)
     {
@@ -501,18 +501,28 @@ void SettingsUi::DrawGraphicsTab()
         Save();
     }
 
-    bool widescreen = widescreen_.expected;
-    if (ImGui::Checkbox("Widescreen", &widescreen))
+    // Hor+ widescreen (docs/design/20261018-i085-widescreen-horplus.md).
+    static const char* const kAspectNames[] = {"4:3", "16:9", "21:9"};
+    const uint32_t current_aspect = std::min<uint32_t>(aspect_.expected, 2);
+    if (ImGui::BeginCombo("Aspect ratio", kAspectNames[current_aspect]))
     {
-        settings_.widescreen = widescreen;
-        widescreen_.expected = widescreen;
-        rexbox::hle::d3d8::SetWidescreen(widescreen);
-        Save();
+        for (uint32_t i = 0; i < 3; ++i)
+        {
+            if (ImGui::Selectable(kAspectNames[i], i == current_aspect) && i != current_aspect)
+            {
+                settings_.aspect = i;
+                aspect_.expected = i;
+                rexbox::hle::d3d8::SetAspect(static_cast<rexbox::hle::d3d8::AspectMode>(i));
+                Save();
+            }
+        }
+        ImGui::EndCombo();
     }
     ImGui::SameLine();
     ImGui::TextDisabled("(?)");
-    ImGui::SetItemTooltip("Shows the picture at 16:9. For now the 4:3 picture is stretched;\n"
-                          "a true widescreen view (Hor+) is planned (issue #85).");
+    ImGui::SetItemTooltip("16:9 and 21:9 show more of the scene at the sides (Hor+): everything the 4:3\n"
+                          "picture shows stays where it is, and the HUD and 2D screens stay centered.\n"
+                          "Objects near the edges may appear a little late (the game culls for 4:3).");
 
     bool vsync = vsync_.expected;
     if (ImGui::Checkbox("VSync", &vsync))

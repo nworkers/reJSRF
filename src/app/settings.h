@@ -15,7 +15,7 @@ struct Settings
     uint32_t render_scale = 1;  // 1..8
     bool fullscreen = false;
     uint32_t window_scale = 2;  // 1..3: the window at 1x-3x the picture (docs/design/20261017-i090-window-size.md)
-    bool widescreen = false;
+    uint32_t aspect = 0;  // 0 4:3, 1 16:9, 2 21:9 (Hor+, docs/design/20261018-i085-widescreen-horplus.md)
     bool vsync = true;  // adaptive vsync; false: off
     bool vblank_wait = true;  // false: the title is not paced by the virtual vertical blank (issue #95)
     // Anti-aliasing and filtering (docs/design/20261017-i089-anti-aliasing.md).

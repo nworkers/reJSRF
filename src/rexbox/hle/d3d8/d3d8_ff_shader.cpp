@@ -378,7 +378,8 @@ std::string GenerateFixedFunctionVertexShader(const FixedFunctionKey& key, bool 
         }
     }
     text += "uniform mat4 u_transform;\n"
-            "uniform vec4 u_target;\n";
+            "uniform vec4 u_target;\n"
+            "uniform float u_wide;\n";  // clip x scale for a widened back buffer (Hor+)
     if (eye_position)
     {
         text += "uniform mat4 u_world_view;\n";
@@ -419,13 +420,14 @@ std::string GenerateFixedFunctionVertexShader(const FixedFunctionKey& key, bool 
         text += "    float w = a_position.w != 0.0 ? 1.0 / a_position.w : 1.0;\n"
                 "    vec2 p = a_position.xy + u_target.zw;\n"
                 "    vec2 ndc = vec2(p.x / u_target.x * 2.0 - 1.0, 1.0 - p.y / u_target.y * 2.0);\n"
-                "    gl_Position = vec4(ndc * w, (a_position.z * 2.0 - 1.0) * w, w);\n";
+                "    gl_Position = vec4(ndc * w, (a_position.z * 2.0 - 1.0) * w, w);\n"
+                "    gl_Position.x *= u_wide;\n";
     }
     else
     {
         // D3D clip space has 0 <= z <= w; GL's -w <= z <= w.
         text += "    vec4 p = u_transform * vec4(a_position.xyz, 1.0);\n"
-                "    gl_Position = vec4(p.x, p.y, p.z * 2.0 - p.w, p.w);\n";
+                "    gl_Position = vec4(p.x * u_wide, p.y, p.z * 2.0 - p.w, p.w);\n";
     }
     // D3DCOLOR is stored B, G, R, A.
     if (!lighting)

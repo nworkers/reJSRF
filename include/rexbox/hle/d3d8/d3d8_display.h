@@ -20,10 +20,20 @@ enum class SmaaMode
     k1x,
 };
 
+// The picture's aspect (docs/design/20261018-i085-widescreen-horplus.md):
+// 16:9 and 21:9 widen the back buffer and the horizontal field of view
+// (Hor+); screen-space drawing stays centered at its 4:3 size.
+enum class AspectMode
+{
+    k4x3,
+    k16x9,
+    k21x9,
+};
+
 struct DisplayDefaults
 {
     uint32_t render_scale = 1;  // 1..8 (docs/design/20261017-i080-render-scale.md)
-    bool widescreen = false;    // 16:9, stretched for now (issue #85)
+    AspectMode aspect = AspectMode::k4x3;
     platform::VsyncMode vsync = platform::VsyncMode::kAdaptive;
     bool fullscreen = false;
     bool vblank_wait = true;    // false: nothing waits for the virtual vertical blank (issue #95)
@@ -60,8 +70,9 @@ uint32_t MaxAnisotropy();
 
 // Shows the picture at 16:9 instead of 4:3 (stretched). Call on the thread
 // that presents (the overlay's builder runs there).
-bool Widescreen();
-void SetWidescreen(bool widescreen);
+// The picture's aspect; a change takes effect after the next present.
+AspectMode Aspect();
+void SetAspect(AspectMode aspect);
 
 // Whether the title waits for the virtual vertical blank
 // (docs/design/20261018-i095-vblank-wait.md). Off, it runs as fast as the

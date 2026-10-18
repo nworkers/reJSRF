@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
+#include <cmath>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -479,8 +480,10 @@ void D3DDevice_Clear()
             const int32_t x2 = static_cast<int32_t>(memory.Read32(rect + layout::kRectX2));
             const int32_t y2 = static_cast<int32_t>(memory.Read32(rect + layout::kRectY2));
             const GLint scale = static_cast<GLint>(RenderScale());
-            gl.Scissor(x1 * scale, (static_cast<GLint>(target_height) - y2) * scale, (x2 - x1) * scale,
-                       (y2 - y1) * scale);
+            // A widened back buffer is wider than the guest's x (Hor+).
+            const float wide = static_cast<float>(scale) / RenderTargetWideFactor();
+            gl.Scissor(static_cast<GLint>(std::lround(x1 * wide)), (static_cast<GLint>(target_height) - y2) * scale,
+                       static_cast<GLsizei>(std::lround((x2 - x1) * wide)), (y2 - y1) * scale);
             gl.Clear(mask);
         }
         gl.Disable(kGlScissorTest);

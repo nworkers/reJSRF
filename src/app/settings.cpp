@@ -203,9 +203,22 @@ Settings SettingsFile::Load()
         {
             ParseBool(value, &settings.fullscreen);
         }
+        else if (key == "aspect")
+        {
+            const std::string mode = Lower(value);
+            if (mode == "4:3" || mode == "16:9" || mode == "21:9")
+            {
+                settings.aspect = mode == "16:9" ? 1 : mode == "21:9" ? 2 : 0;
+            }
+        }
         else if (key == "widescreen")
         {
-            ParseBool(value, &settings.widescreen);
+            // Before v0.0.40: true stretched the picture to 16:9.
+            bool widescreen = false;
+            if (ParseBool(value, &widescreen))
+            {
+                settings.aspect = widescreen ? 1 : 0;
+            }
         }
         else if (key == "vsync")
         {
@@ -253,12 +266,12 @@ bool SettingsFile::Save(const Settings& settings)
          << "; Environment variables (REXBOX_RENDER_SCALE, REXBOX_VSYNC) override these for a run.\n"
          << "[Graphics]\n"
          << "; WindowScale: 1..3 (the window at start). RenderScale: 1..8 (1: 640x480).\n"
-         << "; Widescreen: 16:9, stretched for now.\n"
+         << "; Aspect: 4:3, 16:9 or 21:9 (wider shows more at the sides; the HUD stays centered).\n"
          << "; VSync: true for adaptive vsync, false for none.\n"
          << "WindowScale = " << settings.window_scale << "\n"
          << "RenderScale = " << settings.render_scale << "\n"
          << "Fullscreen = " << flag(settings.fullscreen) << "\n"
-         << "Widescreen = " << flag(settings.widescreen) << "\n"
+         << "Aspect = " << (settings.aspect == 1 ? "16:9" : settings.aspect == 2 ? "21:9" : "4:3") << "\n"
          << "VSync = " << flag(settings.vsync) << "\n"
          << "; VBlankWait: false lets the game run as fast as it draws (game speed follows).\n"
          << "VBlankWait = " << flag(settings.vblank_wait) << "\n"

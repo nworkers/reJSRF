@@ -563,6 +563,7 @@ std::string TranslateToGlsl(const Program& program, uint32_t bgra_inputs, bool g
         }
     }
     text += "uniform vec4 c[192];\n"
+            "uniform float u_wide;\n"  // clip x scale for a widened back buffer (Hor+)
             "out vec4 v_diffuse;\n"
             "out vec4 v_specular;\n"
             "out vec4 v_tex0;\n"
@@ -608,7 +609,7 @@ std::string TranslateToGlsl(const Program& program, uint32_t bgra_inputs, bool g
     text += "    vec3 scale = mix(c[58].xyz, vec3(1.0), equal(c[58].xyz, vec3(0.0)));\n"
             "    vec3 offset = c[59].xyz;\n"
             "    vec3 clip = (oPos.xyz - offset) / scale * oPos.w;\n"
-            "    gl_Position = vec4(clip.x, clip.y, clip.z * 2.0 - oPos.w, oPos.w);\n"
+            "    gl_Position = vec4(clip.x * u_wide, clip.y, clip.z * 2.0 - oPos.w, oPos.w);\n"
             "    v_diffuse = clamp(oD0, 0.0, 1.0);\n"
             "    v_specular = clamp(oD1, 0.0, 1.0);\n"
             "    v_tex0 = oT0;\n"
