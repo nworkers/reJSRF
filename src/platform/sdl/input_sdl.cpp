@@ -12,6 +12,8 @@
 #include <SDL3/SDL.h>
 
 #include <algorithm>
+#include <cstdlib>
+#include <cstring>
 #include <array>
 #include <atomic>
 #include <mutex>
@@ -214,7 +216,13 @@ void ReadGamepad(uint32_t index, GamepadSnapshot* snapshot)
         snapshot->connected = index == 0;
         return;
     }
-    if (g_available)
+    // REXBOX_INPUT=keyboard: the keyboard stands in for the first controller
+    // even with a gamepad attached (scripted runs, a pad left plugged in).
+    static const bool keyboard_only = [] {
+        const char* value = std::getenv("REXBOX_INPUT");
+        return value != nullptr && std::strcmp(value, "keyboard") == 0;
+    }();
+    if (g_available && !keyboard_only)
     {
         if (!DisplayCreated())
         {

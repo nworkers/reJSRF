@@ -16,6 +16,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <array>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -216,6 +217,15 @@ void CaptureDraw(const char* name, uint32_t primitive, uint32_t count, GuestAddr
         {
             line += " | " + StageText(s);
         }
+    }
+    // Fixed-function 3D (not XYZRHW, FVF position bits 0x004): the projection,
+    // row-major as D3D keeps it. The aspect sits in [5]/[0]; [11] is 1 for
+    // perspective and 0 for ortho.
+    if ((pipeline.vertex_shader & fvf::kProgramHandle) == 0 && (pipeline.vertex_shader & 0xEu) != 0x4u)
+    {
+        const std::array<float, 16>& m = pipeline.transforms[ts::kProjection];
+        line += Format(" | proj %g %g %g %g / %g %g %g %g / %g %g %g %g / %g %g %g %g", m[0], m[1], m[2], m[3], m[4],
+                       m[5], m[6], m[7], m[8], m[9], m[10], m[11], m[12], m[13], m[14], m[15]);
     }
     if ((pipeline.vertex_shader & fvf::kProgramHandle) != 0)
     {

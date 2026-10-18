@@ -42,6 +42,7 @@
 * GL 뷰포트: x와 너비를 `scale / k`배 한다(0,0,640x480 → 0,0,W×scale,480×scale). y는 그대로다. 부분 뷰포트도 비례해 넓어지고, 그 안의 내용은 뷰포트 중심 기준 같은 자리에 놓인다.
 * `D3DDevice_Clear`의 사각형 시저도 x를 `scale / k`배 한다.
 * RHW(화면 좌표) 그리기는 가운데 4:3 영역으로 시저한다. 하드웨어가 640픽셀 가장자리에서 잘라내던 것과 같다.
+* `D3DDevice_SetViewport`는 GL 뷰포트를 직접 놓지 않는다(뷰포트 상수만 쓴다). 그리기 상태 캐시가 매 그리기마다 배율과 넓힘을 더해 뷰포트를 놓으므로, 직접 놓으면 캐시가 모르는 640 너비 뷰포트가 남아 메뉴의 RHW 글자가 왼쪽으로 몰렸다(**확인됨**, LOAD 화면).
 * 셰이더 소스가 바뀌므로 프로그램 바이너리 캐시는 다시 컴파일한다.
 
 ### 3.4 설정
@@ -56,6 +57,7 @@
 * 게임의 절두체 컬링은 4:3 기준이라, 화면 가장자리에서 물체가 늦게 나타날 수 있다. 게임 로직을 고치지 않는 한 남는다.
 * 게임이 백버퍼를 텍스처로 읽어 전체 화면 효과를 그리면, 그 사각형은 가운데 640에만 놓인다. 데모와 지금까지의 플레이 로그에서는 백버퍼를 읽는 경우가 없었다(512x512 타깃만 읽는다).
 * 화면 좌표로 계산하는 효과(예: 화면 공간 텍스처 좌표)가 있다면 가운데 640 기준이다.
+* 2D 메뉴(LOAD 화면 등)의 패널은 원근 투영을 쓰는 고정 기능 3D 모델이라 Hor+로 양옆에 패널 아트가 더 보인다(**확인됨**, 캡처의 `proj`). 글자(RHW)와 상대 위치는 4:3과 같다. 메뉴만 4:3으로 가두려면 "정점 프로그램을 쓰지 않는 프레임은 UI 프레임"처럼 프레임 단위 판정이 필요한데, 아직 넣지 않았다.
 * 타이틀 화면은 카메라 주변 4:3 시야 바로 바깥에 반투명 세로 띠(정점 프로그램 `03FD63C1`, 월드·투영 변환을 거치는 3D 사각형)를 두는데, 와이드에서는 양옆에 보인다(**확인됨**, 데모 프레임 3000의 그리기별 픽셀 조사). 일반 규칙으로 가려낼 근거가 없어 그대로 둔다. 게임 플레이 화면(프레임 4650)에는 없다.
 
 ## 4. 검증
@@ -113,6 +115,7 @@ Only the back buffer (and its depth buffer) is widened to W (16:9: 854, 21:9: 11
 * GL viewport: x and width are scaled by `scale / k` (0,0,640x480 → 0,0,W×scale,480×scale); y is unchanged. A partial viewport widens in proportion and its contents keep their place about its centre.
 * `D3DDevice_Clear`'s rectangle scissors scale x by `scale / k` too.
 * RHW (screen-space) draws are scissored to the middle 4:3 region, as the hardware clipped them at the 640-pixel edge.
+* `D3DDevice_SetViewport` no longer sets the GL viewport itself (it writes the viewport constants only). The draw-state cache sets the viewport per draw with the scale and the widening; a direct set left a 640-wide viewport the cache did not know about, which pushed the menus' RHW text to the left (**confirmed**, the LOAD screen).
 * The shader sources change, so the program binary cache recompiles.
 
 ### 3.4 Settings
@@ -127,6 +130,7 @@ Only the back buffer (and its depth buffer) is widened to W (16:9: 854, 21:9: 11
 * The game's frustum culling is 4:3, so objects can appear late at the screen edges. That stays unless game logic is patched.
 * If the game reads the back buffer as a texture for a full-screen effect, that quad covers only the middle 640. The demo and the play logs so far never read the back buffer (only the 512x512 target).
 * Effects computed from screen coordinates (screen-space texture coordinates, say) are relative to the middle 640.
+* The panels of the 2D menus (the LOAD screen, say) are fixed-function 3D models under a perspective projection, so Hor+ shows more of their art at the sides (**confirmed**, the capture's `proj`); their placement against the RHW text is as at 4:3. Confining menus to 4:3 would need a per-frame judgement such as "a frame that uses no vertex program is a UI frame", not done yet.
 * The title screen places translucent vertical bars (vertex program `03FD63C1`, 3D quads through the world and projection transforms) just outside the 4:3 view around the camera, and widescreen shows them at the sides (**confirmed**, a per-draw pixel probe of demo frame 3000). No general rule tells them apart, so they stay. The gameplay picture (frame 4650) has none.
 
 ## 4. Verification
