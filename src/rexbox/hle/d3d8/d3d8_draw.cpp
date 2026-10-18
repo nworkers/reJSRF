@@ -34,6 +34,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <iterator>
 #include <cstring>
 #include <vector>
 
@@ -347,7 +348,8 @@ struct FixedState
 FixedState g_applied_state;
 uint32_t g_applied_epoch = 0;
 
-FixedState CurrentFixedState(GuestAddress depth_target, bool pretransformed, uint32_t width, uint32_t height)
+FixedState CurrentFixedState(GuestAddress depth_target, bool pretransformed, bool full_screen, uint32_t width,
+                             uint32_t height)
 {
     FixedState s;
     s.depth_test = depth_target != 0 && RenderStateValue(rs::kZEnable) != 0;
@@ -399,7 +401,7 @@ FixedState CurrentFixedState(GuestAddress depth_target, bool pretransformed, uin
         s.viewport[2] = static_cast<int32_t>(width);
         s.viewport[3] = static_cast<int32_t>(height);
         s.depth_range[1] = 1.0f;
-        s.scissor = s.wide < 1.0f;
+        s.scissor = s.wide < 1.0f && !full_screen;
     }
     else
     {
@@ -918,6 +920,36 @@ void Draw(const char* name, uint32_t primitive, uint32_t count, IndexSource indi
     }
     lap.Mark(profile::Phase::kIndices);
     const uint32_t stride = source.stride != 0 ? source.stride : layout.stride;
+    // A screen-space quad that covers the whole picture and samples no texture
+    // is a full-screen effect (a fade, a shadow or tint pass): on a widened
+    // back buffer it stretches across the whole width instead of keeping to
+    // the 4:3 middle (docs/design/20261018-i085-widescreen-horplus.md).
+    bool full_screen = false;
+    if (layout.pretransformed && RenderTargetWideFactor() < 1.0f && count <= 6 && source.immediate == nullptr &&
+        !std::any_of(std::begin(sampled), std::end(sampled), [](bool b) { return b; }))
+    {
+        runtime::GuestMemory& memory = Memory();
+        float lo = 1e9f, hi = -1e9f, ylo = 1e9f, yhi = -1e9f;
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            const uint32_t index = indices.address != 0 ? memory.Read16(indices.address + 2 * i) : i;
+            const GuestAddress v = source.base + (index + indices.base) * stride;
+            if (!memory.IsValid(v, 8))
+            {
+                lo = 1e9f;
+                break;
+            }
+            const float x = FloatBits(memory.Read32(v));
+            const float y = FloatBits(memory.Read32(v + 4));
+            lo = std::min(lo, x);
+            hi = std::max(hi, x);
+            ylo = std::min(ylo, y);
+            yhi = std::max(yhi, y);
+        }
+        full_screen = lo <= 1.0f && hi >= static_cast<float>(RenderTargetWidth()) - 1.0f && ylo <= 1.0f &&
+                      yhi >= static_cast<float>(RenderTargetHeight()) - 1.0f;
+    }
+    const float wide = full_screen ? 1.0f : RenderTargetWideFactor();
     const uint32_t bytes = index_data.vertex_count * stride;
     size_t vertex_offset = 0;
     if (source.immediate != nullptr)
@@ -966,7 +998,7 @@ void Draw(const char* name, uint32_t primitive, uint32_t count, IndexSource indi
         {
             SetPixelShaderUniforms(*uniforms, *pixel_shader, vertex_program->combiner);
         }
-        uniforms->Set1f(vertex_program->wide, RenderTargetWideFactor());
+        uniforms->Set1f(vertex_program->wide, wide);
         tex_scale = vertex_program->tex_scale;
         tfactor_location = vertex_program->tfactor;
         alpha_ref_location = vertex_program->alpha_ref;
@@ -977,7 +1009,7 @@ void Draw(const char* name, uint32_t primitive, uint32_t count, IndexSource indi
         uniforms = &program->uniforms;
         uniforms->Set4f(program->target, static_cast<float>(width), static_cast<float>(height),
                         pipeline.screen_space_offset_x, pipeline.screen_space_offset_y);
-        uniforms->Set1f(program->wide, RenderTargetWideFactor());
+        uniforms->Set1f(program->wide, wide);
         const std::array<float, 16> world_view =
             Multiply(pipeline.transforms[ts::kWorld], pipeline.transforms[ts::kView]);
         const std::array<float, 16> transform = Multiply(world_view, pipeline.transforms[ts::kProjection]);
@@ -1023,7 +1055,7 @@ void Draw(const char* name, uint32_t primitive, uint32_t count, IndexSource indi
     }
 
     lap.Mark(profile::Phase::kTextures);
-    ApplyFixedState(CurrentFixedState(state.depth_target, layout.pretransformed, width, height));
+    ApplyFixedState(CurrentFixedState(state.depth_target, layout.pretransformed, full_screen, width, height));
     lap.Mark(profile::Phase::kState);
     if (arrays)
     {

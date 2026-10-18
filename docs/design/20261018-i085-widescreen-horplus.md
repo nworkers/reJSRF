@@ -42,6 +42,7 @@
 * GL 뷰포트: x와 너비를 `scale / k`배 한다(0,0,640x480 → 0,0,W×scale,480×scale). y는 그대로다. 부분 뷰포트도 비례해 넓어지고, 그 안의 내용은 뷰포트 중심 기준 같은 자리에 놓인다.
 * `D3DDevice_Clear`의 사각형 시저도 x를 `scale / k`배 한다.
 * RHW(화면 좌표) 그리기는 가운데 4:3 영역으로 시저한다. 하드웨어가 640픽셀 가장자리에서 잘라내던 것과 같다.
+* 화면 전체(0..640 × 0..480)를 덮고 텍스처를 샘플하지 않는 RHW 사각형(정점 6개 이하)은 전체 화면 효과(페이드, 그림자·색조 패스)로 보고 넓힌 백버퍼 전체로 늘린다(클립 x 배율 1, 시저 없음). 그대로 두면 가운데 4:3만 어두워지고 양옆이 밝게 남아 경계가 보인다(**확인됨**, 사용자 플레이 화면). 텍스처가 있는 전체 화면 사각형(2D 그림)은 늘리지 않고 가운데에 둔다.
 * `D3DDevice_SetViewport`는 GL 뷰포트를 직접 놓지 않는다(뷰포트 상수만 쓴다). 그리기 상태 캐시가 매 그리기마다 배율과 넓힘을 더해 뷰포트를 놓으므로, 직접 놓으면 캐시가 모르는 640 너비 뷰포트가 남아 메뉴의 RHW 글자가 왼쪽으로 몰렸다(**확인됨**, LOAD 화면).
 * 셰이더 소스가 바뀌므로 프로그램 바이너리 캐시는 다시 컴파일한다.
 
@@ -115,6 +116,7 @@ Only the back buffer (and its depth buffer) is widened to W (16:9: 854, 21:9: 11
 * GL viewport: x and width are scaled by `scale / k` (0,0,640x480 → 0,0,W×scale,480×scale); y is unchanged. A partial viewport widens in proportion and its contents keep their place about its centre.
 * `D3DDevice_Clear`'s rectangle scissors scale x by `scale / k` too.
 * RHW (screen-space) draws are scissored to the middle 4:3 region, as the hardware clipped them at the 640-pixel edge.
+* An RHW quad (up to six vertices) that covers the whole picture (0..640 × 0..480) and samples no texture is a full-screen effect (a fade, a shadow or tint pass) and is stretched across the whole widened back buffer (clip x scale 1, no scissor). Left alone it darkens only the 4:3 middle and leaves the sides bright, with a visible edge (**confirmed**, the user's play screenshot). Textured full-screen quads (2D pictures) are not stretched and stay centered.
 * `D3DDevice_SetViewport` no longer sets the GL viewport itself (it writes the viewport constants only). The draw-state cache sets the viewport per draw with the scale and the widening; a direct set left a 640-wide viewport the cache did not know about, which pushed the menus' RHW text to the left (**confirmed**, the LOAD screen).
 * The shader sources change, so the program binary cache recompiles.
 
