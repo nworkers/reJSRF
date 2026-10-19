@@ -10,6 +10,7 @@ xboxrecomp의 `tools.disasm`이 JSRF US `default.xbe`에서 찾는 함수·alias
 | v0.14.0 | 9,133 | #93. 113개 vtable 메서드 누락 |
 | v0.15.0 `6376eb8` | 9,372 | 같은 113개 중 10개만 항목. 41개는 어떤 본문에도 안 덮임 |
 | v0.15.0 + 설계 i093 4절 (trial 3) | 9,481 | 113개 중 111개 항목. v0.15.0이 받던 자료 항목 8개도 거절 |
+| fork `rejsrf` `5aae5df`(위와 같은 디스어셈블러) 재생성 | 9,481 (lift 9,526, 수동 223 포함) | 미해결 스텁 74 → 28 ([unresolved-stubs §4](unresolved-stubs.md)) |
 
 ## 2. vtable 메서드가 버려지는 모양 (확인됨)
 
@@ -37,7 +38,7 @@ MSVC 두 단계 switch는 dword 표 바로 뒤에 바이트 인덱스 표를 둔
 
 * `0x129180`: i058의 사례. `gap_prologue` `0x129367`이 빈 구간을 잘라 switch 표가 밖에 놓인다. seed로 유지.
 * `0x17E580`: EH funclet. 표(`0x1E4328`)가 가리키지만 호출 규약이 다르다. 실행 중 닿는지 미확인.
-* lifter `_read_jump_table`이 바이트 표를 arm으로 읽는지(생성 코드의 `RECOMP_ITAIL` arm 수) 미확인.
+* **확인됨**(재생성 뒤): lifter는 `0x70C90`의 표 `0x70E10`을 arm 3개(`0x70CB1`, `0x70E01`, `0x70E08`)로 번역하고 나머지는 `RECOMP_ITAIL`로 보낸다. 바이트 표 word `0x20200`은 arm이 아니다.
 
 ---
 
@@ -53,6 +54,7 @@ Entry counts (functions and aliases) that xboxrecomp's `tools.disasm` finds on J
 | v0.14.0 | 9,133 | #93: 113 vtable methods missing |
 | v0.15.0 `6376eb8` | 9,372 | only 10 of the same 113 are entries; 41 are covered by no body |
 | v0.15.0 + design i093 section 4 (trial 3) | 9,481 | 111 of the 113; also refuses eight data entries v0.15.0 accepted |
+| fork `rejsrf` `5aae5df` (same disassembler), regenerated | 9,481 (lift 9,526 with 223 manual) | unresolved stubs 74 → 28 ([unresolved-stubs §4](unresolved-stubs.md)) |
 
 ## 2. How vtable methods get dropped (confirmed)
 
@@ -80,4 +82,4 @@ MSVC's two-level switch packs a byte index table right after the dword table (`m
 
 * `0x129180`: i058's case. `gap_prologue` `0x129367` cuts its gap and leaves the switch tables outside. Kept as a seed.
 * `0x17E580`: an EH funclet. A table (`0x1E4328`) names it but its calling convention differs. Whether it runs is unverified.
-* Whether the lifter's `_read_jump_table` reads a byte table as an arm (the `RECOMP_ITAIL` arm count in the generated code) is unverified.
+* **Confirmed** (after regeneration): the lifter translates `0x70C90`'s table `0x70E10` as three arms (`0x70CB1`, `0x70E01`, `0x70E08`) with `RECOMP_ITAIL` for the rest; the byte-table word `0x20200` is not an arm.
