@@ -31,6 +31,7 @@ flowchart LR
 * [미해결 스텁: 실행 중 보고, 되찾은 함수, 남은 스텁의 분류](unresolved-stubs.md)
 * [CRI 미들웨어: ADXM 스레드, SVM 잠금, 단일 코어 우선순위에 기댄 상호 배제](cri-middleware.md)
 * [캐릭터 윤곽선: 윤곽선 정점 셰이더, 색과 두께를 정하는 상수, 데모에서 본 값](outlines.md)
+* [함수 발견: 디스어셈블러가 놓치는 vtable 메서드 모양, 바이트 인덱스 표, 버전별 항목 수](function-discovery.md)
 
 ---
 
@@ -56,3 +57,4 @@ Labels:
 * [Unresolved stubs: reporting at run time, recovered functions, the remaining stubs](unresolved-stubs.md)
 * [CRI middleware: ADXM threads, the SVM lock, exclusion that relies on single-core priorities](cri-middleware.md)
 * [Character outlines: the outline vertex shaders, the constants that set color and thickness, values seen in the demo](outlines.md)
+* [Function discovery: the vtable-method shapes the disassembler misses, byte index tables, entries per version](function-discovery.md)
