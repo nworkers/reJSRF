@@ -621,6 +621,42 @@ uint64_t xbox_ReadTimeStampCounter(void)
     return static_cast<uint64_t>(ns) * 733u / 1000u;
 }
 
+// x86 port I/O. The title's `in`/`out` reach no hardware here: a read answers 0
+// and a write is dropped, and the first access to each port is reported once,
+// so an unmodelled device shows up in the log instead of staying silent. The
+// one port a title is known to poll, the field pin 0x80C0 (bit 5 toggles with
+// the video field), alternates per read so a wait on it ends.
+static bool PortFirstUse(uint32_t port, bool is_out)
+{
+    return bridge::BridgeFirstTimeAt((port & 0xFFFFu) | (is_out ? 0x80000000u : 0x40000000u));
+}
+
+uint32_t xbox_PortIn(uint32_t port, int width)
+{
+    port &= 0xFFFFu;
+    if (port == 0x80C0u)
+    {
+        static std::atomic<uint32_t> reads{0};
+        return ((reads.fetch_add(1u) + 1u) & 1u) << 5;
+    }
+    if (PortFirstUse(port, false))
+    {
+        std::fprintf(stderr, "[recomp] in%c port %04X -> 0 (not modelled)\n",
+                     width == 1 ? 'b' : width == 2 ? 'w' : 'd', port);
+    }
+    return 0;
+}
+
+void xbox_PortOut(uint32_t port, uint32_t value, int width)
+{
+    port &= 0xFFFFu;
+    if (PortFirstUse(port, true))
+    {
+        std::fprintf(stderr, "[recomp] out%c port %04X = %X (ignored)\n",
+                     width == 1 ? 'b' : width == 2 ? 'w' : 'd', port, value);
+    }
+}
+
 void recomp_trace_enter(const char* name, uint32_t va)
 {
     std::fprintf(stderr, "[trace] enter %s %08X\n", name, va);

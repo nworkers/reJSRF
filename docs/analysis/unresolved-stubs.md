@@ -97,6 +97,13 @@
   * 예를 들어 `0x1C3F86`·`0x1C3F96`을 부르는 `sub_001C3F18`은 `.rdata`의 문자열 `"\Device\MU_0"`이다([unlifted-instructions §1](unlifted-instructions.md)). XPP 섹션의 2개도 같은 부류로 보인다.
 * **미확정**: 실제 게임 진행(메뉴, 스테이지, 세이브)에서 어느 스텁이 실행되는지. §1의 보고로 확인한다.
 
+## 4. xboxrecomp v0.15.0 전환 뒤 (i093)
+
+* **확인됨**: v0.15.0 + 표 항목 복구([function-discovery](function-discovery.md), 설계 i093)로 다시 생성하면 스텁이 74개에서 **28개**로 준다. 26개는 알려진 함수 본문 안(§3의 alias 구조 한계), 2개는 어느 섹션에도 없는 주소(`0x3F0383B6`, `0x621075D4`)다.
+* **확인됨**: #93의 B 갈래 5개 중 `0xB67B7`, `0xB7FE2`, `0xF7722`, `0xF7726`는 남아 있다. `ret` 뒤 점프 표 자료를 명령으로 읽은 가짜 분기라 실행되지 않는다(v0.14.0부터 맞게 거절).
+* **확인됨**: lift 요약의 `RECOMP_UNIMPL`에서 `in`·`out`·`popfd`가 사라졌다(v0.15.0의 포트 I/O와 `g_eflags`). 남은 것은 `enter` 40, `daa`/`das`/`aas`/`aad`, `outsb` 13, `sti`/`cli`/`iretd`/`ljmp`/`arpl`/`lcall` 등 자료를 코드로 읽은 본문이다([unlifted-instructions](unlifted-instructions.md)).
+* 스텁 보고는 그대로 `RECOMP_STUB_REPORT`로 켜진다. 생성된 스텁 파일의 `RECOMP_STUB_HIT`가 `recomp_unresolved_stub_log(va)`를 먼저 부른다(fork `5aae5df`).
+
 ---
 
 # Unresolved stubs
@@ -197,3 +204,10 @@ Notes:
   * **Inferred**: calls from bodies that are data decoded as code.
   * For example, `sub_001C3F18`, which calls `0x1C3F86` and `0x1C3F96`, is the `.rdata` string `"\Device\MU_0"` ([unlifted-instructions §1](unlifted-instructions.md)), and the two in the XPP section look the same.
 * **Unresolved**: which stubs run in real play (menus, stages, saves); §1's reports will show.
+
+## 4. After the move to xboxrecomp v0.15.0 (i093)
+
+* **Confirmed**: regenerated on v0.15.0 with the table-entry recovery ([function-discovery](function-discovery.md), design i093), the stubs drop from 74 to **28**: 26 inside known function bodies (§3's alias limit) and 2 outside every section (`0x3F0383B6`, `0x621075D4`).
+* **Confirmed**: of #93's five B-branch stubs, `0xB67B7`, `0xB7FE2`, `0xF7722` and `0xF7726` remain. They are false branches decoded from jump-table data after a `ret` and never run (rightly refused since v0.14.0).
+* **Confirmed**: `in`, `out` and `popfd` are gone from the lift's `RECOMP_UNIMPL` (v0.15.0's port I/O and `g_eflags`). What remains (`enter` 40, `daa`/`das`/`aas`/`aad`, `outsb` 13, `sti`/`cli`/`iretd`/`ljmp`/`arpl`/`lcall`) is in bodies that are data decoded as code ([unlifted-instructions](unlifted-instructions.md)).
+* Stub reporting still turns on with `RECOMP_STUB_REPORT`: the generated stub file's `RECOMP_STUB_HIT` calls `recomp_unresolved_stub_log(va)` first (fork `5aae5df`).
