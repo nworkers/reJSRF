@@ -152,8 +152,8 @@ void DrawGraph(const std::vector<float>& values, float axis_max, const std::vect
 
 }  // namespace
 
-SettingsUi::SettingsUi(BuildInfo build, Settings settings, SettingsFile* file)
-    : build_(std::move(build)), settings_(settings), file_(file)
+SettingsUi::SettingsUi(BuildInfo build, Settings settings, Language running_language, SettingsFile* file)
+    : build_(std::move(build)), settings_(settings), file_(file), running_language_(running_language)
 {
 }
 
@@ -310,6 +310,11 @@ void SettingsUi::DrawMenu()
             if (ImGui::BeginTabItem("Input"))
             {
                 DrawTab(&SettingsUi::DrawInputTab);
+                ImGui::EndTabItem();
+            }
+            if (ImGui::BeginTabItem("Game"))
+            {
+                DrawTab(&SettingsUi::DrawGameTab);
                 ImGui::EndTabItem();
             }
             ImGui::EndTabBar();
@@ -682,6 +687,49 @@ void SettingsUi::DrawInputTab()
     ImGui::SameLine();
     ImGui::TextDisabled("Rumbles the first controller for half a second.");
     ImGui::EndDisabled();
+}
+
+// docs/design/20261020-i104-language-option.md: the game reads the language
+// while it builds objects and loads assets, so a change applies from the next
+// start.
+void SettingsUi::DrawGameTab()
+{
+    ImGui::SeparatorText("Language");
+    if (ImGui::BeginCombo("Language", LanguageName(settings_.language)))
+    {
+        for (uint32_t index = 0; index < kLanguageCount; ++index)
+        {
+            const auto language = static_cast<Language>(index);
+            const bool selected = language == settings_.language;
+            if (ImGui::Selectable(LanguageName(language), selected) && !selected)
+            {
+                settings_.language = language;
+                Save();
+            }
+            if (selected)
+            {
+                ImGui::SetItemDefaultFocus();
+            }
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("(?)");
+    ImGui::SetItemTooltip("Text, voice and pictures in the game's own menus and scenes.\n"
+                          "Every language comes from the same game disc.");
+    if (std::getenv("REJSRF_LANGUAGE") != nullptr)
+    {
+        ImGui::TextDisabled("REJSRF_LANGUAGE set at start: running in %s.", LanguageName(running_language_));
+    }
+    else if (settings_.language != running_language_)
+    {
+        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), "Restart to apply. Running in %s.",
+                           LanguageName(running_language_));
+    }
+    else
+    {
+        ImGui::TextDisabled("Applies from the next start.");
+    }
 }
 
 void SettingsUi::DrawStatsWindow()

@@ -1,11 +1,16 @@
 #include "rejsrf/jsrf_profile.h"
 
 #include "rexbox/recomp/recomp_hle_entry.h"
+#include "rexbox/runtime/guest_memory.h"
 #include "rexbox/runtime/hle_registry.h"
 #include "rexbox/xbe/xbe_image.h"
 
+#include <algorithm>
 #include <array>
+#include <cctype>
 #include <cstdint>
+#include <cstdio>
+#include <cstring>
 
 namespace rejsrf
 {
@@ -38,6 +43,15 @@ struct XdkInternal
 constexpr std::array<XdkInternal, 1> kXdkInternals = {{
     {"D3D_InitializeDeviceState", 0x001919C0},
 }};
+
+// The language index in the primary variant's .data, read through the getter
+// sub_00043700 at 191 sites (docs/analysis/language.md sections 3 and 7).
+constexpr uint32_t kLanguageIndexAddress = 0x001FC724;
+
+// Indexed by the Language value (the ending-texture switch at 0x27B87).
+constexpr std::array<const char*, kLanguageCount> kLanguageNames = {
+    "Japanese", "English", "French", "German", "Spanish",
+};
 
 }  // namespace
 
@@ -81,6 +95,41 @@ size_t BindTitleHle(const rexbox::xbe::XbeImage& image, rexbox::runtime::HleRegi
         ++count;
     }
     return count;
+}
+
+const char* LanguageName(Language language)
+{
+    const auto index = static_cast<uint32_t>(language);
+    return index < kLanguageCount ? kLanguageNames[index] : "Unknown";
+}
+
+bool ParseLanguage(const std::string& text, Language* language)
+{
+    for (uint32_t index = 0; index < kLanguageCount; ++index)
+    {
+        const char* name = kLanguageNames[index];
+        if (text.size() == std::strlen(name) &&
+            std::equal(text.begin(), text.end(), name, [](char a, char b) {
+                return std::tolower(static_cast<unsigned char>(a)) == std::tolower(static_cast<unsigned char>(b));
+            }))
+        {
+            *language = static_cast<Language>(index);
+            return true;
+        }
+    }
+    return false;
+}
+
+bool ApplyLanguage(const rexbox::xbe::XbeImage& image, rexbox::runtime::GuestMemory& memory, Language language)
+{
+    if (IdentifyXbe(image) != PrimaryVariant() || static_cast<uint32_t>(language) >= kLanguageCount ||
+        !memory.IsValid(kLanguageIndexAddress, 4))
+    {
+        return false;
+    }
+    memory.Write32(kLanguageIndexAddress, static_cast<uint32_t>(language));
+    std::printf("[jsrf] language: %s\n", LanguageName(language));
+    return true;
 }
 
 }  // namespace rejsrf

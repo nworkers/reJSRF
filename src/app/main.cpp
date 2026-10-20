@@ -267,6 +267,18 @@ int main(int argc, char** argv)
     // saved settings (docs/design/20261017-i084-settings-overlay.md).
     static rejsrf::SettingsFile settings_file;
     const rejsrf::Settings settings = settings_file.Load();
+    // The language this run starts in: REJSRF_LANGUAGE for this run only,
+    // else the saved one (docs/design/20261020-i104-language-option.md).
+    rejsrf::Language language = settings.language;
+    if (const char* language_override = std::getenv("REJSRF_LANGUAGE"))
+    {
+        if (!rejsrf::ParseLanguage(language_override, &language))
+        {
+            std::fprintf(stderr, "warning: REJSRF_LANGUAGE=%s is not English, Japanese, French, German or Spanish; "
+                                 "using %s\n",
+                         language_override, rejsrf::LanguageName(language));
+        }
+    }
     rexbox::hle::d3d8::DisplayDefaults display_defaults;
     display_defaults.render_scale = settings.render_scale;
     display_defaults.aspect = static_cast<rexbox::hle::d3d8::AspectMode>(std::min<uint32_t>(settings.aspect, 2));
@@ -289,7 +301,7 @@ int main(int argc, char** argv)
     char title_id[64];
     std::snprintf(title_id, sizeof(title_id), " (title ID %08X)", image->certificate().title_id);
     build_info.xbe = options.xbe + title_id;
-    static rejsrf::SettingsUi settings_ui(build_info, settings, &settings_file);
+    static rejsrf::SettingsUi settings_ui(build_info, settings, language, &settings_file);
     rexbox::platform::SetOverlayBuilder([] { settings_ui.Build(); });
 
     rexbox::runtime::GuestMemory memory;
@@ -303,6 +315,9 @@ int main(int argc, char** argv)
         std::fprintf(stderr, "error: %s\n", error.c_str());
         return 1;
     }
+    // Before the entry: some of the game's objects keep the language they
+    // were created with.
+    rejsrf::ApplyLanguage(*image, memory, language);
     rexbox::runtime::GuestHeap heap(memory.size(), rexbox::runtime::GuestMemory::kRetailRamSize);
     heap.Reserve(0, image->base_address());  // low memory below the image
     heap.Reserve(image->base_address(), image->size_of_image());

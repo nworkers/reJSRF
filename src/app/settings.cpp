@@ -133,12 +133,20 @@ Settings SettingsFile::Load()
             continue;
         }
         const size_t equals = line.find('=');
-        if (equals == std::string::npos || (section != "graphics" && section != "input"))
+        if (equals == std::string::npos || (section != "graphics" && section != "input" && section != "game"))
         {
             continue;
         }
         const std::string key = Lower(Trim(line.substr(0, equals)));
         const std::string value = Trim(line.substr(equals + 1));
+        if (section == "game")
+        {
+            if (key == "language")
+            {
+                ParseLanguage(value, &settings.language);
+            }
+            continue;
+        }
         if (section == "input")
         {
             if (key == "vibration")
@@ -263,7 +271,7 @@ bool SettingsFile::Save(const Settings& settings)
     std::ostringstream text;
     const auto flag = [](bool value) { return value ? "true" : "false"; };
     text << "; reJSRF settings, written by the settings menu (Tab opens it).\n"
-         << "; Environment variables (REXBOX_RENDER_SCALE, REXBOX_VSYNC) override these for a run.\n"
+         << "; Environment variables (REXBOX_RENDER_SCALE, REXBOX_VSYNC, REJSRF_LANGUAGE) override these for a run.\n"
          << "[Graphics]\n"
          << "; WindowScale: 1..3 (the window at start). RenderScale: 1..8 (1: 640x480).\n"
          << "; Aspect: 4:3, 16:9 or 21:9 (wider shows more at the sides; the HUD stays centered).\n"
@@ -291,7 +299,10 @@ bool SettingsFile::Save(const Settings& settings)
     text << "[Input]\n"
          << "; Vibration: gamepad rumble. VibrationStrength: 10..100 (percent).\n"
          << "Vibration = " << flag(settings.vibration) << "\n"
-         << "VibrationStrength = " << settings.vibration_strength << "\n";
+         << "VibrationStrength = " << settings.vibration_strength << "\n"
+         << "[Game]\n"
+         << "; Language: English, Japanese, French, German or Spanish (from the next start).\n"
+         << "Language = " << LanguageName(settings.language) << "\n";
     if (WriteFile(path_, text.str()))
     {
         return true;

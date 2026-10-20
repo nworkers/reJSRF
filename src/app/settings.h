@@ -4,6 +4,8 @@
 #ifndef REJSRF_APP_SETTINGS_H
 #define REJSRF_APP_SETTINGS_H
 
+#include "rejsrf/jsrf_profile.h"
+
 #include <cstdint>
 #include <string>
 
@@ -34,6 +36,9 @@ struct Settings
     bool show_video_memory = false;
     float stats_x = -1.0f;
     float stats_y = -1.0f;
+    // [Game]: the language the game runs in, from the next start
+    // (docs/design/20261020-i104-language-option.md).
+    Language language = Language::kEnglish;
 };
 
 // rejsrf.ini next to the executable, or in the user's settings folder when

@@ -87,9 +87,26 @@ US판의 `mov ecx, 0x1FC724` 191곳을 모두 분류했다(81개 함수). 189곳
 * 언어별 자산(텍스처, 목록 파일)은 장면을 읽을 때 열린다. 이미 읽은 자산은 언어를 바꿔도 그대로다(**추정**).
 * 따라서 실행 중 언어 전환은 안전하지 않다. **진입 전에 쓰고 다음 실행부터 적용**한다.
 
-## 8. 미확정
+## 8. 다섯 언어 실행 (확인됨, issue #104 구현 후)
 
-* 로고·경고문·타이틀 너머(메뉴, 게임 중 자막·음성)도 일본판과 같은지. 입력이 필요해 아직 보지 않았다.
+`REJSRF_LANGUAGE`로 다섯 언어를 각각 55초 실행해(숨긴 창, 같은 빌드) 파일 열기와 프레임 300·600·1500·1800·2400·3000을 비교했다.
+
+| 언어 | 영어와 다르게 여는 파일 | 화면(처음 55초) |
+|---|---|---|
+| 영어(1) | `LogoE`, `TitleE.dat/.bin`, `se_pple`, `SprNorm1.bin/.dat` | 기준. 설정 없는 실행과 파일 열기·프레임이 같다 |
+| 일본어(0) | `LogoJ`, `Title.dat/.bin`, `se_ppl_j`, `SprNorm.bin/.dat` | 로고·경고문·타이틀이 일본판 |
+| 프랑스어(2) | `LogoF`, `TitleF.dat/.bin`, `SprNorm2.bin/.dat` | 영어와 같다 |
+| 독일어(3) | `LogoG`, `TitleG.dat/.bin`, `SprNorm3.bin/.dat` | 영어와 같다(프레임 3000은 데모 진행 시각만 조금 다르다) |
+| 스페인어(4) | `LogoS`, `TitleS.dat/.bin`, `SprNorm4.bin/.dat` | 영어와 같다 |
+
+* 유럽 세 언어의 처음 화면이 영어와 같은 것은 자산이 같기 때문이다(디스크 MD5): `LogoE` = `LogoF` = `LogoG` = `LogoS`, 모든 `Title*.bin`이 같다, `SprNorm1~4.bin`이 같다. 다른 것은 `TitleF/G/S.dat`(셋은 서로 같고 `TitleE.dat`와 다르다)와 `SprNorm2/3/4.dat`(셋은 서로 같고 `SprNorm1.dat`와 다르다)이다.
+* 유럽 세 언어는 `SprNormN`을 `Z:`(유틸리티 파티션)에 복사해 두고 쓴다(`Z:` 열기 실패 → `D:`에서 읽기 → `Z:\...~`에 쓰고 이름 바꾸기). 영어·일본어 파일은 이전 실행에서 이미 복사되어 있었다. 게임 자체의 캐시 동작이며 모두 성공했다.
+* 음성 효과음 `se_ppl_*`는 영어(`se_pple`)와 일본어(`se_ppl_j`)만 따로 연다. 유럽 세 언어는 영어 효과음을 쓰는 것으로 보인다(**추정**).
+
+## 9. 미확정
+
+* 로고·경고문·타이틀 너머(메뉴, 게임 중 자막·음성)도 일본판과 같은지, 유럽 세 언어의 메뉴·자막이 그 언어로 나오는지. 입력이 필요해 아직 보지 않았다.
+* `TitleF/G/S.dat`와 `TitleE.dat`의 차이가 화면 어디에 나오는지(처음 55초 프레임에는 보이지 않는다).
 * `[obj+0x74C]`와 `[obj+0xB0]`을 가진 객체가 무엇인지.
 
 ---
@@ -174,7 +191,24 @@ All 191 `mov ecx, 0x1FC724` in the US build were classified (81 functions). 189 
 * Per-language assets (textures, list files) are opened when a scene loads; assets already loaded stay as they are when the language changes (**inferred**).
 * So switching while running is not safe. **Write it before the entry, and apply it from the next start.**
 
-## 8. Unresolved
+## 8. Runs in all five languages (confirmed, after the issue #104 implementation)
 
-* Whether everything past the logos, warning and title (menus, in-game subtitles and voice) matches the Japanese build; it needs input and has not been looked at yet.
+Each language was run for 55 s through `REJSRF_LANGUAGE` (hidden window, the same build), comparing file opens and frames 300, 600, 1500, 1800, 2400 and 3000.
+
+| Language | Files it opens instead of English's | Screens (first 55 s) |
+|---|---|---|
+| English (1) | `LogoE`, `TitleE.dat/.bin`, `se_pple`, `SprNorm1.bin/.dat` | the reference; file opens and frames equal a run without the setting |
+| Japanese (0) | `LogoJ`, `Title.dat/.bin`, `se_ppl_j`, `SprNorm.bin/.dat` | logo, warning and title as in the Japanese build |
+| French (2) | `LogoF`, `TitleF.dat/.bin`, `SprNorm2.bin/.dat` | the same as English |
+| German (3) | `LogoG`, `TitleG.dat/.bin`, `SprNorm3.bin/.dat` | the same as English (frame 3000 differs only in the demo's timing) |
+| Spanish (4) | `LogoS`, `TitleS.dat/.bin`, `SprNorm4.bin/.dat` | the same as English |
+
+* The three European languages start out looking like English because the assets are the same (disc MD5s): `LogoE` = `LogoF` = `LogoG` = `LogoS`, all `Title*.bin` are equal, `SprNorm1-4.bin` are equal. What differs is `TitleF/G/S.dat` (equal to each other, not to `TitleE.dat`) and `SprNorm2/3/4.dat` (equal to each other, not to `SprNorm1.dat`).
+* The European languages copy `SprNormN` to `Z:` (the utility partition) and use the copy (`Z:` open fails → read from `D:` → write `Z:\...~` and rename). English's and Japanese's files had been copied by earlier runs. It is the game's own caching, and every step succeeded.
+* The voice effect `se_ppl_*` is opened per language only for English (`se_pple`) and Japanese (`se_ppl_j`); the European languages seem to use the English one (**inferred**).
+
+## 9. Unresolved
+
+* Whether everything past the logos, warning and title (menus, in-game subtitles and voice) matches the Japanese build, and whether the European languages' menus and subtitles come out in their language; it needs input and has not been looked at yet.
+* Where on screen `TitleF/G/S.dat` differs from `TitleE.dat` (nothing in the first 55 s of frames shows it).
 * What the objects holding `[obj+0x74C]` and `[obj+0xB0]` are.
