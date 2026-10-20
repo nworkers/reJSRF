@@ -50,7 +50,7 @@ constexpr uint32_t kLanguageIndexAddress = 0x001FC724;
 
 // Indexed by the Language value (the ending-texture switch at 0x27B87).
 constexpr std::array<const char*, kLanguageCount> kLanguageNames = {
-    "Japanese", "English", "French", "German", "Spanish",
+    "Japanese", "English",
 };
 
 }  // namespace

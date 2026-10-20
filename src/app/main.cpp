@@ -274,8 +274,7 @@ int main(int argc, char** argv)
     {
         if (!rejsrf::ParseLanguage(language_override, &language))
         {
-            std::fprintf(stderr, "warning: REJSRF_LANGUAGE=%s is not English, Japanese, French, German or Spanish; "
-                                 "using %s\n",
+            std::fprintf(stderr, "warning: REJSRF_LANGUAGE=%s is not English or Japanese; using %s\n",
                          language_override, rejsrf::LanguageName(language));
         }
     }

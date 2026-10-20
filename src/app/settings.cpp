@@ -301,7 +301,7 @@ bool SettingsFile::Save(const Settings& settings)
          << "Vibration = " << flag(settings.vibration) << "\n"
          << "VibrationStrength = " << settings.vibration_strength << "\n"
          << "[Game]\n"
-         << "; Language: English, Japanese, French, German or Spanish (from the next start).\n"
+         << "; Language: English or Japanese (from the next start).\n"
          << "Language = " << LanguageName(settings.language) << "\n";
     if (WriteFile(path_, text.str()))
     {

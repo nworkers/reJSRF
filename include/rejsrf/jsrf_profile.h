@@ -49,18 +49,16 @@ const XbeVariant* PrimaryVariant();
 size_t BindTitleHle(const rexbox::xbe::XbeImage& image, rexbox::runtime::HleRegistry& registry);
 
 // The game's language: the value of the language index each build carries as
-// a constant (US: 1, Japan: 0). Every build has the assets of all five
-// (docs/design/20261020-i104-language-option.md).
+// a constant (US: 1, Japan: 0). The index also has French (2), German (3) and
+// Spanish (4), left out because the disc carries no localization for them
+// beyond a few screens (docs/design/20261020-i104-language-option.md 3.4).
 enum class Language : uint32_t
 {
     kJapanese = 0,
     kEnglish = 1,
-    kFrench = 2,
-    kGerman = 3,
-    kSpanish = 4,
 };
 
-constexpr uint32_t kLanguageCount = 5;
+constexpr uint32_t kLanguageCount = 2;
 
 // "Japanese", "English", ...: the rejsrf.ini value and the menu label.
 const char* LanguageName(Language language);

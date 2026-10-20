@@ -11,6 +11,8 @@
 5. `main.cpp`: `REJSRF_LANGUAGE`가 있으면 그 실행에만 우선(저장 안 함, 모르는 값은 경고 후 ini 값). XBE를 올린 직후·진입 전에 `ApplyLanguage`. 실행 중 언어를 메뉴에 넘긴다.
 6. Game 탭(`settings_ui.cpp/.h`, Info 바로 다음, 사용자 요청): `Language` 콤보(프로파일 순서), 도움말, 아래 줄에 "Applies from the next start." / 실행 중 언어와 다르면 "Restart to apply. Running in <언어>." / `REJSRF_LANGUAGE`가 있으면 그 사실.
 7. 문서: 설계 확정, 작업 지시, 분석 §8(다섯 언어 실행), 가이드, `ARCHITECTURE.md`(실행 흐름, 타이틀 설정 계약).
+8. 유럽 세 언어 조사: 디스크 자산 MD5 비교, XBE 문자열(그래피티 편집기는 번역, 멀티플레이 메뉴는 `(Fr)`·`(Gr)`·`(Esp)` 자리표시자), 웹 검색. 결과는 [language §8.1](../analysis/language.md).
+9. 범위 축소(사용자 결정): English와 Japanese 두 언어로 되돌렸다. `Language`는 `kJapanese` = 0, `kEnglish` = 1만 남기고, ini 주석과 `REJSRF_LANGUAGE` 경고 문구를 고쳤다. 이유는 [설계 §3.4](../design/20261020-i104-language-option.md).
 
 ## 검증
 
@@ -25,12 +27,15 @@
 | `French` / `German` / `Spanish` | 각각 `LogoF/G/S`, `TitleF/G/S`, `SprNorm2/3/4`를 연다(`Z:` 캐시 복사 포함, 모두 성공). 처음 55초 화면은 영어와 같다. 디스크의 해당 자산이 영어와 같기 때문이다([language §8](../analysis/language.md)) |
 | ini 읽기 | `Language = japanese` → Japanese, `Klingon` → English. 읽기만으로 파일이 바뀌지 않는다 |
 | `REJSRF_LANGUAGE` | `GERMAN`이 ini의 Japanese보다 우선, `korean`은 경고 후 ini 값. 저장되지 않는다(ini 없는 실행 뒤에도 파일이 생기지 않음) |
-| Game 탭 화면, 탭에서 바꾼 값의 저장 | 사용자 확인 대기(입력 자동화 수단이 없다) |
-| 메뉴·게임 중 자막이 그 언어로 나오는지 | 사용자 확인 대기(Press Start 이후는 입력이 필요하다) |
+| Game 탭에서 바꾼 값의 저장 | 확인됨: 사용자가 다섯 언어 빌드의 Game 탭에서 German을 고른 `rejsrf.ini`에 `[Game] Language = German`이 저장되어 있었다 |
+| 두 언어로 줄인 뒤: Release 빌드, 회귀 도구 | 경고·오류 없음, 위와 같은 결과(0 failure, 0 difference) |
+| 두 언어로 줄인 뒤: 빠진 언어 이름 | 사용자 ini의 `German` → English(파일은 바뀌지 않음, MD5 같음), `REJSRF_LANGUAGE=French` → 경고 후 English |
+| 두 언어로 줄인 뒤: English / Japanese 실행 | 프레임 300·600·1500·1800이 다섯 언어 빌드의 English·Japanese 실행과 바이트 단위로 같다 |
+| 메뉴·게임 중 자막이 일본어로 나오는지 | 사용자 확인 대기(Press Start 이후는 입력이 필요하다) |
 
 ## 남은 것
 
-* 저장 데이터에 언어가 들어 있는지(설계 §3.4, 미확정).
+* 저장 데이터에 언어가 들어 있는지(설계 §3.5, 미확정).
 * 한국어 패치 검토(#105)는 일본어 실행을 출발점으로 한다.
 
 ---
@@ -48,6 +53,8 @@ Design: [20261020-i104](../design/20261020-i104-language-option.md) · Work orde
 5. `main.cpp`: `REJSRF_LANGUAGE`, when set, wins for that run (not saved; an unknown value warns and keeps the ini's). `ApplyLanguage` right after the XBE is placed, before the entry. The running language goes to the menu.
 6. Game tab (`settings_ui.cpp/.h`, right after Info at the user's request): a `Language` combo (profile order), a tooltip, and below it "Applies from the next start." / "Restart to apply. Running in <language>." while the running language differs / a note when `REJSRF_LANGUAGE` is set.
 7. Documents: design settled, work order, analysis §8 (runs in all five languages), the guide, `ARCHITECTURE.md` (execution flow, the title-settings contract).
+8. A look at the three European languages: disc asset MD5s, XBE strings (graffiti editor translated, multiplayer menus with `(Fr)`/`(Gr)`/`(Esp)` placeholders), a web search. Results in [language §8.1](../analysis/language.md).
+9. Narrowed scope (the user's decision): back to English and Japanese. `Language` keeps only `kJapanese` = 0 and `kEnglish` = 1; the ini comment and the `REJSRF_LANGUAGE` warning were reworded. Reasons in [design §3.4](../design/20261020-i104-language-option.md).
 
 ## Verification
 
@@ -62,10 +69,13 @@ Design: [20261020-i104](../design/20261020-i104-language-option.md) · Work orde
 | `French` / `German` / `Spanish` | open `LogoF/G/S`, `TitleF/G/S`, `SprNorm2/3/4` respectively (including the `Z:` cache copies, all successful). The first 55 s look like English, because those assets on the disc equal English's ([language §8](../analysis/language.md)) |
 | ini read | `Language = japanese` → Japanese, `Klingon` → English; reading never rewrites the file |
 | `REJSRF_LANGUAGE` | `GERMAN` wins over the ini's Japanese; `korean` warns and keeps the ini's; never saved (no file appears after a run without an ini) |
-| The Game tab on screen, saving a value changed there | waiting for the user (no input automation) |
-| Menus and in-game subtitles in the chosen language | waiting for the user (past Press Start needs input) |
+| Saving a value changed in the Game tab | confirmed: the user picked German in the five-language build's Game tab, and `rejsrf.ini` held `[Game] Language = German` |
+| After narrowing to two: Release build, regression tools | no warnings or errors; the same results as above (0 failures, 0 differences) |
+| After narrowing to two: dropped language names | the user's ini `German` → English (file unchanged, same MD5); `REJSRF_LANGUAGE=French` → warning, English |
+| After narrowing to two: English / Japanese runs | frames 300, 600, 1500 and 1800 equal the five-language build's English and Japanese runs byte for byte |
+| Menus and in-game subtitles in Japanese | waiting for the user (past Press Start needs input) |
 
 ## Open
 
-* Whether save data records the language (design §3.4, unresolved).
+* Whether save data records the language (design §3.5, unresolved).
 * The Korean patch review (#105) starts from the Japanese run.
