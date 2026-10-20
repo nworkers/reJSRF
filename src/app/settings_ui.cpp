@@ -302,6 +302,11 @@ void SettingsUi::DrawMenu()
                 DrawTab(&SettingsUi::DrawInfoTab);
                 ImGui::EndTabItem();
             }
+            if (ImGui::BeginTabItem("Game"))
+            {
+                DrawTab(&SettingsUi::DrawGameTab);
+                ImGui::EndTabItem();
+            }
             if (ImGui::BeginTabItem("Graphics"))
             {
                 DrawTab(&SettingsUi::DrawGraphicsTab);
@@ -310,11 +315,6 @@ void SettingsUi::DrawMenu()
             if (ImGui::BeginTabItem("Input"))
             {
                 DrawTab(&SettingsUi::DrawInputTab);
-                ImGui::EndTabItem();
-            }
-            if (ImGui::BeginTabItem("Game"))
-            {
-                DrawTab(&SettingsUi::DrawGameTab);
                 ImGui::EndTabItem();
             }
             ImGui::EndTabBar();

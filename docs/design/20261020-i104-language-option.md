@@ -59,7 +59,7 @@ flowchart LR
 ### 3.3 설정
 
 * `rejsrf.ini`에 새 절 `[Game]`, 키 `Language = English | Japanese | French | German | Spanish`(기본 English, 대소문자 무시, 모르는 값은 기본값).
-* 설정 메뉴에 **Game 탭**을 새로 둔다(Info, Graphics, Input 다음). 콤보 `Language`, "Applies from the next start." 안내, 실행 중 언어와 저장된 값이 다르면 "Restart to apply." 표시.
+* 설정 메뉴에 **Game 탭**을 새로 둔다. 위치는 Info 바로 다음이다(탭 순서 Info, Game, Graphics, Input, 사용자 결정). 콤보 `Language`, "Applies from the next start." 안내, 실행 중 언어와 저장된 값이 다르면 "Restart to apply." 표시.
 * 적용 시점: **다음 실행부터**. 객체가 만들 때의 언어를 저장하고 이미 읽은 자산은 바뀌지 않으므로 실행 중 전환은 하지 않는다(§2).
 * 환경 변수 `REJSRF_LANGUAGE=<ini 값>`이 있으면 그 실행에만 ini보다 우선하고 저장하지 않는다(`REXBOX_RENDER_SCALE`류와 같은 규칙). 스크립트 실행·검증용이다.
 
@@ -138,7 +138,7 @@ The mapping confirmed in the ending-texture switch ([language §3](../analysis/l
 ### 3.3 Settings
 
 * A new `[Game]` section in `rejsrf.ini` with `Language = English | Japanese | French | German | Spanish` (default English, case-insensitive, unknown values keep the default).
-* A new **Game tab** in the settings menu (after Info, Graphics and Input): a `Language` combo, "Applies from the next start.", and "Restart to apply." while the running language differs from the saved one.
+* A new **Game tab** in the settings menu, right after Info (tab order Info, Game, Graphics, Input; the user's decision): a `Language` combo, "Applies from the next start.", and "Restart to apply." while the running language differs from the saved one.
 * When it applies: **from the next start**. Objects keep the language they were created with and loaded assets do not change, so there is no switch while running (§2).
 * `REJSRF_LANGUAGE=<ini value>`, when set, wins over the ini for that run and is not saved (the same rule as `REXBOX_RENDER_SCALE` and the like); for scripted runs and verification.
 

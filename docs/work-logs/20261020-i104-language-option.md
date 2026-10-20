@@ -9,7 +9,7 @@
 3. 타이틀 프로파일(`jsrf_profile.h/.cpp`): `enum class Language`(0~4), `LanguageName`, `ParseLanguage`(대소문자 무시), `ApplyLanguage`(기본 variant만 `0x1FC724`에 쓰고 `[jsrf] language: <이름>` 출력).
 4. 설정(`settings.h/.cpp`): `Settings::language`(기본 English), `rejsrf.ini`의 `[Game]` 절 `Language` 읽기·쓰기. 모르는 값은 기본값.
 5. `main.cpp`: `REJSRF_LANGUAGE`가 있으면 그 실행에만 우선(저장 안 함, 모르는 값은 경고 후 ini 값). XBE를 올린 직후·진입 전에 `ApplyLanguage`. 실행 중 언어를 메뉴에 넘긴다.
-6. Game 탭(`settings_ui.cpp/.h`): `Language` 콤보(프로파일 순서), 도움말, 아래 줄에 "Applies from the next start." / 실행 중 언어와 다르면 "Restart to apply. Running in <언어>." / `REJSRF_LANGUAGE`가 있으면 그 사실.
+6. Game 탭(`settings_ui.cpp/.h`, Info 바로 다음, 사용자 요청): `Language` 콤보(프로파일 순서), 도움말, 아래 줄에 "Applies from the next start." / 실행 중 언어와 다르면 "Restart to apply. Running in <언어>." / `REJSRF_LANGUAGE`가 있으면 그 사실.
 7. 문서: 설계 확정, 작업 지시, 분석 §8(다섯 언어 실행), 가이드, `ARCHITECTURE.md`(실행 흐름, 타이틀 설정 계약).
 
 ## 검증
@@ -46,7 +46,7 @@ Design: [20261020-i104](../design/20261020-i104-language-option.md) · Work orde
 3. Title profile (`jsrf_profile.h/.cpp`): `enum class Language` (0-4), `LanguageName`, `ParseLanguage` (case-insensitive), `ApplyLanguage` (writes `0x1FC724` for the primary variant only and prints `[jsrf] language: <name>`).
 4. Settings (`settings.h/.cpp`): `Settings::language` (default English); `Language` in `rejsrf.ini`'s `[Game]` section, read and written; unknown values keep the default.
 5. `main.cpp`: `REJSRF_LANGUAGE`, when set, wins for that run (not saved; an unknown value warns and keeps the ini's). `ApplyLanguage` right after the XBE is placed, before the entry. The running language goes to the menu.
-6. Game tab (`settings_ui.cpp/.h`): a `Language` combo (profile order), a tooltip, and below it "Applies from the next start." / "Restart to apply. Running in <language>." while the running language differs / a note when `REJSRF_LANGUAGE` is set.
+6. Game tab (`settings_ui.cpp/.h`, right after Info at the user's request): a `Language` combo (profile order), a tooltip, and below it "Applies from the next start." / "Restart to apply. Running in <language>." while the running language differs / a note when `REJSRF_LANGUAGE` is set.
 7. Documents: design settled, work order, analysis §8 (runs in all five languages), the guide, `ARCHITECTURE.md` (execution flow, the title-settings contract).
 
 ## Verification
