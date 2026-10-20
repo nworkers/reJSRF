@@ -37,8 +37,9 @@ struct Settings
     float stats_x = -1.0f;
     float stats_y = -1.0f;
     // [Game]: the language the game runs in, from the next start
-    // (docs/design/20261020-i104-language-option.md).
-    Language language = Language::kEnglish;
+    // (docs/design/20261020-i104-language-option.md); by default the built
+    // variant's own (USA English, Japan Japanese).
+    Language language = NativeLanguage();
 };
 
 // rejsrf.ini next to the executable, or in the user's settings folder when

@@ -2,16 +2,21 @@
 #
 # The configuration is a parameter so Debug and Release come from the same
 # procedure. One multi-config Visual Studio tree holds every configuration.
+# -Variant picks the disc the build runs: us (default) in build\win32_x86, jp
+# in build\win32_x86_jp, each with its own generated code
+# (docs/design/20261020-i108-japanese-variant.md).
 param(
     [ValidateSet("Debug", "Release", "RelWithDebInfo", "MinSizeRel")]
     [string]$Configuration = "Debug",
+    [ValidateSet("us", "jp")]
+    [string]$Variant = "us",
     [string[]]$Target = @()
 )
 
 $ErrorActionPreference = "Stop"
 
 $Root = Resolve-Path (Join-Path $PSScriptRoot "..")
-$BuildDir = Join-Path $Root "build\win32_x86"
+$BuildDir = Join-Path $Root $(if ($Variant -eq "jp") { "build\win32_x86_jp" } else { "build\win32_x86" })
 $VsWhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
 
 function Resolve-CMake
@@ -73,7 +78,7 @@ if (Test-Path $cache)
     }
 }
 
-& $cmake -S $Root -B $BuildDir -G $generator -A Win32
+& $cmake -S $Root -B $BuildDir -G $generator -A Win32 "-DREJSRF_VARIANT=jsrf_$Variant"
 if ($LASTEXITCODE -ne 0)
 {
     throw "CMake configure failed."

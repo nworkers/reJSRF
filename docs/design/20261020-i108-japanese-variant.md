@@ -1,6 +1,6 @@
 # 설계: 일본판 XBE를 빌드 변형으로 지원 (issue #108)
 
-상태: **설계, 구현 전**(사용자 승인 대기). 작업 지시: [20261020-i108](../work-orders/20261020-i108-japanese-variant.md)
+상태: **구현됨**(사용자 승인). 작업 로그: [20261020-i108](../work-logs/20261020-i108-japanese-variant.md) · 작업 지시: [20261020-i108](../work-orders/20261020-i108-japanese-variant.md)
 
 분석: [language §5~§7, §10](../analysis/language.md)
 
@@ -8,6 +8,7 @@
 
 * 일본판 디스크만 가진 사용자를 지원한다. 일본판 `default.xbe`(MD5 `d8490cdb75bd47b36c62effdf1461ae0`, 지역 2)를 실행한다.
 * **실행 파일 하나로 두 판을 지원하지 않는다.** CMake configure 때 미국판(`jsrf_us`, 기본) 또는 일본판(`jsrf_jp`) 하나를 고른다(사용자 결정).
+* **판은 파일 이름이 아니라 내용으로 판단한다**(사용자 결정). 읽는 파일은 `default.xbe` 또는 사용자가 지정한 XBE이고, `_eng`·`_jpn` 같은 이름은 덤프한 사람이 붙인 것이라 쓰지 않는다. 앱은 인증서(title ID, 인증서 시각, 버전, 이미지 시각)로, 스크립트는 MD5로 판단한다.
 
 ## 2. 확인한 것
 
@@ -56,7 +57,7 @@ flowchart LR
 ### 4.2 재생성
 
 * `variants.json`에 `jsrf_jp`(라벨 "Japan (region 2)", MD5 `d8490cdb…`)를 더한다.
-* `regenerate.py --variant jsrf_jp --xbe <일본판>`. seed, `hle_libraries.json`, `xdk_symbols_extra.json`, 디컴파일 소스는 **공유**한다(함수 주소가 같으므로).
+* `regenerate.py`는 `--xbe`(기본 `roms/Jet Set Radio Future/default.xbe`)를 읽고 MD5로 변형을 정한다. `--variant`는 생략하고, 주면 판단 결과와 같아야 한다. 출력은 `gen/<판단한 변형>/`. seed, `hle_libraries.json`, `xdk_symbols_extra.json`, 디컴파일 소스는 **공유**한다(함수 주소가 같으므로).
 * 공유가 맞는지 재생성 때 확인한다: 미국판이 아닌 변형이면 `variant_addresses.py`의 함수 비교(seed, 추가 심볼, 디컴파일 함수가 그 XBE의 같은 주소에 미국판과 같은 코드로 있는지)를 돌리고, 어긋나면 멈춘다. 이를 위해 함수 비교 부분을 `scripts/recomp/`의 모듈로 옮긴다. 미국판 XBE가 없는 사용자는 미국판과 직접 비교할 수 없으므로, 비교 기준은 미국판 XBE가 아니라 **커밋한 지문**(주소별 가린 명령 바이트의 해시, `src/game/jsrf/recomp/function_fingerprints.json`)으로 한다. 원본 바이트가 아니라 해시만 커밋한다.
 
 ### 4.3 자료 주소
@@ -109,7 +110,7 @@ flowchart LR
 
 # Design: the Japanese XBE as a build variant (issue #108)
 
-Status: **design, not implemented** (waiting for the user's approval). Work order: [20261020-i108](../work-orders/20261020-i108-japanese-variant.md)
+Status: **implemented** (approved by the user). Work log: [20261020-i108](../work-logs/20261020-i108-japanese-variant.md) · Work order: [20261020-i108](../work-orders/20261020-i108-japanese-variant.md)
 
 Analysis: [language §5-§7, §10](../analysis/language.md)
 
@@ -117,6 +118,7 @@ Analysis: [language §5-§7, §10](../analysis/language.md)
 
 * Support users who only have the Japanese disc: run the Japanese `default.xbe` (MD5 `d8490cdb75bd47b36c62effdf1461ae0`, region 2).
 * **One executable does not run both.** CMake configure picks either the US (`jsrf_us`, default) or the Japanese (`jsrf_jp`) build (the user's decision).
+* **The build is told from the file's content, never its name** (the user's decision). What is read is `default.xbe` or an XBE the user names; names such as `_eng` and `_jpn` are whatever the person who dumped the disc chose and are not used. The app decides by the certificate (title ID, certificate time, version, image time), the scripts by MD5.
 
 ## 2. What was established
 
@@ -153,7 +155,7 @@ Analysis: [language §5-§7, §10](../analysis/language.md)
 ### 4.2 Regeneration
 
 * `variants.json` gains `jsrf_jp` (label "Japan (region 2)", MD5 `d8490cdb…`).
-* `regenerate.py --variant jsrf_jp --xbe <Japanese>`. The seeds, `hle_libraries.json`, `xdk_symbols_extra.json` and the decompiled sources are **shared** (the function addresses are the same).
+* `regenerate.py` reads `--xbe` (default `roms/Jet Set Radio Future/default.xbe`) and picks the variant by MD5. `--variant` is left out; when given it must agree. The output goes to `gen/<the variant found>/`. The seeds, `hle_libraries.json`, `xdk_symbols_extra.json` and the decompiled sources are **shared** (the function addresses are the same).
 * Regeneration checks that sharing holds: for a variant other than the US one it runs `variant_addresses.py`'s function comparison (do the seeds, extra symbols and decompiled functions hold the US code at the same address in that XBE?) and stops on a mismatch; the comparison moves into a module under `scripts/recomp/`. A user without the US XBE cannot compare against it, so the reference is not the US XBE but **committed fingerprints** (a hash of the masked instruction bytes per address, `src/game/jsrf/recomp/function_fingerprints.json`): only hashes are committed, never original bytes.
 
 ### 4.3 Data addresses

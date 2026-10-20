@@ -16,6 +16,7 @@
  * Prefetches are omitted. */
 
 #include "recomp_types.h"
+#include "rejsrf/jsrf_addresses.h"
 
 #include <string.h>
 
@@ -41,12 +42,12 @@ extern void sub_001BB2E0_gen(void);
 extern void sub_001BB330_gen(void);
 extern void sub_001BB380_gen(void);
 
-/* Guest globals the library uses. */
-#define kStackCell 0x00264C04u    /* -> cell holding the current matrix address */
-#define kSinCosTable 0x00264BA4u  /* -> table of (a, b) float pairs by angle */
-#define kWorkMatrix 0x00264C08u   /* -> scratch matrix of 0x001BAC70 */
-#define kWorkScalar 0x00264BD8u   /* float scratch of 0x001BAC70 */
-#define kWorkVector 0x0022E5B0u   /* -> vector read by 0x001BAC70 */
+/* Guest globals the library uses (per build: rejsrf/jsrf_addresses.h). */
+#define kStackCell JSRF_MMATRIX_STACK_CELL      /* -> cell holding the current matrix address */
+#define kSinCosTable JSRF_MMATRIX_SINCOS_TABLE  /* -> table of (a, b) float pairs by angle */
+#define kWorkMatrix JSRF_MMATRIX_WORK_MATRIX    /* -> scratch matrix of 0x001BAC70 */
+#define kWorkScalar JSRF_MMATRIX_WORK_SCALAR    /* float scratch of 0x001BAC70 */
+#define kWorkVector JSRF_MMATRIX_WORK_VECTOR    /* -> vector read by 0x001BAC70 */
 
 /* Host pointer to a guest address; the base is read once per function. */
 #define GUEST_BASE() const uintptr_t base = (uintptr_t)g_xbox_mem_offset

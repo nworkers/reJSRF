@@ -29,12 +29,16 @@ direct calls and the generated dispatch table link to the hand-written
 version. A file that also declares `extern void sub_XXXXXXXX_gen(void);` keeps
 the lifted body under that name (docs/design/20261012-i002-recomp-pipeline.md).
 
-The XBE must be the exact build the variant is lifted from (its MD5 is in
-src/game/jsrf/recomp/variants.json); any other build stops the run.
+Variant: the XBE (default.xbe, or the one --xbe names) is identified by its
+MD5 (src/game/jsrf/recomp/variants.json), never by its file name, and the
+output goes to gen/<variant>/. The seeds and decompiled functions name US
+addresses; for any other build, variant_fingerprints.py first checks that
+they hold the same code there (docs/design/20261020-i108-japanese-variant.md),
+and the run stops if not. An unsupported build stops the run too.
 
 Usage:
     python scripts/recomp/regenerate.py
-    python scripts/recomp/regenerate.py --xbe <path> --variant jsrf_us --symbols-tool <exe>
+    python scripts/recomp/regenerate.py --xbe <path> --symbols-tool <exe>
 """
 
 import argparse
@@ -45,7 +49,8 @@ import subprocess
 import sys
 import time
 
-from xbe_variant import check_xbe
+from variant_fingerprints import check as check_fingerprints
+from xbe_variant import identify_xbe
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 XBOXRECOMP = ROOT / "third_party" / "xboxrecomp"
@@ -193,7 +198,8 @@ def check_submodule_clean():
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--xbe", type=pathlib.Path, default=DEFAULT_XBE)
-    parser.add_argument("--variant", default="jsrf_us")
+    parser.add_argument("--variant", default=None,
+                        help="expected variant (jsrf_us, jsrf_jp); found from the XBE's content when left out")
     parser.add_argument("--symbols-tool", type=pathlib.Path, default=None,
                         help="path to rexbox_xdk_symbols (default: look in build/)")
     parser.add_argument("--split", type=int, default=250,
@@ -203,14 +209,23 @@ def main():
     xbe = args.xbe.resolve()
     if not xbe.is_file():
         sys.exit(f"no XBE at {xbe} -- put your own dump under roms/ (docs/guides/)")
-    problem = check_xbe(xbe, args.variant)
-    if problem:
-        sys.exit(f"error: {problem}")
+    variant, detail = identify_xbe(xbe)
+    if variant is None:
+        sys.exit(f"error: {detail}")
+    if args.variant is not None and args.variant != variant:
+        sys.exit(f"error: {xbe} is the {detail} build ({variant}), not {args.variant}")
+    print(f"=== variant: {variant} ({detail})", flush=True)
+    if variant != "jsrf_us":
+        problems = check_fingerprints(xbe)
+        if problems:
+            sys.exit("error: the US-addressed seeds and decompiled functions do not fit this build:\n  "
+                     + "\n  ".join(problems))
+        print("    named functions: all hold the USA code at the same address", flush=True)
     if not (XBOXRECOMP / "tools").is_dir():
         sys.exit("third_party/xboxrecomp is empty -- run: git submodule update --init")
     tool = find_symbol_tool(args.symbols_tool)
 
-    out = (ROOT / "gen" / args.variant).resolve()
+    out = (ROOT / "gen" / variant).resolve()
     gen_dir = out / "gen"
     out.mkdir(parents=True, exist_ok=True)
     # Stale split files from a run with a different function count would

@@ -54,6 +54,7 @@ These rules follow [rePIU's CODING_STYLE](https://github.com/reexec/rePIU/blob/m
 * 디컴파일 함수는 lifter와 링커가 찾을 수 있도록 대체하는 함수와 같은 심볼 `void sub_XXXXXXXX(void)`로 정의하고, 주석에 주소, 호출 규약, 의미 있는 시그니처를 적는다. lift 본문과 비교하려면 `extern void sub_XXXXXXXX_gen(void);`을 선언한다.
 * 디컴파일 코드는 게스트 메모리를 `MEM8/16/32` 같은 런타임 접근 매크로로 다루고, 레지스터는 `g_eax` 같은 전역 이름으로 쓴다(`eax` 같은 짧은 이름은 생성 코드 전용). 게스트 구조체를 호스트 포인터로 직접 캐스팅하지 않는다(64비트 호스트에서 포인터 크기가 다르기 때문).
 * 디컴파일 함수마다 재컴파일 버전과 비교하는 검증 방법을 작업 로그에 남긴다.
+* 함수 주소(`sub_XXXXXXXX`)는 US판과 일본판이 같으므로 그대로 쓴다. 게스트 **자료 주소**는 판마다 다를 수 있으므로 숫자로 쓰지 않고 `include/rejsrf/jsrf_addresses.h`의 이름을 쓴다. 새 자료 주소는 두 판의 값을 짝지어(`scripts/analysis/language/variant_addresses.py`) 그 헤더에 더한다. 디컴파일 함수나 seed를 더하면 US판으로 `scripts/recomp/variant_fingerprints.py --write`를 다시 돌린다([설계 i108](design/20261020-i108-japanese-variant.md)).
 
 ## Recompiled and Decompiled Code
 
@@ -61,6 +62,7 @@ These rules follow [rePIU's CODING_STYLE](https://github.com/reexec/rePIU/blob/m
 * A decompiled function is defined under the same symbol as the function it replaces, `void sub_XXXXXXXX(void)`, so the lifter and the linker find it; its comment gives the address, calling convention and a meaningful signature. To compare it with the lifted body, declare `extern void sub_XXXXXXXX_gen(void);`.
 * Decompiled code handles guest memory through the runtime's access macros (`MEM8/16/32`) and registers through the global names (`g_eax`; short names like `eax` are for generated code only). Do not cast guest structures straight to host pointers (pointer sizes differ on 64-bit hosts).
 * For each decompiled function, the work log records how it was compared with its recompiled version.
+* Function addresses (`sub_XXXXXXXX`) are the same in the US and Japanese builds and are used as they are. Guest **data addresses** may differ per build, so they are never written as numbers: use the names in `include/rejsrf/jsrf_addresses.h`, and add a new one there with both builds' values paired (`scripts/analysis/language/variant_addresses.py`). After adding a decompiled function or a seed, rerun `scripts/recomp/variant_fingerprints.py --write` on the US build ([design i108](design/20261020-i108-japanese-variant.md)).
 
 ## 주석 언어
 

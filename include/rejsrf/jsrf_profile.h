@@ -26,9 +26,12 @@ struct RexboxXdkVariable;
 namespace rejsrf
 {
 
-// One XBE build the project supports, identified by its certificate.
+// One XBE build the project supports, identified by its certificate (the
+// file's content; its name says nothing about the build).
 struct XbeVariant
 {
+    const char* id;     // "jsrf_us", "jsrf_jp": the CMake REJSRF_VARIANT value
+    const char* tag;    // "US", "JP": short form for the build identity
     const char* label;
     uint32_t title_id;
     uint32_t certificate_time;
@@ -39,12 +42,14 @@ struct XbeVariant
 // The variant `image` matches, or nullptr for an unsupported build.
 const XbeVariant* IdentifyXbe(const rexbox::xbe::XbeImage& image);
 
-// The variant the recompiled code and title bindings are made for.
-const XbeVariant* PrimaryVariant();
+// The variant this executable is built for (CMake REJSRF_VARIANT): its
+// recompiled code, title bindings and data addresses
+// (docs/design/20261020-i108-japanese-variant.md).
+const XbeVariant* BuiltVariant();
 
 // Binds what the HLE needs to know about the title's statically linked XDK
 // code: the identified XDK variables (device types and the like), for the
-// primary variant only. XDK functions reach the HLE through generated
+// built variant only. XDK functions reach the HLE through generated
 // overrides instead. Returns the number of bindings made.
 size_t BindTitleHle(const rexbox::xbe::XbeImage& image, rexbox::runtime::HleRegistry& registry);
 
@@ -60,6 +65,10 @@ enum class Language : uint32_t
 
 constexpr uint32_t kLanguageCount = 2;
 
+// The language the built variant's disc runs in by itself (USA: English,
+// Japan: Japanese); the setting's default.
+Language NativeLanguage();
+
 // "Japanese", "English", ...: the rejsrf.ini value and the menu label.
 const char* LanguageName(Language language);
 
@@ -68,7 +77,7 @@ bool ParseLanguage(const std::string& text, Language* language);
 
 // Sets the language the game runs in by writing the index into the loaded
 // image; call it after the XBE is loaded and before its entry runs, because
-// some objects keep the value they were created with. Primary variant only;
+// some objects keep the value they were created with. Built variant only;
 // returns false (and writes nothing) for any other build.
 bool ApplyLanguage(const rexbox::xbe::XbeImage& image, rexbox::runtime::GuestMemory& memory, Language language);
 
@@ -77,10 +86,10 @@ using RecompiledFunction = void (*)();
 using RecompiledLookup = RecompiledFunction (*)(uint32_t guest_va);
 
 // The generated guest-VA-to-function lookup, or nullptr when the build has no
-// recompiled code (gen/ was not generated). Lifted for the primary variant only.
+// recompiled code (gen/ was not generated). Lifted for the built variant only.
 RecompiledLookup RecompiledLookupFunction();
 
-// The XDK variables identified in the primary variant (generated with the
+// The XDK variables identified in the built variant (generated with the
 // recompiled code; the table ends with a null name), or nullptr when the build
 // has no recompiled code.
 const RexboxXdkVariable* RecompiledXdkVariables();

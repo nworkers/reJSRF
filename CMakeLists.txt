@@ -129,10 +129,26 @@ add_library(imgui STATIC
 target_include_directories(imgui PUBLIC "${REJSRF_IMGUI_DIR}")
 target_compile_definitions(imgui PUBLIC IMGUI_DISABLE_OBSOLETE_FUNCTIONS)
 
-# Lifted C for the primary variant, produced by scripts/recomp/regenerate.py.
+# The XBE build this tree is built for: the USA or the Japanese disc. One
+# executable runs one build; the other is a separate build directory
+# (docs/design/20261020-i108-japanese-variant.md).
+set(REJSRF_VARIANT "jsrf_us" CACHE STRING "XBE build to build for: jsrf_us (USA) or jsrf_jp (Japan)")
+set_property(CACHE REJSRF_VARIANT PROPERTY STRINGS jsrf_us jsrf_jp)
+if(NOT REJSRF_VARIANT MATCHES "^(jsrf_us|jsrf_jp)$")
+    message(FATAL_ERROR "REJSRF_VARIANT must be jsrf_us or jsrf_jp, not '${REJSRF_VARIANT}'")
+endif()
+message(STATUS "reJSRF variant: ${REJSRF_VARIANT}")
+
+# Lifted C for that variant, produced by scripts/recomp/regenerate.py.
 # Without it the game links no recompiled code and the app stops after load.
-set(REJSRF_RECOMP_GEN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/gen/jsrf_us/gen" CACHE PATH
+set(REJSRF_RECOMP_GEN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/gen/${REJSRF_VARIANT}/gen" CACHE PATH
     "Directory of generated recompiled C (recomp_dispatch.c and friends)")
+# A tree reconfigured for the other variant still caches the old default.
+if(REJSRF_RECOMP_GEN_DIR MATCHES "/gen/jsrf_(us|jp)/gen$"
+   AND NOT REJSRF_RECOMP_GEN_DIR STREQUAL "${CMAKE_CURRENT_SOURCE_DIR}/gen/${REJSRF_VARIANT}/gen")
+    set(REJSRF_RECOMP_GEN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/gen/${REJSRF_VARIANT}/gen" CACHE PATH
+        "Directory of generated recompiled C (recomp_dispatch.c and friends)" FORCE)
+endif()
 
 # License guard. third_party/xboxrecomp is MIT, except its xemu-derived files,
 # which are LGPL-2.1+ (its NOTICE). Those must never be compiled into this

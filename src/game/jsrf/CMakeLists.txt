@@ -14,6 +14,11 @@ add_library(rejsrf_game STATIC
     ${REJSRF_DECOMP_SOURCES}
 )
 target_link_libraries(rejsrf_game PUBLIC rexbox_recomp)
+# The build variant (root CMakeLists.txt): the profile and the decompiled
+# sources pick its data addresses (include/rejsrf/jsrf_addresses.h).
+if(REJSRF_VARIANT STREQUAL "jsrf_jp")
+    target_compile_definitions(rejsrf_game PUBLIC REJSRF_VARIANT_JP=1)
+endif()
 
 if(EXISTS "${REJSRF_RECOMP_GEN_DIR}/recomp_dispatch.c")
     # The generated code must have been lifted against the same ABI header

@@ -871,10 +871,10 @@ int main(int argc, char** argv)
         std::fprintf(stderr, "error: %s: %s\n", xbe_path.c_str(), error.c_str());
         return 2;
     }
-    if (rejsrf::IdentifyXbe(*image) != rejsrf::PrimaryVariant())
+    if (rejsrf::IdentifyXbe(*image) != rejsrf::BuiltVariant())
     {
-        std::fprintf(stderr, "error: %s is not the %s build the lifted originals come from\n", xbe_path.c_str(),
-                     rejsrf::PrimaryVariant()->label);
+        std::fprintf(stderr, "error: %s is not the %s build the lifted originals come from (REJSRF_VARIANT=%s)\n",
+                     xbe_path.c_str(), rejsrf::BuiltVariant()->label, rejsrf::BuiltVariant()->id);
         return 2;
     }
 
