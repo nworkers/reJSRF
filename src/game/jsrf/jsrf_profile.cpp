@@ -1,5 +1,6 @@
 #include "rejsrf/jsrf_profile.h"
 
+#include "rejsrf/jsrf_addresses.h"
 #include "rexbox/recomp/recomp_hle_entry.h"
 #include "rexbox/runtime/guest_memory.h"
 #include "rexbox/runtime/hle_registry.h"
@@ -19,15 +20,23 @@ namespace
 {
 
 // Certificate identity of each known build (docs/analysis/jsrf-xbe-overview.md).
-// Both share title id 5345000A, XDK 4134 and the entry point, but their code
-// differs, so guest addresses from one do not apply to the other.
+// Both share title id 5345000A, XDK 4134 and the entry point. Their code sits
+// at the same addresses but their data moved, so one executable runs one of
+// them (docs/design/20261020-i108-japanese-variant.md).
 constexpr std::array<XbeVariant, 2> kVariants = {{
-    // Primary target: the USA retail build's default.xbe
-    // (MD5 f4e366bfdceee551a09f42219c90d84e).
-    {"USA (region 1)", 0x5345000A, 0x3C5881D9, 0x00000001, 0x3C558EA7},
-    // Recognized only: the Japan-region build's default.xbe.
-    {"Japan (region 2)", 0x5345000A, 0x3C56850C, 0x00000001, 0x3C559627},
+    // The USA retail build (MD5 f4e366bfdceee551a09f42219c90d84e).
+    {"jsrf_us", "US", "USA (region 1)", 0x5345000A, 0x3C5881D9, 0x00000001, 0x3C558EA7},
+    // The Japan-region build (MD5 d8490cdb75bd47b36c62effdf1461ae0).
+    {"jsrf_jp", "JP", "Japan (region 2)", 0x5345000A, 0x3C56850C, 0x00000001, 0x3C559627},
 }};
+
+#if defined(REJSRF_VARIANT_JP)
+constexpr size_t kBuiltVariant = 1;
+constexpr Language kNativeLanguage = Language::kJapanese;
+#else
+constexpr size_t kBuiltVariant = 0;
+constexpr Language kNativeLanguage = Language::kEnglish;
+#endif
 
 struct XdkInternal
 {
@@ -44,9 +53,10 @@ constexpr std::array<XdkInternal, 1> kXdkInternals = {{
     {"D3D_InitializeDeviceState", 0x001919C0},
 }};
 
-// The language index in the primary variant's .data, read through the getter
-// sub_00043700 at 191 sites (docs/analysis/language.md sections 3 and 7).
-constexpr uint32_t kLanguageIndexAddress = 0x001FC724;
+// The language index, read through the getter sub_00043700 at 191 sites
+// (docs/analysis/language.md sections 3, 7 and 10): the US .data or the
+// Japanese bss.
+constexpr uint32_t kLanguageIndexAddress = JSRF_LANGUAGE_INDEX;
 
 // Indexed by the Language value (the ending-texture switch at 0x27B87).
 constexpr std::array<const char*, kLanguageCount> kLanguageNames = {
@@ -69,16 +79,21 @@ const XbeVariant* IdentifyXbe(const rexbox::xbe::XbeImage& image)
     return nullptr;
 }
 
-const XbeVariant* PrimaryVariant()
+const XbeVariant* BuiltVariant()
 {
-    return &kVariants[0];
+    return &kVariants[kBuiltVariant];
+}
+
+Language NativeLanguage()
+{
+    return kNativeLanguage;
 }
 
 size_t BindTitleHle(const rexbox::xbe::XbeImage& image, rexbox::runtime::HleRegistry& registry)
 {
-    // The variable addresses were identified in the primary variant's XBE.
+    // The variable addresses were identified in the built variant's XBE.
     const RexboxXdkVariable* variables = RecompiledXdkVariables();
-    if (variables == nullptr || IdentifyXbe(image) != PrimaryVariant())
+    if (variables == nullptr || IdentifyXbe(image) != BuiltVariant())
     {
         return 0;
     }
@@ -122,7 +137,7 @@ bool ParseLanguage(const std::string& text, Language* language)
 
 bool ApplyLanguage(const rexbox::xbe::XbeImage& image, rexbox::runtime::GuestMemory& memory, Language language)
 {
-    if (IdentifyXbe(image) != PrimaryVariant() || static_cast<uint32_t>(language) >= kLanguageCount ||
+    if (IdentifyXbe(image) != BuiltVariant() || static_cast<uint32_t>(language) >= kLanguageCount ||
         !memory.IsValid(kLanguageIndexAddress, 4))
     {
         return false;

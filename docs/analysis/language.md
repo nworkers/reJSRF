@@ -117,6 +117,20 @@ US판의 `mov ecx, 0x1FC724` 191곳을 모두 분류했다(81개 함수). 189곳
 * `TitleF/G/S.dat`와 `TitleE.dat`의 차이가 화면 어디에 나오는지(처음 55초 프레임에는 보이지 않는다).
 * `[obj+0x74C]`와 `[obj+0xB0]`을 가진 객체가 무엇인지.
 
+## 10. 두 빌드의 주소 대응 (확인됨, `variant_addresses.py`, issue #108)
+
+* **함수**: 손으로 적은 미국판 함수 주소 225개(seed 188개, `xdk_symbols_extra.json` 5개, 디컴파일 함수 31개, `D3D_InitializeDeviceState`)가 모두 일본판의 **같은 주소**에 같은 코드로 있다. 앞 12개 명령을 상대 분기와 이미지 주소를 가리고 비교했다. 옮겨진 함수(§5의 `0x694A0`, `0xD4440`)는 이 목록에 없다.
+* **자료**: 같은 주소의 명령이 담은 피연산자를 짝지었다.
+
+| 미국판 | 일본판 | 차이 | 근거(피연산자 수) |
+|---|---|---|---|
+| `0x001FC724` 언어 인덱스 | `0x00251F58` | `+0x55834` | `.text` 191 |
+| `0x0022E5B0` | `0x0022E590` | `-0x20` | MMATRIX 1 |
+| `0x00264BA4`, `0x00264BD8`, `0x00264C04`, `0x00264C08` | 각각 `-0x18` | `-0x18` | `.text`·MMATRIX 64 |
+| `0x00264E78`~`0x00264E94` | 같음 | `0` | `.text` 17 |
+
+* 따라서 일본판 빌드 변형은 seed와 디컴파일 함수 이름을 그대로 쓰고, 자료 주소만 변형별로 두면 된다([설계 i108](../design/20261020-i108-japanese-variant.md)).
+
 ---
 
 # Language: how the US and Japanese builds choose it
@@ -228,3 +242,17 @@ Each language was run for 55 s through `REJSRF_LANGUAGE` (hidden window, the sam
 * Whether index 5 is Italian, and whether it runs without asset files.
 * Where on screen `TitleF/G/S.dat` differs from `TitleE.dat` (nothing in the first 55 s of frames shows it).
 * What the objects holding `[obj+0x74C]` and `[obj+0xB0]` are.
+
+## 10. Address map between the two builds (confirmed, `variant_addresses.py`, issue #108)
+
+* **Functions**: all 225 hand-written US function addresses (188 seeds, 5 in `xdk_symbols_extra.json`, 31 decompiled functions, `D3D_InitializeDeviceState`) hold the same code at **the same address** in the Japanese build, comparing the first 12 instructions with relative branches and image addresses masked. The moved functions (§5's `0x694A0`, `0xD4440`) are not on that list.
+* **Data**: paired from the operands of the instruction at the same address.
+
+| US | Japanese | Shift | Basis (operands) |
+|---|---|---|---|
+| `0x001FC724` language index | `0x00251F58` | `+0x55834` | `.text` 191 |
+| `0x0022E5B0` | `0x0022E590` | `-0x20` | MMATRIX 1 |
+| `0x00264BA4`, `0x00264BD8`, `0x00264C04`, `0x00264C08` | each `-0x18` | `-0x18` | `.text` and MMATRIX 64 |
+| `0x00264E78`-`0x00264E94` | the same | `0` | `.text` 17 |
+
+* A Japanese build variant can therefore share the seeds and decompiled function names and keep only data addresses per variant ([design i108](../design/20261020-i108-japanese-variant.md)).

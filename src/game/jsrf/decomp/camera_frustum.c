@@ -18,6 +18,7 @@
  * while its culling admits what the widened picture shows. */
 
 #include "recomp_types.h"
+#include "rejsrf/jsrf_addresses.h"
 #include "rejsrf/jsrf_host.h"
 
 #include <math.h>
@@ -31,11 +32,11 @@ void sub_00153A90(void)
     const float scale = rejsrf_host_horizontal_view_scale != 0 ? rejsrf_host_horizontal_view_scale() : 1.0f;
     if (scale > 1.0f)
     {
-        const float tangent = MEMF(0x264E8C) * scale;
+        const float tangent = MEMF(JSRF_FRUSTUM_HTAN_POS) * scale;
         const float secant = sqrtf(1.0f + tangent * tangent);
-        MEMF(0x264E8C) = tangent;
-        MEMF(0x264E84) = -tangent;
-        MEMF(0x264E80) = secant;
-        MEMF(0x264E88) = secant;
+        MEMF(JSRF_FRUSTUM_HTAN_POS) = tangent;
+        MEMF(JSRF_FRUSTUM_HTAN_NEG) = -tangent;
+        MEMF(JSRF_FRUSTUM_HSECANT_A) = secant;
+        MEMF(JSRF_FRUSTUM_HSECANT_B) = secant;
     }
 }

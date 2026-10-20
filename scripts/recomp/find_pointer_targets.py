@@ -57,9 +57,11 @@ def main():
     parser.add_argument("--write", action="store_true")
     args = parser.parse_args()
 
-    problem = check_xbe(args.xbe)
+    # The seeds are kept as US addresses and shared by the other builds
+    # (variant_fingerprints.py), so they are found on the US build only.
+    problem = check_xbe(args.xbe, "jsrf_us")
     if problem:
-        print(f"error: {problem}", file=sys.stderr)
+        print(f"error: {problem}; the seed file is kept against the USA build", file=sys.stderr)
         return 2
     image = pathlib.Path(args.xbe).read_bytes()
     if not DISPATCH.exists():

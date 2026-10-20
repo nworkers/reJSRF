@@ -62,3 +62,18 @@ jobs:
           & .\build\win32_x86\src\app\${{ matrix.configuration }}\rejsrf.exe docs
           if ($LASTEXITCODE -ne 1) { throw "directory: expected exit code 1, got $LASTEXITCODE" }
           exit 0
+
+      # The Japanese-disc variant (docs/design/20261020-i108-japanese-variant.md):
+      # its own tree, so the REJSRF_VARIANT_JP branches compile. Release only.
+      - name: Build - Japanese variant (app)
+        if: matrix.configuration == 'Release'
+        shell: powershell
+        run: .\scripts\build_win32_x86.ps1 -Configuration Release -Variant jp -Target rejsrf
+
+      - name: Smoke - Japanese variant rejects a directory without an XBE
+        if: matrix.configuration == 'Release'
+        shell: powershell
+        run: |
+          & .\build\win32_x86_jp\src\app\Release\rejsrf.exe docs
+          if ($LASTEXITCODE -ne 1) { throw "directory: expected exit code 1, got $LASTEXITCODE" }
+          exit 0

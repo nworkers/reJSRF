@@ -4,6 +4,7 @@ rem (the policy blocks .ps1 files by default). Arguments pass through:
 rem   scripts\build_win32_x86.bat                      Debug
 rem   scripts\build_win32_x86.bat Release              Release
 rem   scripts\build_win32_x86.bat -Configuration Release -Target rejsrf
+rem   scripts\build_win32_x86.bat Release -Variant jp  Release for the Japanese disc
 setlocal
 set "ARGS=%*"
 if "%~1"=="" set "ARGS=-Configuration Debug"

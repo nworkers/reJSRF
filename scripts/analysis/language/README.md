@@ -10,6 +10,7 @@ US판과 일본판 XBE의 언어 처리를 비교할 때 쓴 스크립트다. �
 | `code_diff.py` | 실행 섹션을 디스어셈블해 주소 이동을 정규화한 구조 비교, 주소 대응표. **10분 넘게 걸린다** | `python -I scripts/analysis/language/code_diff.py <us.xbe> <jp.xbe> > diff.txt` |
 | `data_diff.py` | `.data`·`.rdata`를 dword 열로 읽어 포인터를 정규화한 뒤 비교. 언어별 초기값을 찾는다. **`.data`는 7분쯤 걸린다** | `python -I scripts/analysis/language/data_diff.py <us.xbe> <jp.xbe> .data .rdata` |
 | `lang_reads.py` | US판에서 언어 인덱스를 읽는 191곳과 읽은 값을 쓰는 방식(표 인덱스, 비교, 객체에 저장) 분류. `gen/jsrf_us/disasm`이 있어야 한다 | `python -I scripts/analysis/language/lang_reads.py` |
+| `variant_addresses.py` | 손으로 적은 미국판 함수 주소(seed, 추가 심볼, 디컴파일 함수)가 일본판에서 어디 있는지, 디컴파일이 쓰는 자료 주소의 일본판 값(issue #108). 몇 초 | `python -I scripts/analysis/language/variant_addresses.py <us.xbe> <jp.xbe>` |
 
 `<us.xbe>`는 `roms/Jet Set Radio Future/default_eng.xbe`(=`default.xbe`), `<jp.xbe>`는 `default_jpn.xbe`다.
 
@@ -27,5 +28,6 @@ Scripts used to compare how the US and Japanese XBEs handle language. They only 
 | `code_diff.py` | Structural diff of the executable sections with relocated addresses normalized, plus the address map. **Takes over ten minutes** | `python -I scripts/analysis/language/code_diff.py <us.xbe> <jp.xbe> > diff.txt` |
 | `data_diff.py` | Compares `.data` and `.rdata` as dword streams with pointers normalized, to find per-language initial values. **`.data` takes about seven minutes** | `python -I scripts/analysis/language/data_diff.py <us.xbe> <jp.xbe> .data .rdata` |
 | `lang_reads.py` | Classifies the US build's 191 reads of the language index by what the value is used for (table index, compare, stored in an object); needs `gen/jsrf_us/disasm` | `python -I scripts/analysis/language/lang_reads.py` |
+| `variant_addresses.py` | Where the hand-written US function addresses (seeds, extra symbols, decompiled functions) sit in the Japanese build, and the Japanese values of the data addresses the decompiled sources use (issue #108). A few seconds | `python -I scripts/analysis/language/variant_addresses.py <us.xbe> <jp.xbe>` |
 
 `<us.xbe>` is `roms/Jet Set Radio Future/default_eng.xbe` (= `default.xbe`), `<jp.xbe>` is `default_jpn.xbe`.

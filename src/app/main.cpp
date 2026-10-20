@@ -72,6 +72,8 @@ std::string BuildIdentity()
 #else
     identity += " " + (config.empty() ? std::string("Debug") : config);
 #endif
+    // The XBE build it runs (CMake REJSRF_VARIANT).
+    identity += std::string(", ") + rejsrf::BuiltVariant()->tag;
     return identity;
 }
 
@@ -352,12 +354,15 @@ int main(int argc, char** argv)
         std::printf("this build has no recompiled code (run scripts/recomp/regenerate.py); stopping after load\n");
         return 0;
     }
-    if (variant != rejsrf::PrimaryVariant())
+    if (variant != rejsrf::BuiltVariant())
     {
-        std::printf("recompiled code was lifted from the %s build; not running %s "
-                    "(load the %s XBE with --xbe <file>)\n",
-                    rejsrf::PrimaryVariant()->label, variant->label, rejsrf::PrimaryVariant()->label);
-        return 0;
+        // One executable runs one build: the other disc needs its own build
+        // (docs/design/20261020-i108-japanese-variant.md).
+        std::fprintf(stderr,
+                     "error: %s is the %s build, but this executable is built for the %s build; "
+                     "build reJSRF with -DREJSRF_VARIANT=%s to run it\n",
+                     options.xbe.c_str(), variant->label, rejsrf::BuiltVariant()->label, variant->id);
+        return 1;
     }
 
     if (!rexbox::recomp::Attach(memory, registry, *image, &error))
