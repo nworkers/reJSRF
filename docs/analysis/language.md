@@ -103,9 +103,17 @@ US판의 `mov ecx, 0x1FC724` 191곳을 모두 분류했다(81개 함수). 189곳
 * 유럽 세 언어는 `SprNormN`을 `Z:`(유틸리티 파티션)에 복사해 두고 쓴다(`Z:` 열기 실패 → `D:`에서 읽기 → `Z:\...~`에 쓰고 이름 바꾸기). 영어·일본어 파일은 이전 실행에서 이미 복사되어 있었다. 게임 자체의 캐시 동작이며 모두 성공했다.
 * 음성 효과음 `se_ppl_*`는 영어(`se_pple`)와 일본어(`se_ppl_j`)만 따로 연다. 유럽 세 언어는 영어 효과음을 쓰는 것으로 보인다(**추정**).
 
+### 8.1 XBE 안의 유럽 언어 텍스트 (확인됨, US판 `0x1CA437`~`0x1CF000`)
+
+* 그래피티 편집기·저장·불러오기 화면의 텍스트는 이탈리아어, 스페인어, 독일어, 프랑스어, 영어 순으로 언어마다 따로 번역되어 있다(예: "Modifica graffito", "Editar Graffiti", "Graffiti editieren", "Editer le graf", "Graffiti Edit"; 메모리 블록 부족·덮어쓰기 안내문 포함).
+* 멀티플레이 메뉴(모드 이름, 인원, 패드 연결 안내)는 번역되지 않은 자리표시자다: 영어 문장 뒤에 `(Fr)`, `(Gr)`, `(Esp)`를 붙였다(예: "Flag(Fr)", "Battle mode(Gr)", "Plactice mode(Esp)"). 이탈리아어 자리표시자는 없다. 외부 자료([TCRF](https://tcrf.net/Jet_Set_Radio_Future), 검색 요약으로만 확인)도 실행 파일에 미완성 현지화의 자리표시자 텍스트가 있다고 적는다(**추정**, 페이지 본문은 봇 차단으로 직접 읽지 못했다).
+* 따라서 유럽 세 언어는 자산(로고, 타이틀, 엔딩, 마크 목록)이 영어와 같거나 셋이 공유하지만, 게임 안의 그래피티 편집기 등 XBE 텍스트에서는 그 언어로 나올 것으로 보인다(**추정**, 화면은 입력이 필요해 아직 보지 않았다).
+* 이탈리아어 텍스트도 있으므로 `sub_00134320`의 여섯째 갈래(인덱스 5)는 이탈리아어일 가능성이 높다(**추정**). 디스크에는 이탈리아어 자산 파일(`tex_Ita` 등)이 없다.
+
 ## 9. 미확정
 
-* 로고·경고문·타이틀 너머(메뉴, 게임 중 자막·음성)도 일본판과 같은지, 유럽 세 언어의 메뉴·자막이 그 언어로 나오는지. 입력이 필요해 아직 보지 않았다.
+* 로고·경고문·타이틀 너머(메뉴, 게임 중 자막·음성)도 일본판과 같은지, 유럽 세 언어의 그래피티 편집기·멀티플레이 메뉴가 §8.1처럼 나오는지. 입력이 필요해 아직 보지 않았다.
+* 인덱스 5가 이탈리아어인지, 자산 파일 없이 동작하는지.
 * `TitleF/G/S.dat`와 `TitleE.dat`의 차이가 화면 어디에 나오는지(처음 55초 프레임에는 보이지 않는다).
 * `[obj+0x74C]`와 `[obj+0xB0]`을 가진 객체가 무엇인지.
 
@@ -207,8 +215,16 @@ Each language was run for 55 s through `REJSRF_LANGUAGE` (hidden window, the sam
 * The European languages copy `SprNormN` to `Z:` (the utility partition) and use the copy (`Z:` open fails → read from `D:` → write `Z:\...~` and rename). English's and Japanese's files had been copied by earlier runs. It is the game's own caching, and every step succeeded.
 * The voice effect `se_ppl_*` is opened per language only for English (`se_pple`) and Japanese (`se_ppl_j`); the European languages seem to use the English one (**inferred**).
 
+### 8.1 European-language text inside the XBE (confirmed, US build `0x1CA437`-`0x1CF000`)
+
+* The graffiti editor, save and load screens are translated per language, in the order Italian, Spanish, German, French, English (for example "Modifica graffito", "Editar Graffiti", "Graffiti editieren", "Editer le graf", "Graffiti Edit"; including the not-enough-blocks and overwrite messages).
+* The multiplayer menus (mode names, player counts, pad-connection prompts) are untranslated placeholders: the English text with `(Fr)`, `(Gr)` or `(Esp)` appended ("Flag(Fr)", "Battle mode(Gr)", "Plactice mode(Esp)"). There is no Italian placeholder. An outside source ([TCRF](https://tcrf.net/Jet_Set_Radio_Future), seen only through a search summary) also says the executable carries placeholder text from an unfinished localization (**inferred**; the page itself could not be read past its bot check).
+* So the three European languages share or reuse English's assets (logos, title, ending, mark lists), but in-game XBE text such as the graffiti editor should appear in their language (**inferred**; the screens need input and have not been looked at).
+* With Italian text present, the sixth branch of `sub_00134320` (index 5) is likely Italian (**inferred**). The disc has no Italian asset files (`tex_Ita` and the like).
+
 ## 9. Unresolved
 
-* Whether everything past the logos, warning and title (menus, in-game subtitles and voice) matches the Japanese build, and whether the European languages' menus and subtitles come out in their language; it needs input and has not been looked at yet.
+* Whether everything past the logos, warning and title (menus, in-game subtitles and voice) matches the Japanese build, and whether the European languages' graffiti editor and multiplayer menus come out as §8.1 says; it needs input and has not been looked at yet.
+* Whether index 5 is Italian, and whether it runs without asset files.
 * Where on screen `TitleF/G/S.dat` differs from `TitleE.dat` (nothing in the first 55 s of frames shows it).
 * What the objects holding `[obj+0x74C]` and `[obj+0xB0]` are.
