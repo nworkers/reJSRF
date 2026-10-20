@@ -40,7 +40,7 @@ issue [#104](https://github.com/nworkers/reJSRF/issues/104)의 분석 결과다.
 * **확인됨**: US판에서 `0x1FC724`를 담은 dword 191개는 모두 `mov ecx, imm32`다. 이 주소에 직접 쓰는 명령은 없다.
 * **확인됨**: `REXBOX_WATCH32=1FC724`로 12초 실행했을 때 바뀐 것은 로드 시의 0→1 한 번(첫 HLE 진입에서 본 초기값)뿐이다.
 * **추정**: 게임은 대시보드 언어(`XC_LANGUAGE`, `XGetLanguage`)를 쓰지 않는다. 커널 HLE의 `XC_LANGUAGE` 답(영어 1)은 이 값과 무관해 보인다. 조회 여부는 아직 추적하지 않았다.
-* **추정**: 따라서 US판에서 로드 직후 `0x1FC724`를 0으로 바꾸면 일본어로 동작할 수 있다. 시험은 아직 안 했다.
+* **확인됨**: US판에서 로드 직후·진입 전에 `0x1FC724`를 0으로 쓰면 일본어로 동작한다(50초 실행). 파일 열기 168개 중 6개가 일본어 자산으로 바뀌었다: `Title\LogoJ.dat`(영어 `LogoE`), `Title\Title.dat/.bin`(`TitleE`), `Sounds\SE\se_ppl_j.dat`(`se_pple`), `Disp\SprNorm.bin/.dat`(`SprNorm1`). SEGA 로고, 낙서 경고문, 타이틀 로고가 일본판으로 나왔고 진단 출력에 새 경고·오류는 없었다.
 
 ## 5. 코드 차이 (확인됨, `code_diff.py`)
 
@@ -53,16 +53,44 @@ issue [#104](https://github.com/nworkers/reJSRF/issues/104)의 분석 결과다.
 | `.rdata` | 다른 블록 8개(자료) |
 | `.data` | 다른 블록 369개. 자료를 명령으로 읽은 비교라 의미가 없고, dword 단위 비교가 따로 필요하다 |
 
-* **US에만 있는 함수 `0x694A0`**: `mov eax,[esp+4]; cmp eax,0x5E; jae; mov ecx,[ecx]; fld [ecx+eax*4]; ret 4`(0x5E칸 float 표의 getter). 일본판은 그 자리가 nop이다.
+* **함수 `0x694A0`는 배치만 다르다**(확인됨): `mov eax,[esp+4]; cmp eax,0x5E; jae; mov ecx,[ecx]; fld [ecx+eax*4]; ret 4`(0x5E칸 float 표의 getter). 처음에는 US 전용으로 보았으나, 일본판은 같은 함수를 `0x69690`에 두고, 두 빌드 모두 호출하는 `call`이 91곳으로 같다(같은 자리에서 같은 표 객체, US `0x251F5C` / 일본판 `0x251F3C`를 넘긴다). 언어와 관계없는 링커 배치 차이다.
 * **옮겨진 함수**: US `0xD4440`의 함수가 일본판에서는 `0xD4321` 근처로 옮겨졌다(그 부근 주소 대응이 `+0x30`). 내용은 같아 보인다.
 * 주소 대응: `.data`는 대부분 `-0x20`·`-0x18`·`-0x8`만큼, 언어 전역만 `+0x55834`(bss로 옮겨짐) 이동했다.
 
-## 6. 미확정
+## 6. 언어별 초기값은 언어 인덱스 하나다 (확인됨, `data_diff.py`)
 
-* US판에서 언어를 0으로 바꾸면 메뉴·자막·음성이 일본판과 같아지는지(실행으로 확인).
-* `.data`의 차이 중 주소 이동이 아닌 값(언어별 초기값 표 등)이 있는지.
-* US 전용 함수 `0x694A0`를 누가 부르는지, 영어 전용 동작인지.
-* 언어 값을 언제 읽는지(부팅 때 한 번인지, 장면마다인지). 실행 중 바꿀 수 있는지가 여기에 달렸다.
+`.data`와 `.rdata`를 dword 열로 읽고, 이미지 안을 가리키는 값(포인터)은 같은 토큰으로 바꾼 뒤 정렬해 비교했다.
+
+| 섹션 | 결과 |
+|---|---|
+| `.rdata` | 같음 |
+| `.data` | 다른 블록 2개뿐 |
+
+* US `0x1FC720`~`0x1FC727`(0, 1): 언어 인덱스(`0x1FC724` = 1)와 그 앞 0. 일본판은 이 객체가 bss에 있어 `.data`에서 빠졌다.
+* US `0x215384`부터 0 6개: 함수 포인터 표 `0x215364`(8칸, `sub_000A2640`이 `call [eax*4+0x215364]`로 부른다) 뒤의 0 채움이다. 일본판은 같은 자리에 0이 2개뿐이고 바로 다음 자료가 온다. 코드와 자료 어디에서도 이 6개를 가리키지 않으므로 정렬 패딩으로 본다(**추정**).
+* 언어 객체는 두 필드다: `+0` 언어 인덱스, `+4`는 `sub_000149D0`(`mov eax,[ecx+4]`)로 읽고 `0x18AEBF`가 쓰는 필드. `+4`의 초기값은 두 빌드 모두 0이다(US `0x1FC728` `.data`, 일본판 `0x251F5C` bss).
+* 결론: US판과 일본판이 다르게 시작하는 값은 언어 인덱스 하나다.
+
+## 7. 언어 값을 읽는 곳 (확인됨, `lang_reads.py`)
+
+US판의 `mov ecx, 0x1FC724` 191곳을 모두 분류했다(81개 함수). 189곳은 getter `sub_00043700`을 부르고, 2곳은 다른 접근이다(`0x7E703`은 `sub_000149D0`으로 `+4` 필드를 읽고, `0x1289BB`는 뒤의 공통 getter 호출로 점프한다).
+
+| 읽은 값을 쓰는 방식 | 곳 |
+|---|---|
+| 언어별 표의 인덱스(`[eax*4 + 표]`) | 92 |
+| 비교·분기(`cmp`/`test`/switch) | 26 |
+| 몇 명령 뒤에 인덱스·인자로 씀(기타) | 71 |
+| 객체 필드에 저장 | 2 |
+
+* 대부분은 **쓸 때마다 다시 읽는다**. 부팅 때 한 번 읽어 전역에 저장하는 곳은 없다.
+* 객체 필드에 저장해 두는 곳이 세 군데다: `[obj+0x74C]`(`sub_00028BAD`, `sub_00038460`), `[obj+0xB0]`(`sub_0007E6A0`, vtable `0x1CCFB8` 객체의 생성자). 이 객체들은 만들 때의 언어를 계속 쓴다.
+* 언어별 자산(텍스처, 목록 파일)은 장면을 읽을 때 열린다. 이미 읽은 자산은 언어를 바꿔도 그대로다(**추정**).
+* 따라서 실행 중 언어 전환은 안전하지 않다. **진입 전에 쓰고 다음 실행부터 적용**한다.
+
+## 8. 미확정
+
+* 로고·경고문·타이틀 너머(메뉴, 게임 중 자막·음성)도 일본판과 같은지. 입력이 필요해 아직 보지 않았다.
+* `[obj+0x74C]`와 `[obj+0xB0]`을 가진 객체가 무엇인지.
 
 ---
 
@@ -99,7 +127,7 @@ Findings of issue [#104](https://github.com/nworkers/reJSRF/issues/104). The scr
 * **Confirmed**: all 191 dwords in the US build holding `0x1FC724` are `mov ecx, imm32`; no instruction writes the address directly.
 * **Confirmed**: a 12 s run with `REXBOX_WATCH32=1FC724` saw one change only, 0→1 at load (the initial value, seen at the first HLE entry).
 * **Inferred**: the game does not use the dashboard language (`XC_LANGUAGE`, `XGetLanguage`); the kernel HLE's `XC_LANGUAGE` answer (English, 1) looks unrelated. Whether it is queried has not been traced.
-* **Inferred**: so setting `0x1FC724` to 0 right after load could make the US build run in Japanese. Not tried yet.
+* **Confirmed**: writing 0 to `0x1FC724` after load and before the entry makes the US build run in Japanese (a 50 s run). Of 168 file opens, six became Japanese assets: `Title\LogoJ.dat` (English `LogoE`), `Title\Title.dat/.bin` (`TitleE`), `Sounds\SE\se_ppl_j.dat` (`se_pple`), `Disp\SprNorm.bin/.dat` (`SprNorm1`). The SEGA logo, the graffiti warning and the title logo came out as in the Japanese build, and diagnostics showed no new warnings or errors.
 
 ## 5. Code differences (confirmed, `code_diff.py`)
 
@@ -112,13 +140,41 @@ The executable sections were disassembled with image addresses normalized, then 
 | `.rdata` | 8 differing blocks (data) |
 | `.data` | 369 differing blocks; a comparison of data read as instructions, meaningless, so a dword-level comparison is still needed |
 
-* **A function only the US build has, `0x694A0`**: `mov eax,[esp+4]; cmp eax,0x5E; jae; mov ecx,[ecx]; fld [ecx+eax*4]; ret 4` (the getter of a 0x5E-entry float table). The Japanese build has nops there.
+* **Function `0x694A0` is only placed differently** (confirmed): `mov eax,[esp+4]; cmp eax,0x5E; jae; mov ecx,[ecx]; fld [ecx+eax*4]; ret 4` (the getter of a 0x5E-entry float table). It first looked US-only, but the Japanese build has the same function at `0x69690`, and both builds call it from 91 `call`s (the same sites, passing the same table object, US `0x251F5C` / Japanese `0x251F3C`). A linker placement difference, unrelated to language.
 * **A moved function**: US `0xD4440`'s function sits near `0xD4321` in the Japanese build (addresses around it map with `+0x30`); the body looks the same.
 * Address map: `.data` moves mostly by `-0x20`, `-0x18` and `-0x8`; only the language global moves by `+0x55834` (into bss).
 
-## 6. Unresolved
+## 6. The only per-language initial value is the language index (confirmed, `data_diff.py`)
 
-* Whether the US build with the language set to 0 matches the Japanese build in menus, subtitles and voice (to be checked by running).
-* Whether `.data` holds differences other than relocation (per-language initial tables, ...).
-* Who calls the US-only `0x694A0`, and whether it is English-only behaviour.
-* When the language is read (once at boot, or per scene); whether it can change while running depends on it.
+`.data` and `.rdata` were read as dword streams, values pointing into the image (pointers) replaced by one token, then aligned and compared.
+
+| Section | Result |
+|---|---|
+| `.rdata` | identical |
+| `.data` | only 2 differing blocks |
+
+* US `0x1FC720`-`0x1FC727` (0, 1): the language index (`0x1FC724` = 1) and the zero before it. In the Japanese build that object is in bss, so it is missing from `.data`.
+* Six zeros from US `0x215384`: the zero fill after the function-pointer table `0x215364` (8 entries, called by `sub_000A2640` as `call [eax*4+0x215364]`). The Japanese build has only two zeros there before the next data. Nothing in code or data points at those six, so they are taken as alignment padding (**inferred**).
+* The language object has two fields: `+0` the language index, and `+4`, read by `sub_000149D0` (`mov eax,[ecx+4]`) and written at `0x18AEBF`. `+4` starts at 0 in both builds (US `0x1FC728` in `.data`, Japanese `0x251F5C` in bss).
+* Conclusion: the language index is the only value the US and Japanese builds start with differently.
+
+## 7. Where the language is read (confirmed, `lang_reads.py`)
+
+All 191 `mov ecx, 0x1FC724` in the US build were classified (81 functions). 189 call the getter `sub_00043700`; two are other accesses (`0x7E703` reads the `+4` field through `sub_000149D0`, and `0x1289BB` jumps to a shared getter call further on).
+
+| What the read value is used for | Sites |
+|---|---|
+| Index into a per-language table (`[eax*4 + table]`) | 92 |
+| Compare or branch (`cmp`/`test`/switch) | 26 |
+| Index or argument a few instructions later (other) | 71 |
+| Stored into an object field | 2 |
+
+* Most sites **read it again every time they need it**. No site reads it once at boot into a global.
+* Three places keep a copy in an object: `[obj+0x74C]` (`sub_00028BAD`, `sub_00038460`) and `[obj+0xB0]` (`sub_0007E6A0`, the constructor of the object with vtable `0x1CCFB8`). Those objects keep the language they were created with.
+* Per-language assets (textures, list files) are opened when a scene loads; assets already loaded stay as they are when the language changes (**inferred**).
+* So switching while running is not safe. **Write it before the entry, and apply it from the next start.**
+
+## 8. Unresolved
+
+* Whether everything past the logos, warning and title (menus, in-game subtitles and voice) matches the Japanese build; it needs input and has not been looked at yet.
+* What the objects holding `[obj+0x74C]` and `[obj+0xB0]` are.
