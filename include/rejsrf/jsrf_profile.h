@@ -12,6 +12,7 @@
 
 namespace rexbox::runtime
 {
+class GuestMemory;
 class HleRegistry;
 }
 
@@ -46,6 +47,30 @@ const XbeVariant* PrimaryVariant();
 // primary variant only. XDK functions reach the HLE through generated
 // overrides instead. Returns the number of bindings made.
 size_t BindTitleHle(const rexbox::xbe::XbeImage& image, rexbox::runtime::HleRegistry& registry);
+
+// The game's language: the value of the language index each build carries as
+// a constant (US: 1, Japan: 0). The index also has French (2), German (3) and
+// Spanish (4), left out because the disc carries no localization for them
+// beyond a few screens (docs/design/20261020-i104-language-option.md 3.4).
+enum class Language : uint32_t
+{
+    kJapanese = 0,
+    kEnglish = 1,
+};
+
+constexpr uint32_t kLanguageCount = 2;
+
+// "Japanese", "English", ...: the rejsrf.ini value and the menu label.
+const char* LanguageName(Language language);
+
+// Reads a LanguageName, ignoring case. Returns false for anything else.
+bool ParseLanguage(const std::string& text, Language* language);
+
+// Sets the language the game runs in by writing the index into the loaded
+// image; call it after the XBE is loaded and before its entry runs, because
+// some objects keep the value they were created with. Primary variant only;
+// returns false (and writes nothing) for any other build.
+bool ApplyLanguage(const rexbox::xbe::XbeImage& image, rexbox::runtime::GuestMemory& memory, Language language);
 
 using RecompiledFunction = void (*)();
 

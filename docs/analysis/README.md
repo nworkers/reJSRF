@@ -32,6 +32,7 @@ flowchart LR
 * [CRI 미들웨어: ADXM 스레드, SVM 잠금, 단일 코어 우선순위에 기댄 상호 배제](cri-middleware.md)
 * [캐릭터 윤곽선: 윤곽선 정점 셰이더, 색과 두께를 정하는 상수, 데모에서 본 값](outlines.md)
 * [함수 발견: 디스어셈블러가 놓치는 vtable 메서드 모양, 바이트 인덱스 표, 버전별 항목 수](function-discovery.md)
+* [언어: US판·일본판의 언어 인덱스, 언어별 자산, 두 빌드의 코드 차이](language.md)
 
 ---
 
@@ -58,3 +59,4 @@ Labels:
 * [CRI middleware: ADXM threads, the SVM lock, exclusion that relies on single-core priorities](cri-middleware.md)
 * [Character outlines: the outline vertex shaders, the constants that set color and thickness, values seen in the demo](outlines.md)
 * [Function discovery: the vtable-method shapes the disassembler misses, byte index tables, entries per version](function-discovery.md)
+* [Language: the language index of the US and Japanese builds, per-language assets, the code differences between the builds](language.md)
