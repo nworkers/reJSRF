@@ -2,16 +2,6 @@
 	path = third_party/xboxrecomp
 	url = https://github.com/nworkers/xboxrecomp
 	branch = rejsrf
-[submodule "third_party/XbSymbolDatabase"]
-	path = third_party/XbSymbolDatabase
-	url = https://github.com/Cxbx-Reloaded/XbSymbolDatabase
-[submodule "third_party/SDL"]
-	path = third_party/SDL
-	url = https://github.com/libsdl-org/SDL
-	branch = release-3.4.x
-[submodule "third_party/imgui"]
-	path = third_party/imgui
-	url = https://github.com/ocornut/imgui
-[submodule "third_party/smaa"]
-	path = third_party/smaa
-	url = https://github.com/iryoku/smaa
+[submodule "third_party/rexbox"]
+	path = third_party/rexbox
+	url = https://github.com/reexec/rexbox

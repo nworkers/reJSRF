@@ -207,16 +207,18 @@ If the requirement is a simple question or confirmation request, answer it direc
 ## 레이어와 의존 규칙
 
 * 레이어는 아래에서 위로 `platform` → `rexbox`(xbe, runtime, hle) → `game/<title>` → `app` 순서다. 각 레이어는 아래 레이어만 링크한다. CMake 타깃 그래프가 이 규칙을 강제한다.
-* `rexbox`(`include/rexbox/`, `src/rexbox/`)는 타이틀 이름, 타이틀 주소, `rejsrf` 헤더를 쓰지 않는다. 다른 타이틀이 그대로 가져다 쓸 수 있어야 한다.
-* HLE 모듈(`src/rexbox/hle/<module>/`)은 런타임만 링크하고 다른 HLE 모듈을 링크하지 않는다. 모듈 사이에 공유가 필요하면 런타임 계약으로 올린다.
+* `platform`과 `rexbox`는 submodule `third_party/rexbox`([reexec/rexbox](https://github.com/reexec/rexbox), reCT3와 공유)에 있다. 이 저장소에는 `game/<title>`, `app`, 타이틀 도구만 둔다. 런타임·HLE·플랫폼을 고칠 일은 rexbox 저장소에서 그 규칙(rexbox `AGENTS.md`)대로 하고, 이 저장소는 submodule 커밋을 올려 받는다. `third_party/rexbox` 안을 이 저장소에서 직접 고치지 않는다.
+* `rexbox`는 타이틀 이름, 타이틀 주소, `rejsrf` 헤더를 쓰지 않는다. 다른 타이틀이 그대로 가져다 쓸 수 있어야 한다. 타이틀이 런타임에 알려야 하는 것은 rexbox의 소비자 계약(rexbox `ARCHITECTURE.md` §2)으로 전한다.
+* HLE 모듈은 런타임만 링크하고 다른 HLE 모듈을 링크하지 않는다(rexbox 규칙).
 * 타이틀 코드(재컴파일·디컴파일 코드)는 HLE 모듈을 직접 부르지 않는다. HLE는 `HleRegistry`의 바인딩(게스트 주소 → HLE export)을 통해서만 연결된다.
 * 플랫폼 계층은 런타임과 타이틀의 타입을 알지 못한다. 기본 값(주소, 크기, 버퍼, 콜백)으로만 호출된다.
 
 ## Layer and Dependency Rules
 
 * Layers run bottom to top: `platform` → `rexbox` (xbe, runtime, hle) → `game/<title>` → `app`. Each layer links only the layers below it; the CMake target graph enforces this.
-* `rexbox` (`include/rexbox/`, `src/rexbox/`) never names a title, a title's addresses, or `rejsrf` headers. Another title must be able to take it as is.
-* An HLE module (`src/rexbox/hle/<module>/`) links the runtime only, never another HLE module. Anything modules must share moves up into a runtime contract.
+* `platform` and `rexbox` live in the submodule `third_party/rexbox` ([reexec/rexbox](https://github.com/reexec/rexbox), shared with reCT3). This repository holds only `game/<title>`, `app` and the title tools. Changes to the runtime, HLE or platform layer are made in the rexbox repository under its rules (rexbox's `AGENTS.md`), and this repository takes them by moving the submodule commit; never edit inside `third_party/rexbox` from here.
+* `rexbox` never names a title, a title's addresses, or `rejsrf` headers. Another title must be able to take it as is. What a title must tell the runtime goes through rexbox's consumer contract (rexbox `ARCHITECTURE.md` §2).
+* An HLE module links the runtime only, never another HLE module (a rexbox rule).
 * Title code (recompiled and decompiled) never calls an HLE module directly. HLE is reached only through `HleRegistry` bindings (guest address → HLE export).
 * The platform layer knows none of the runtime's or the title's types. It is called with plain values (addresses, sizes, buffers, callbacks).
 
@@ -224,8 +226,7 @@ If the requirement is a simple question or confirmation request, answer it direc
 
 ## 구현 규칙
 
-* 플랫폼(OS) 종속 코드는 `src/platform/win32/`, `src/platform/linux/`, `src/platform/web/`, `src/platform/android/` 아래에 둔다. 여러 OS가 공유하는 호스트 라이브러리 백엔드(예: SDL3)는 `src/platform/<라이브러리>/`(예: `src/platform/sdl/`)에 두고, 각 OS가 `src/platform/CMakeLists.txt`의 소스 목록에서 선택한다. 런타임·HLE·타이틀·도구 디렉터리에는 플랫폼·아키텍처 하위 디렉터리를 두지 않는다.
-* 한 플랫폼 안에서 CPU 아키텍처에 따라 갈리는 코드는 그 플랫폼 디렉터리의 아키텍처 하위 디렉터리(예: `src/platform/linux/x86/`, `src/platform/linux/x64/`)에 둔다. 공개 헤더도 같은 규칙으로 `include/rexbox/platform/<플랫폼>/`에 두고, 모든 호스트가 쓰는 플랫폼 중립 계약만 `include/rexbox/platform/`에 둔다.
+* 플랫폼(OS)·CPU 아키텍처 종속 코드는 rexbox의 플랫폼 계층(`third_party/rexbox/src/platform/<플랫폼>/[<아키텍처>/]`)에 둔다. 타이틀·앱·도구 디렉터리에는 플랫폼·아키텍처 하위 디렉터리를 두지 않는다.
 * 게스트 주소는 항상 32비트 `GuestAddress`이며 호스트 포인터로 바꿀 때는 `GuestMemory::Translate`를 거친다(based 주소 모델). 32비트 호스트에서도 게스트 주소를 호스트 포인터로 직접 쓰지 않는다.
 * 새 기능을 추가할 때는 테스트 전략 또는 최소 검증 절차를 문서에 함께 남긴다.
 * 코드 수정이 있는 작업은 영향 범위에 맞는 빌드 검증을 수행하고, 불가능하면 이유를 작업 로그에 남긴다.
@@ -235,8 +236,7 @@ If the requirement is a simple question or confirmation request, answer it direc
 
 ## Implementation Rules
 
-* Put platform (OS) specific code under `src/platform/win32/`, `src/platform/linux/`, `src/platform/web/`, or `src/platform/android/`. A backend on a host library several OSes share (for example SDL3) goes in `src/platform/<library>/` (for example `src/platform/sdl/`), and each OS selects it in the source list of `src/platform/CMakeLists.txt`. The runtime, HLE, title and tool directories have no platform or architecture subdirectories.
-* Within one platform, put code that differs by CPU architecture in an architecture subdirectory of that platform (for example `src/platform/linux/x86/` and `src/platform/linux/x64/`). Public headers follow the same rule under `include/rexbox/platform/<platform>/`; only platform-neutral contracts every host uses stay in `include/rexbox/platform/`.
+* Platform (OS) and CPU-architecture specific code belongs in rexbox's platform layer (`third_party/rexbox/src/platform/<platform>/[<arch>/]`). The title, app and tool directories have no platform or architecture subdirectories.
 * A guest address is always a 32-bit `GuestAddress`, turned into a host pointer only through `GuestMemory::Translate` (the based address model). Even on a 32-bit host, guest addresses are not used directly as host pointers.
 * When adding a feature, document the test strategy or minimum verification procedure.
 * For tasks that modify code, run build verification appropriate to the impact. If verification is impossible, record the reason in the work log.
@@ -266,21 +266,21 @@ If the requirement is a simple question or confirmation request, answer it direc
 
 * 프로젝트 라이선스는 `MIT License`다.
 * 서드파티 오픈소스는 MIT, BSD, zlib, ISC, Apache-2.0, Boost 같은 허용적 라이선스만 빌드에 포함한다.
-* GPL, LGPL, AGPL 같은 전염성 라이선스의 코드는 컴파일·링크하지 않고 저장소에 복사하지도 않는다. 루트 `CMakeLists.txt`의 `REJSRF_COPYLEFT_PATHS` 가드가 xboxrecomp의 LGPL 파일을 막는다.
+* GPL, LGPL, AGPL 같은 전염성 라이선스의 코드는 컴파일·링크하지 않고 저장소에 복사하지도 않는다. rexbox의 라이선스 가드(`rexbox_check_license`, `REXBOX_COPYLEFT_PATHS`)가 우리 타깃과 생성 코드에서 xboxrecomp의 LGPL 파일을 막는다.
 * 전염성 라이선스 프로젝트(xemu, Cxbx-Reloaded 등)는 동작을 이해하는 지식 출처로만 참고하고, 코드를 옮기지 않는다.
 * 라이선스가 명시되지 않았거나 LLM 기여를 금지한 프로젝트(예: Codeberg `KeybadeBlox/JSRF-Decompilation`)의 코드는 가져오지 않는다. 공개 문서의 사실은 출처를 달아 참고할 수 있다.
 * 서드파티 코드를 가져오면 같은 작업에서 `THIRD_PARTY_NOTICES.md`를 갱신한다. 예외가 필요하면 먼저 문서화하고 사용자 확인을 받는다.
-* 가져온 서드파티 코드에서 문제(버그, 이식성)를 찾으면 우리 사본만 고치지 않고 업스트림에 기여한다. 특히 같은 호스트 계층을 쓰는 [reexec/re2DJ](https://github.com/reexec/re2DJ)(BSD-3-Clause)는 필요할 때 참고하고, 얻어온 코드의 수정은 re2DJ에 되돌려 보낸다.
+* 가져온 서드파티 코드에서 문제(버그, 이식성)를 찾으면 우리 사본만 고치지 않고 업스트림에 기여한다. rexbox의 문제는 rexbox 저장소에서 고친다. 특히 같은 호스트 계층을 쓰는 [reexec/re2DJ](https://github.com/reexec/re2DJ)(BSD-3-Clause)는 필요할 때 참고하고, 얻어온 코드의 수정은 re2DJ에 되돌려 보낸다.
 
 ## License Rules
 
 * The project license is the `MIT License`.
 * Only permissively licensed third-party code (MIT, BSD, zlib, ISC, Apache-2.0, Boost, ...) is built into the project.
-* Copyleft code (GPL, LGPL, AGPL) is neither compiled, linked, nor copied into the repository. The `REJSRF_COPYLEFT_PATHS` guard in the root `CMakeLists.txt` blocks xboxrecomp's LGPL files.
+* Copyleft code (GPL, LGPL, AGPL) is neither compiled, linked, nor copied into the repository. rexbox's license guard (`rexbox_check_license`, `REXBOX_COPYLEFT_PATHS`) blocks xboxrecomp's LGPL files in our targets and the generated code.
 * Copyleft projects (xemu, Cxbx-Reloaded, ...) are consulted only as sources of knowledge about behavior; their code is not carried over.
 * Do not take code from projects with no stated license or that forbid LLM contributions (for example Codeberg `KeybadeBlox/JSRF-Decompilation`). Facts from their public documents may be used with attribution.
 * When bringing in third-party code, update `THIRD_PARTY_NOTICES.md` in the same task. If an exception is needed, document it and confirm with the user first.
-* When a problem (a bug, a portability issue) is found in third-party code we took, contribute the fix upstream instead of fixing only our copy. In particular, consult [reexec/re2DJ](https://github.com/reexec/re2DJ) (BSD-3-Clause), which shares our host layer, when useful, and send fixes to code taken from it back to re2DJ.
+* When a problem (a bug, a portability issue) is found in third-party code we took, contribute the fix upstream instead of fixing only our copy. Problems in rexbox are fixed in the rexbox repository. In particular, consult [reexec/re2DJ](https://github.com/reexec/re2DJ) (BSD-3-Clause), which shares our host layer, when useful, and send fixes to code taken from it back to re2DJ.
 
 ---
 

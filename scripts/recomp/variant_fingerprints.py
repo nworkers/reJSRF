@@ -30,7 +30,7 @@ import re
 import struct
 import sys
 
-from xbe_variant import identify_xbe
+from jsrf_variant import identify_xbe
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 TITLE_RECOMP_DIR = ROOT / "src" / "game" / "jsrf" / "recomp"

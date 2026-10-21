@@ -15,13 +15,13 @@ Xbox 게임 **Jet Set Radio Future**를 정적 재컴파일과 디컴파일로 W
 ```mermaid
 flowchart TD
     APP["app: rejsrf"] --> GAME["game/jsrf: recompiled + decompiled JSRF code, title profile"]
-    APP --> HLE["rexbox HLE: kernel, xapi, d3d8, dsound, xinput"]
-    GAME --> RT["rexbox runtime: guest memory, XBE loader, HLE registry"]
+    APP --> HLE["third_party/rexbox HLE: kernel, xapi, d3d8, dsound, xinput"]
+    GAME --> RT["third_party/rexbox runtime: guest memory, XBE loader, HLE registry"]
     HLE --> RT
-    RT --> PLAT["platform: win32 / linux / web / android"]
+    RT --> PLAT["third_party/rexbox platform: win32 / linux / web / android"]
 ```
 
-* **rexbox**는 타이틀에 의존하지 않는 재사용 가능한 Xbox 런타임입니다. 다른 Xbox 타이틀에서도 그대로 쓸 수 있도록 JSRF 코드와 분리되어 있습니다.
+* **rexbox**는 타이틀에 의존하지 않는 재사용 가능한 Xbox 런타임입니다. reJSRF 안에서 만들어진 뒤 별도 저장소 [reexec/rexbox](https://github.com/reexec/rexbox)로 분리되었고, reJSRF는 submodule `third_party/rexbox`로 씁니다. [reCT3](https://github.com/reexec/reCT3)(Crazy Taxi 3)도 같은 런타임을 씁니다.
 * **game/jsrf**는 원본 x86 코드를 C로 옮긴 재컴파일 코드(로컬 생성)와, 그것을 함수 단위로 대체하는 디컴파일 코드를 담습니다.
 * 자세한 내용: [ARCHITECTURE.md](ARCHITECTURE.md), [설계 i001](docs/design/20261012-i001-project-bootstrap.md), [프로젝트 헌장](docs/PROJECT_CHARTER.md)
 
@@ -84,7 +84,7 @@ This repository does not and will not contain the game's executable, its assets,
 
 See the diagram above.
 
-* **rexbox** is a reusable, title-agnostic Xbox runtime, kept separate from the JSRF code so other Xbox titles can use it unchanged.
+* **rexbox** is a reusable, title-agnostic Xbox runtime. It was built inside reJSRF and split out into its own repository, [reexec/rexbox](https://github.com/reexec/rexbox), which reJSRF uses as the submodule `third_party/rexbox`; [reCT3](https://github.com/reexec/reCT3) (Crazy Taxi 3) uses the same runtime.
 * **game/jsrf** holds the recompiled code (the original x86 lifted to C, generated locally) and the decompiled code that replaces it function by function.
 * More: [ARCHITECTURE.md](ARCHITECTURE.md), [design i001](docs/design/20261012-i001-project-bootstrap.md), [project charter](docs/PROJECT_CHARTER.md)
 

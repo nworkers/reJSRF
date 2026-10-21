@@ -1,6 +1,6 @@
 # 설계: 공용 런타임 rexbox를 submodule로 쓰기 (issue #102)
 
-상태: **승인됨**(사용자 승인). 작업 지시: [20261022-i102](../work-orders/20261022-i102-rexbox-submodule.md)
+상태: **구현됨**(사용자 승인). 작업 로그: [20261022-i102](../work-logs/20261022-i102-rexbox-submodule.md) · 작업 지시: [20261022-i102](../work-orders/20261022-i102-rexbox-submodule.md)
 
 ## 1. 요구
 
@@ -101,7 +101,7 @@ flowchart TD
 
 # Design: use the shared runtime rexbox as a submodule (issue #102)
 
-Status: **approved** (user approval). Work order: [20261022-i102](../work-orders/20261022-i102-rexbox-submodule.md)
+Status: **implemented** (user approval). Work log: [20261022-i102](../work-logs/20261022-i102-rexbox-submodule.md) · Work order: [20261022-i102](../work-orders/20261022-i102-rexbox-submodule.md)
 
 ## 1. Requirement
 

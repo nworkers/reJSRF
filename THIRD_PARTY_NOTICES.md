@@ -4,18 +4,23 @@ reJSRF는 MIT 라이선스다. 아래 서드파티 코드가 저장소에 포함
 
 reJSRF is MIT licensed. The third-party code below is included in, or ported into, the repository.
 
+## rexbox
+
+* 출처 / Source: https://github.com/reexec/rexbox
+* 라이선스 / License: MIT (Copyright (c) 2026 rexbox contributors (reJSRF contributors)). 전문은 `third_party/rexbox/LICENSE`. / Full text in `third_party/rexbox/LICENSE`.
+* 포함 방식 / How included: git submodule `third_party/rexbox`, v0.0.9 (`b2f2653`). reJSRF에서 이력째 분리된 타이틀 비의존 Xbox 런타임(플랫폼 계층, XBE, 런타임, 재컴파일 ABI 어댑터, HLE, 도구, 재컴파일 파이프라인 스크립트)이다. 아래 SDL3, Dear ImGui, SMAA, XbSymbolDatabase는 rexbox의 submodule(`third_party/rexbox/third_party/`)로 들어온다. rexbox 자체의 서드파티 고지는 `third_party/rexbox/THIRD_PARTY_NOTICES.md`에 있다. / The title-agnostic Xbox runtime split out of reJSRF with its history (platform layer, XBE, runtime, lifter ABI adapter, HLE, tools, recompilation pipeline scripts). SDL3, Dear ImGui, SMAA and XbSymbolDatabase below come in as rexbox's submodules (`third_party/rexbox/third_party/`); rexbox's own notices are in `third_party/rexbox/THIRD_PARTY_NOTICES.md`.
+
 ## xboxrecomp
 
 * 출처 / Source: https://github.com/sp00nznet/xboxrecomp
 * 라이선스 / License: MIT (Copyright (c) 2026 sp00nz). 전문은 `third_party/xboxrecomp/LICENSE`. / Full text in `third_party/xboxrecomp/LICENSE`.
 * 포함 방식 / How included: git submodule `third_party/xboxrecomp`. v0.15.0 (`6376eb8`) 위에 수정을 합친 포크 `nworkers/xboxrecomp` 브랜치 `rejsrf`(`5aae5df`)를 가리킨다. 디스어셈블러 수정 세 커밋(`adc827c`, `4953472`, `3a1afff`: 빈 구간 밖의 증명된 exit로 닫히는 표 항목, 바이트 인덱스 표 거절, 표 측정이 바이트 표 앞에서 멈춤; upstream PR [sp00nznet/xboxrecomp#236](https://github.com/sp00nznet/xboxrecomp/pull/236), i093), 성능 개선 두 개(`44cb039` 함수마다 메모리 기준, fork 브랜치 `perf/mem-base-local`, upstream PR 보류; `56b73d9`·`716547c` XMM 도우미 SSE2 intrinsic, `perf/xmm-intrinsics`, upstream의 칸 단위 C 설계와 달라 우리 fork에만 둠), C4310 수정 `16a4a0d`(`fix/fp-cc-cast`), 그리고 생성기 변경 `5aae5df`(미해결 스텁이 `RECOMP_STUB_REPORT`일 때 `recomp_unresolved_stub_log`로 보고; upstream의 `RECOMP_STUB_HIT` 옆에 두는 fork 전용)다. v0.13.1 기반의 이전 핀은 fork 브랜치 `rejsrf-v0.13`(`1991221`)에 남아 있다. 그때 함께 올린 PR #198, #199는 머지됐고, #200은 v0.14.0이 대신 해결해 닫았다. / Points at the fork `nworkers/xboxrecomp`, branch `rejsrf` (`5aae5df`): v0.15.0 (`6376eb8`) plus three disassembler commits (`adc827c`, `4953472`, `3a1afff`: table entries that close through proven exits outside their gap, byte index tables refused, table measurement stopping before a byte table; upstream PR [sp00nznet/xboxrecomp#236](https://github.com/sp00nznet/xboxrecomp/pull/236), i093), two performance changes (`44cb039` reads the memory base once per function, fork branch `perf/mem-base-local`, upstream PR held; `56b73d9` and `716547c` SSE2 intrinsics for the XMM helpers, `perf/xmm-intrinsics`, fork only because upstream deliberately writes them as lane-wise C), the C4310 fix `16a4a0d` (`fix/fp-cc-cast`), and the generator change `5aae5df` (unresolved stubs report through `recomp_unresolved_stub_log` under `RECOMP_STUB_REPORT`, beside upstream's `RECOMP_STUB_HIT`; fork only). The previous pin on v0.13.1 stays on the fork branch `rejsrf-v0.13` (`1991221`); PRs #198 and #199 from then are merged, and #200 was closed because v0.14.0 covers it.
-* 옮긴 코드 / Ported code:
-  * `src/rexbox/hle/kernel/kernel_exports.cpp` — `tools/xbe_parser/xbe_parser.py`의 `KERNEL_EXPORTS` 표 / the `KERNEL_EXPORTS` table of `tools/xbe_parser/xbe_parser.py`.
+* 옮긴 코드 / Ported code: rexbox의 `src/hle/kernel/kernel_exports.cpp`(`KERNEL_EXPORTS` 표, rexbox 고지 참고) / rexbox's `src/hle/kernel/kernel_exports.cpp` (the `KERNEL_EXPORTS` table; see rexbox's notices).
 * 빌드에 쓰는 파일 / Files used by the build (MIT, submodule에서 직접 / straight from the submodule):
   * `templates/runtime/recomp_types.h` — 생성 코드 ABI 헤더, `rexbox_recomp`와 생성 코드가 include / the generated-code ABI header, included by `rexbox_recomp` and the generated code.
   * `src/kernel/recomp_icall_feedback.h` — 생성 코드의 include 경로 / on the generated code's include path.
-  * `tools/` — 재컴파일 파이프라인(Python), `scripts/recomp/regenerate.py`가 실행 / the recompilation pipeline (Python), run by `scripts/recomp/regenerate.py`.
-* 제외 / Excluded: xemu에서 가져온 LGPL-2.1-or-later 파일(`src/apu/*`, `src/nv2a/nv2a_core.c`, `src/nv2a/nv2a_regs.h`, `src/nv2a/nv2a_state.h`)과 그것을 include하는 `include/xbox/xboxrecomp.h`는 컴파일·링크하지 않는다. 루트 `CMakeLists.txt`의 `REJSRF_COPYLEFT_PATHS`가 이를 강제한다. / The LGPL-2.1-or-later files taken from xemu (`src/apu/*`, `src/nv2a/nv2a_core.c`, `src/nv2a/nv2a_regs.h`, `src/nv2a/nv2a_state.h`) and `include/xbox/xboxrecomp.h`, which includes them, are never compiled or linked; `REJSRF_COPYLEFT_PATHS` in the root `CMakeLists.txt` enforces this.
+  * `tools/` — 재컴파일 파이프라인(Python), rexbox의 `scripts/recomp/regenerate.py`가 실행(reJSRF의 wrapper가 이 체크아웃을 넘긴다) / the recompilation pipeline (Python), run by rexbox's `scripts/recomp/regenerate.py` (reJSRF's wrapper passes this checkout).
+* 제외 / Excluded: xemu에서 가져온 LGPL-2.1-or-later 파일(`src/apu/*`, `src/nv2a/nv2a_core.c`, `src/nv2a/nv2a_regs.h`, `src/nv2a/nv2a_state.h`)과 그것을 include하는 `include/xbox/xboxrecomp.h`는 컴파일·링크하지 않는다. rexbox의 `rexbox_check_license`(`REXBOX_COPYLEFT_PATHS`, 경로는 `REXBOX_XBOXRECOMP_DIR` 기준)가 이를 강제한다. / The LGPL-2.1-or-later files taken from xemu (`src/apu/*`, `src/nv2a/nv2a_core.c`, `src/nv2a/nv2a_regs.h`, `src/nv2a/nv2a_state.h`) and `include/xbox/xboxrecomp.h`, which includes them, are never compiled or linked; rexbox's `rexbox_check_license` (`REXBOX_COPYLEFT_PATHS`, relative to `REXBOX_XBOXRECOMP_DIR`) enforces this.
 
 ```text
 MIT License
@@ -44,14 +49,14 @@ SOFTWARE.
 ## XbSymbolDatabase
 
 * 출처 / Source: https://github.com/Cxbx-Reloaded/XbSymbolDatabase
-* 라이선스 / License: MIT (Copyright (c) 2023 The XbSymbolDatabase authors). 전문은 `third_party/XbSymbolDatabase/LICENSE`. / Full text in `third_party/XbSymbolDatabase/LICENSE`.
-* 포함 방식 / How included: git submodule `third_party/XbSymbolDatabase` (`20eced544726f5558c5a408458f38a086cc4e543`). 라이브러리 `libXbSymbolDatabase`만 빌드해 도구 `rexbox_xdk_symbols`에 링크한다. 게임 실행 파일에는 들어가지 않는다. / Only the `libXbSymbolDatabase` library is built, linked into the `rexbox_xdk_symbols` tool; it does not enter the game executable.
+* 라이선스 / License: MIT (Copyright (c) 2023 The XbSymbolDatabase authors). 전문은 `third_party/rexbox/third_party/XbSymbolDatabase/LICENSE`. / Full text in `third_party/rexbox/third_party/XbSymbolDatabase/LICENSE`.
+* 포함 방식 / How included: rexbox의 git submodule / rexbox's git submodule `third_party/XbSymbolDatabase` (`20eced544726f5558c5a408458f38a086cc4e543`). 라이브러리 `libXbSymbolDatabase`만 빌드해 도구 `rexbox_xdk_symbols`에 링크한다. 게임 실행 파일에는 들어가지 않는다. / Only the `libXbSymbolDatabase` library is built, linked into the `rexbox_xdk_symbols` tool; it does not enter the game executable.
 
 ## SDL3
 
 * 출처 / Source: https://github.com/libsdl-org/SDL
-* 라이선스 / License: zlib (Copyright (C) 1997-2026 Sam Lantinga). 전문은 `third_party/SDL/LICENSE.txt`. / Full text in `third_party/SDL/LICENSE.txt`.
-* 포함 방식 / How included: git submodule `third_party/SDL`, `release-3.4.18`. 정적 라이브러리 `SDL3-static`만 빌드해 `rexbox_platform`에 링크한다(표시·입력·오디오 계약의 백엔드 `src/platform/sdl/`). 카메라, GPU, 2D 렌더러, 햅틱, 센서, 대화상자, 트레이 하위 시스템과 테스트·예제·설치는 끈다. / Only the static library `SDL3-static` is built and linked into `rexbox_platform` (the backend of the display, input and audio contracts, `src/platform/sdl/`); the camera, GPU, 2D renderer, haptic, sensor, dialog and tray subsystems, tests, examples and installation are off.
+* 라이선스 / License: zlib (Copyright (C) 1997-2026 Sam Lantinga). 전문은 `third_party/rexbox/third_party/SDL/LICENSE.txt`. / Full text in `third_party/rexbox/third_party/SDL/LICENSE.txt`.
+* 포함 방식 / How included: rexbox의 git submodule / rexbox's git submodule `third_party/SDL`, `release-3.4.18`. 정적 라이브러리 `SDL3-static`만 빌드해 `rexbox_platform`에 링크한다(표시·입력·오디오 계약의 백엔드 `src/platform/sdl/`). 카메라, GPU, 2D 렌더러, 햅틱, 센서, 대화상자, 트레이 하위 시스템과 테스트·예제·설치는 끈다. / Only the static library `SDL3-static` is built and linked into `rexbox_platform` (the backend of the display, input and audio contracts, `src/platform/sdl/`); the camera, GPU, 2D renderer, haptic, sensor, dialog and tray subsystems, tests, examples and installation are off.
 
 ```text
 This software is provided 'as-is', without any express or implied
@@ -74,8 +79,8 @@ freely, subject to the following restrictions:
 ## Dear ImGui
 
 * 출처 / Source: https://github.com/ocornut/imgui
-* 라이선스 / License: MIT (Copyright (c) 2014-2026 Omar Cornut). 전문은 `third_party/imgui/LICENSE.txt`. / Full text in `third_party/imgui/LICENSE.txt`.
-* 포함 방식 / How included: git submodule `third_party/imgui`, `v1.93.0` (`c1aaac65e`). 코어(`imgui.cpp`, `imgui_draw.cpp`, `imgui_tables.cpp`, `imgui_widgets.cpp`)는 정적 라이브러리 `imgui`로 빌드해 앱(설정 메뉴)과 `rexbox_platform`에 링크한다. SDL3·OpenGL3 백엔드(`backends/imgui_impl_sdl3.cpp`, `backends/imgui_impl_opengl3.cpp`)는 `rexbox_platform` 안에서 컴파일한다. / The core (`imgui.cpp`, `imgui_draw.cpp`, `imgui_tables.cpp`, `imgui_widgets.cpp`) is built as the static library `imgui`, linked into the app (the settings menu) and `rexbox_platform`; the SDL3 and OpenGL3 backends (`backends/imgui_impl_sdl3.cpp`, `backends/imgui_impl_opengl3.cpp`) compile inside `rexbox_platform`.
+* 라이선스 / License: MIT (Copyright (c) 2014-2026 Omar Cornut). 전문은 `third_party/rexbox/third_party/imgui/LICENSE.txt`. / Full text in `third_party/rexbox/third_party/imgui/LICENSE.txt`.
+* 포함 방식 / How included: rexbox의 git submodule / rexbox's git submodule `third_party/imgui`, `v1.93.0` (`c1aaac65e`). 코어(`imgui.cpp`, `imgui_draw.cpp`, `imgui_tables.cpp`, `imgui_widgets.cpp`)는 정적 라이브러리 `imgui`로 빌드해 앱(설정 메뉴)과 `rexbox_platform`에 링크한다. SDL3·OpenGL3 백엔드(`backends/imgui_impl_sdl3.cpp`, `backends/imgui_impl_opengl3.cpp`)는 `rexbox_platform` 안에서 컴파일한다. / The core (`imgui.cpp`, `imgui_draw.cpp`, `imgui_tables.cpp`, `imgui_widgets.cpp`) is built as the static library `imgui`, linked into the app (the settings menu) and `rexbox_platform`; the SDL3 and OpenGL3 backends (`backends/imgui_impl_sdl3.cpp`, `backends/imgui_impl_opengl3.cpp`) compile inside `rexbox_platform`.
 
 ```text
 The MIT License (MIT)
@@ -104,8 +109,8 @@ SOFTWARE.
 ## SMAA
 
 * 출처 / Source: https://github.com/iryoku/smaa
-* 라이선스 / License: MIT (Copyright (C) 2013 Jorge Jimenez, Jose I. Echevarria, Belen Masia, Fernando Navarro, Diego Gutierrez). 전문은 `third_party/smaa/LICENSE.txt`. / Full text in `third_party/smaa/LICENSE.txt`.
-* 포함 방식 / How included: git submodule `third_party/smaa` (`71c806a`). `SMAA.hlsl`은 빌드 때 바이트 배열로 `rexbox_hle`에 들어가 GLSL 3 셰이더로 컴파일되고, `Textures/AreaTex.h`, `Textures/SearchTex.h`는 `d3d8_smaa.cpp`가 그대로 include한다. / `SMAA.hlsl` is embedded in `rexbox_hle` as bytes at build time and compiled as GLSL 3 shaders; `d3d8_smaa.cpp` includes `Textures/AreaTex.h` and `Textures/SearchTex.h` as they are.
+* 라이선스 / License: MIT (Copyright (C) 2013 Jorge Jimenez, Jose I. Echevarria, Belen Masia, Fernando Navarro, Diego Gutierrez). 전문은 `third_party/rexbox/third_party/smaa/LICENSE.txt`. / Full text in `third_party/rexbox/third_party/smaa/LICENSE.txt`.
+* 포함 방식 / How included: rexbox의 git submodule / rexbox's git submodule `third_party/smaa` (`71c806a`). `SMAA.hlsl`은 빌드 때 바이트 배열로 `rexbox_hle`에 들어가 GLSL 3 셰이더로 컴파일되고, `Textures/AreaTex.h`, `Textures/SearchTex.h`는 `d3d8_smaa.cpp`가 그대로 include한다. / `SMAA.hlsl` is embedded in `rexbox_hle` as bytes at build time and compiled as GLSL 3 shaders; `d3d8_smaa.cpp` includes `Textures/AreaTex.h` and `Textures/SearchTex.h` as they are.
 
 ```text
 Copyright (C) 2013 Jorge Jimenez (jorge@iryoku.com)

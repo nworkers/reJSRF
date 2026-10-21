@@ -21,6 +21,7 @@
 #include "rexbox/platform/display.h"
 #include "rexbox/platform/input.h"
 #include "rexbox/platform/overlay.h"
+#include "rexbox/platform/paths.h"
 #include "rexbox/recomp/recomp_runtime.h"
 #include "rexbox/runtime/environment.h"
 #include "rexbox/runtime/guest_heap.h"
@@ -222,6 +223,9 @@ int main(int argc, char** argv)
     });
 
     std::printf("reJSRF %s\n", REJSRF_VERSION);
+    // The per-user settings folder (rejsrf.ini when the executable's folder is
+    // not writable): the same name the in-tree platform layer used.
+    rexbox::platform::SetApplicationIdentity("reJSRF", "reJSRF");
     // The window adds the renderer and the FPS (rePIU's form).
     rexbox::platform::SetDisplayTitle(std::string("reJSRF v" REJSRF_VERSION " (") + BuildIdentity() +
                                       ") - Build " REJSRF_BUILD_TIME);
