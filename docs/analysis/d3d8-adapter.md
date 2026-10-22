@@ -74,9 +74,9 @@ flowchart TD
 
 ## 4. 디바이스 Caps / Device caps
 
-`D3DDevice_GetDeviceCaps`는 `0x0022E480`(.data)의 53 DWORD(212바이트)를 복사한다. 값은 `src/rexbox/hle/d3d8/d3d8_caps.cpp`의 `kCaps`에 그대로 있다. 눈에 띄는 값: `DeviceType` 1(HAL), `DevCaps` `0x007BBEF0`, `TextureCaps` `0x0007EC87`, `MaxTextureWidth/Height` 4096, `MaxSimultaneousTextures` 4, `MaxStreams` 16, `VertexShaderVersion` `0xFFFF0101`(1.1), `MaxVertexShaderConst` 96, `PixelShaderVersion` `0xFFFF0101`(1.1), `MaxPixelShaderValue` 1.0.
+`D3DDevice_GetDeviceCaps`는 `0x0022E480`(.data)의 53 DWORD(212바이트)를 복사한다. 값은 `third_party/rexbox/src/hle/d3d8/d3d8_caps.cpp`의 `kCaps`에 그대로 있다. 눈에 띄는 값: `DeviceType` 1(HAL), `DevCaps` `0x007BBEF0`, `TextureCaps` `0x0007EC87`, `MaxTextureWidth/Height` 4096, `MaxSimultaneousTextures` 4, `MaxStreams` 16, `VertexShaderVersion` `0xFFFF0101`(1.1), `MaxVertexShaderConst` 96, `PixelShaderVersion` `0xFFFF0101`(1.1), `MaxPixelShaderValue` 1.0.
 
-`D3DDevice_GetDeviceCaps` copies 53 DWORDs (212 bytes) from `0x0022E480` (.data); the values are kept verbatim in `kCaps` of `src/rexbox/hle/d3d8/d3d8_caps.cpp`. Notable: `DeviceType` 1 (HAL), `DevCaps` `0x007BBEF0`, `TextureCaps` `0x0007EC87`, `MaxTextureWidth/Height` 4096, `MaxSimultaneousTextures` 4, `MaxStreams` 16, `VertexShaderVersion` `0xFFFF0101` (1.1), `MaxVertexShaderConst` 96, `PixelShaderVersion` `0xFFFF0101` (1.1), `MaxPixelShaderValue` 1.0.
+`D3DDevice_GetDeviceCaps` copies 53 DWORDs (212 bytes) from `0x0022E480` (.data); the values are kept verbatim in `kCaps` of `third_party/rexbox/src/hle/d3d8/d3d8_caps.cpp`. Notable: `DeviceType` 1 (HAL), `DevCaps` `0x007BBEF0`, `TextureCaps` `0x0007EC87`, `MaxTextureWidth/Height` 4096, `MaxSimultaneousTextures` 4, `MaxStreams` 16, `VertexShaderVersion` `0xFFFF0101` (1.1), `MaxVertexShaderConst` 96, `PixelShaderVersion` `0xFFFF0101` (1.1), `MaxPixelShaderValue` 1.0.
 
 * **확인됨**: 212바이트가 쓰인다(PC `D3DCAPS8` 220바이트와 다름; 뒤 두 필드가 없다고 보인다 — **추정**).
 * **Confirmed**: 212 bytes are written (the PC `D3DCAPS8` is 220; the last two fields appear to be absent — **inferred**).

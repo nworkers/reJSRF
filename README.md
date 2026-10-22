@@ -15,13 +15,13 @@ Xbox 게임 **Jet Set Radio Future**를 정적 재컴파일과 디컴파일로 W
 ```mermaid
 flowchart TD
     APP["app: rejsrf"] --> GAME["game/jsrf: recompiled + decompiled JSRF code, title profile"]
-    APP --> HLE["rexbox HLE: kernel, xapi, d3d8, dsound, xinput"]
-    GAME --> RT["rexbox runtime: guest memory, XBE loader, HLE registry"]
+    APP --> HLE["third_party/rexbox HLE: kernel, xapi, d3d8, dsound, xinput"]
+    GAME --> RT["third_party/rexbox runtime: guest memory, XBE loader, HLE registry"]
     HLE --> RT
-    RT --> PLAT["platform: win32 / linux / web / android"]
+    RT --> PLAT["third_party/rexbox platform: win32 / linux / web / android"]
 ```
 
-* **rexbox**는 타이틀에 의존하지 않는 재사용 가능한 Xbox 런타임입니다. 다른 Xbox 타이틀에서도 그대로 쓸 수 있도록 JSRF 코드와 분리되어 있습니다.
+* **rexbox**는 타이틀에 의존하지 않는 재사용 가능한 Xbox 런타임입니다. reJSRF 안에서 만들어진 뒤 별도 저장소 [reexec/rexbox](https://github.com/reexec/rexbox)로 분리되었고, reJSRF는 submodule `third_party/rexbox`로 씁니다. [reCT3](https://github.com/reexec/reCT3)(Crazy Taxi 3)도 같은 런타임을 씁니다.
 * **game/jsrf**는 원본 x86 코드를 C로 옮긴 재컴파일 코드(로컬 생성)와, 그것을 함수 단위로 대체하는 디컴파일 코드를 담습니다.
 * 자세한 내용: [ARCHITECTURE.md](ARCHITECTURE.md), [설계 i001](docs/design/20261012-i001-project-bootstrap.md), [프로젝트 헌장](docs/PROJECT_CHARTER.md)
 
@@ -30,7 +30,10 @@ flowchart TD
 ```powershell
 git clone --recurse-submodules https://github.com/nworkers/reJSRF.git
 cd reJSRF
-.\scripts\build_win32_x86.ps1          # 실행 정책이 막으면 scripts\build_win32_x86.bat
+# 게임 파일을 roms\Jet Set Radio Future\ 에 두고, 처음 한 번 XDK 식별 도구를 빌드한 뒤 재컴파일 코드를 만든다
+.\scripts\build_win32_x86.ps1 -Configuration Release -Target rexbox_xdk_symbols
+python scripts\recomp\regenerate.py    # default.xbe가 US판이면 gen\jsrf_us, 일본판이면 gen\jsrf_jp
+.\scripts\build_win32_x86.ps1          # US판용. 일본판용은 -Variant jp (build\win32_x86_jp)
 .\build\win32_x86\src\app\Debug\rejsrf.exe "roms\Jet Set Radio Future"
 ```
 
@@ -40,7 +43,7 @@ cd reJSRF
 .\build\win32_x86\src\app\Debug\rejsrf.exe "roms\Jet Set Radio Future" --xbe SegaJSRF.xbe
 ```
 
-앱은 읽은 XBE를 내용(인증서)으로 식별합니다. 재컴파일 코드를 만든 US판이면 실행하고, 지원하는 다른 판이면 읽기만 하고 멈춥니다.
+US판과 일본판을 모두 지원합니다. 실행 파일 하나는 한 판만 실행하며, 어느 판으로 빌드할지는 `-Variant us|jp`(CMake `-DREJSRF_VARIANT=jsrf_us|jsrf_jp`)로 정합니다. 판은 파일 이름이 아니라 내용으로 식별합니다(재생성 스크립트는 MD5, 앱은 인증서). 빌드한 판과 다른 XBE를 주면 어느 판으로 빌드해야 하는지 알리고 멈춥니다. 언어(English / Japanese)는 두 판 모두 설정 메뉴의 Game 탭에서 고릅니다.
 
 자세한 절차: [Win32 개발 환경 준비와 빌드](docs/guides/win32-setup-and-build.md)
 
@@ -84,13 +87,13 @@ This repository does not and will not contain the game's executable, its assets,
 
 See the diagram above.
 
-* **rexbox** is a reusable, title-agnostic Xbox runtime, kept separate from the JSRF code so other Xbox titles can use it unchanged.
+* **rexbox** is a reusable, title-agnostic Xbox runtime. It was built inside reJSRF and split out into its own repository, [reexec/rexbox](https://github.com/reexec/rexbox), which reJSRF uses as the submodule `third_party/rexbox`; [reCT3](https://github.com/reexec/reCT3) (Crazy Taxi 3) uses the same runtime.
 * **game/jsrf** holds the recompiled code (the original x86 lifted to C, generated locally) and the decompiled code that replaces it function by function.
 * More: [ARCHITECTURE.md](ARCHITECTURE.md), [design i001](docs/design/20261012-i001-project-bootstrap.md), [project charter](docs/PROJECT_CHARTER.md)
 
 ## Build (Win32)
 
-See the commands above, and [Win32 development setup and build](docs/guides/win32-setup-and-build.md) for the full procedure. The argument is the **game directory** extracted from the disc. The app serves that folder as the game's `D:` and loads `default.xbe`, an Xbox title's default executable. `--xbe <file>` loads another XBE, for example `--xbe SegaJSRF.xbe` on a disc that carries Sega GT and JSRF together. The app identifies the loaded XBE by content (its certificate): the US build, which the recompiled code comes from, runs; another supported build is loaded and the app stops.
+See the commands above, and [Win32 development setup and build](docs/guides/win32-setup-and-build.md) for the full procedure. The argument is the **game directory** extracted from the disc. The app serves that folder as the game's `D:` and loads `default.xbe`, an Xbox title's default executable. `--xbe <file>` loads another XBE, for example `--xbe SegaJSRF.xbe` on a disc that carries Sega GT and JSRF together. Before the first build, put the game files under `roms\Jet Set Radio Future\`, build the XDK identification tool once (`-Target rexbox_xdk_symbols`) and generate the recompiled code with `python scripts\recomp\regenerate.py`. The US and Japanese builds are both supported: one executable runs one build, chosen with `-Variant us|jp` (CMake `-DREJSRF_VARIANT=jsrf_us|jsrf_jp`; the Japanese build goes to `build\win32_x86_jp`). Builds are told apart by content, never by file name (MD5 in the scripts, the certificate in the app); an XBE of the other build is explained and stopped. Both builds choose English or Japanese in the settings menu's Game tab.
 
 ## Platform status
 

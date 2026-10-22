@@ -1,6 +1,6 @@
 # Xbox 커널 구조와 서비스
 
-커널 HLE(`src/rexbox/hle/kernel/`)가 게스트 메모리에 재현하는 구조와 그 근거를 모은다. "게임 코드로 확인"은 JSRF US 빌드의 디스어셈블이나 실행에서 직접 본 것이고, 나머지는 외부 자료에서 왔다.
+커널 HLE(`third_party/rexbox/src/hle/kernel/`)가 게스트 메모리에 재현하는 구조와 그 근거를 모은다. "게임 코드로 확인"은 JSRF US 빌드의 디스어셈블이나 실행에서 직접 본 것이고, 나머지는 외부 자료에서 왔다.
 
 출처: [xboxdevwiki: Kernel](https://xboxdevwiki.net/Kernel), [xboxdevwiki: Xbox Partitions](https://xboxdevwiki.net/Xbox_Partitions), [nxdk xboxkrnl 헤더](https://github.com/XboxDev/nxdk/tree/master/lib/xboxkrnl), Windows NT 공개 문서(DISPATCHER_HEADER, IO_STATUS_BLOCK 등). xboxrecomp(MIT)의 커널 구현은 동작 비교에 참고했다.
 
@@ -76,7 +76,7 @@ Xbox의 `OBJECT_ATTRIBUTES.ObjectName`과 경로 문자열은 ANSI(`OBJECT_STRIN
 
 # Xbox kernel structures and services
 
-This collects the structures the kernel HLE (`src/rexbox/hle/kernel/`) reproduces in guest memory and where each comes from. "Confirmed in game code" means seen directly in the JSRF US build's disassembly or execution; the rest comes from outside sources.
+This collects the structures the kernel HLE (`third_party/rexbox/src/hle/kernel/`) reproduces in guest memory and where each comes from. "Confirmed in game code" means seen directly in the JSRF US build's disassembly or execution; the rest comes from outside sources.
 
 Sources: [xboxdevwiki: Kernel](https://xboxdevwiki.net/Kernel), [xboxdevwiki: Xbox Partitions](https://xboxdevwiki.net/Xbox_Partitions), [nxdk xboxkrnl headers](https://github.com/XboxDev/nxdk/tree/master/lib/xboxkrnl), public Windows NT documentation (DISPATCHER_HEADER, IO_STATUS_BLOCK, ...). xboxrecomp's (MIT) kernel was consulted for behavior.
 

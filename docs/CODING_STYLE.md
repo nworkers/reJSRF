@@ -108,15 +108,13 @@ The incorrect and correct forms are the two blocks above: braces move to their o
 
 ## 디렉터리 정책
 
-* 플랫폼 공용 계약은 `include/rexbox/platform/`, 구현은 `src/platform/<플랫폼>/`에 둔다. 아키텍처에 따라 갈리는 구현은 `src/platform/<플랫폼>/<아키텍처>/`에 두고, 그 파일은 첫머리에서 `#error`로 자기 아키텍처를 확인한다. 여러 플랫폼이 공유하는 호스트 라이브러리 백엔드는 `src/platform/<라이브러리>/`(예: `src/platform/sdl/`)에 두며, 그 라이브러리의 헤더는 그 디렉터리 밖에서 include하지 않는다.
-* 재사용 런타임은 `include/rexbox/`, `src/rexbox/`에 둔다. 이 아래에는 플랫폼·아키텍처 하위 디렉터리를 두지 않는다.
+* 플랫폼 계층과 재사용 런타임은 submodule `third_party/rexbox`에 있고, 그 디렉터리 정책은 rexbox의 `docs/CODING_STYLE.md`를 따른다. 이 저장소에서 그 안을 고치지 않는다.
 * 타이틀 코드는 `include/rejsrf/`, `src/game/jsrf/`에 둔다.
 * 헤더에서 플랫폼을 고르는 `#if`는 플랫폼 헤더의 선택 지점에만 두며, 그 안에는 `#include`만 둔다.
 
 ## Directory Policy
 
-* Platform-neutral contracts go in `include/rexbox/platform/`, implementations in `src/platform/<platform>/`. Implementations that differ by architecture go in `src/platform/<platform>/<arch>/`, and such files check their own architecture with `#error` at the top. A backend on a host library shared by several platforms goes in `src/platform/<library>/` (for example `src/platform/sdl/`), and that library's headers are never included outside that directory.
-* The reusable runtime goes in `include/rexbox/` and `src/rexbox/`, with no platform or architecture subdirectories.
+* The platform layer and the reusable runtime live in the submodule `third_party/rexbox` and follow its directory policy (rexbox's `docs/CODING_STYLE.md`); they are not edited from this repository.
 * Title code goes in `include/rejsrf/` and `src/game/jsrf/`.
 * A `#if` that chooses a platform in a header exists only at the selection points of platform headers, with nothing but `#include` inside.
 

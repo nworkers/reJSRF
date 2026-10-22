@@ -7,6 +7,8 @@ default_eng.xbe are whatever the person who dumped the disc chose.
 The seeds, title bindings and decompiled functions hold addresses of the US
 build. The Japanese build shares them (docs/analysis/language.md section 10),
 which regenerate.py checks with variant_fingerprints.py before lifting it.
+(rexbox's scripts/recomp/xbe_variant.py checks one named variant; this
+module finds which of JSRF's builds a file is.)
 """
 
 import hashlib
@@ -31,15 +33,3 @@ def identify_xbe(xbe):
     known = ", ".join(f"{entry['label']} {entry['md5']}" for entry in variants.values())
     return None, f"{xbe} (MD5 {actual}) is not a supported Jet Set Radio Future build (known: {known})"
 
-
-def check_xbe(xbe, variant="jsrf_us"):
-    """Returns None when `xbe` is `variant`'s build, otherwise the reason it is not."""
-    variants = known_variants()
-    if variant not in variants:
-        return f"unknown variant {variant} (known: {', '.join(sorted(variants))})"
-    found, detail = identify_xbe(xbe)
-    if found is None:
-        return detail
-    if found != variant:
-        return f"{xbe} is the {detail} build, not {variants[variant]['label']} ({variant})"
-    return None

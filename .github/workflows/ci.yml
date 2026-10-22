@@ -35,8 +35,10 @@ jobs:
       - name: Check out
         uses: actions/checkout@v7
         with:
-          # rexbox_recomp compiles against xboxrecomp's pinned ABI header.
-          submodules: true
+          # The runtime (third_party/rexbox) and its own submodules (SDL, imgui,
+          # smaa, XbSymbolDatabase); rexbox_recomp compiles against
+          # third_party/xboxrecomp's pinned ABI header.
+          submodules: recursive
 
       - name: Build
         shell: powershell
@@ -44,15 +46,15 @@ jobs:
 
       - name: Probe - kernel HLE
         shell: powershell
-        run: .\build\win32_x86\tools\${{ matrix.configuration }}\rexbox_kernel_probe.exe
+        run: .\build\win32_x86\third_party\rexbox\tools\${{ matrix.configuration }}\rexbox_kernel_probe.exe
 
       - name: Probe - DSOUND HLE
         shell: powershell
-        run: .\build\win32_x86\tools\${{ matrix.configuration }}\rexbox_dsound_probe.exe
+        run: .\build\win32_x86\third_party\rexbox\tools\${{ matrix.configuration }}\rexbox_dsound_probe.exe
 
       - name: Probe - D3D8 HLE
         shell: powershell
-        run: .\build\win32_x86\tools\${{ matrix.configuration }}\rexbox_d3d8_probe.exe
+        run: .\build\win32_x86\third_party\rexbox\tools\${{ matrix.configuration }}\rexbox_d3d8_probe.exe
 
       - name: Smoke - app rejects a file and a directory without an XBE
         shell: powershell

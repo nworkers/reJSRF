@@ -13,6 +13,7 @@ add_library(rejsrf_game STATIC
     jsrf_host.c
     ${REJSRF_DECOMP_SOURCES}
 )
+target_include_directories(rejsrf_game PUBLIC "${PROJECT_SOURCE_DIR}/include")  # rejsrf/*.h
 target_link_libraries(rejsrf_game PUBLIC rexbox_recomp)
 # The build variant (root CMakeLists.txt): the profile and the decompiled
 # sources pick its data addresses (include/rejsrf/jsrf_addresses.h).
@@ -20,60 +21,16 @@ if(REJSRF_VARIANT STREQUAL "jsrf_jp")
     target_compile_definitions(rejsrf_game PUBLIC REJSRF_VARIANT_JP=1)
 endif()
 
-if(EXISTS "${REJSRF_RECOMP_GEN_DIR}/recomp_dispatch.c")
-    # The generated code must have been lifted against the same ABI header
-    # rexbox_recomp compiles with; a different xboxrecomp pin means regenerate.
-    file(SHA256 "${REJSRF_RECOMP_GEN_DIR}/recomp_types.h" gen_abi_hash)
-    file(SHA256 "${REJSRF_XBOXRECOMP_DIR}/templates/runtime/recomp_types.h" pinned_abi_hash)
-    if(NOT gen_abi_hash STREQUAL pinned_abi_hash)
-        message(FATAL_ERROR "${REJSRF_RECOMP_GEN_DIR} was generated with a different xboxrecomp; "
-                            "run scripts/recomp/regenerate.py")
-    endif()
-
-    file(GLOB REJSRF_RECOMP_SOURCES CONFIGURE_DEPENDS "${REJSRF_RECOMP_GEN_DIR}/*.c")
-    list(LENGTH REJSRF_RECOMP_SOURCES recomp_count)
-    message(STATUS "reJSRF recompiled code: ${recomp_count} files from ${REJSRF_RECOMP_GEN_DIR}")
-
-    add_library(rejsrf_recomp STATIC ${REJSRF_RECOMP_SOURCES})
-    target_include_directories(rejsrf_recomp PRIVATE
-        "${REJSRF_RECOMP_GEN_DIR}"
-        "${REJSRF_XBOXRECOMP_DIR}/src/kernel")  # recomp_icall_feedback.h (MIT)
-    if(MSVC)
-        # Machine-written code: warnings are noise, and the files are large.
-        target_compile_options(rejsrf_recomp PRIVATE /w /bigobj /MP)
-    else()
-        target_compile_options(rejsrf_recomp PRIVATE -w)
-    endif()
-    # Diagnostic: every direct call in the generated code reports its target
-    # (recomp_call_profile_hit in rexbox_recomp); rejsrf's REXBOX_WATCHDOG dumps it.
-    option(REJSRF_RECOMP_CALL_PROFILE "Build the generated code with per-call profiling (slow)" OFF)
-    if(REJSRF_RECOMP_CALL_PROFILE)
-        target_compile_definitions(rejsrf_recomp PRIVATE RECOMP_CALL_PROFILE)
-    endif()
-    # Diagnostic: every direct call checks that the callee kept ebx/esi/edi and
-    # popped at least its return address (recomp_abi_violation_log in rexbox_recomp).
-    option(REJSRF_RECOMP_ABI_CHECK "Build the generated code with per-call ABI checks (slow)" OFF)
-    if(REJSRF_RECOMP_ABI_CHECK)
-        target_compile_definitions(rejsrf_recomp PRIVATE RECOMP_ABI_CHECK)
-    endif()
-    # An unresolved-target stub that runs reports itself once
-    # (recomp_unresolved_stub_log in rexbox_recomp, design i055).
-    target_compile_definitions(rejsrf_recomp PRIVATE RECOMP_STUB_REPORT)
-    target_link_libraries(rejsrf_recomp PUBLIC rexbox_recomp)
-
+# The generated code (rejsrf_recomp), built by rexbox against the pinned
+# xboxrecomp's ABI header; nothing when the directory is empty (CI). Options:
+# REXBOX_RECOMP_CALL_PROFILE, REXBOX_RECOMP_ABI_CHECK (rexbox's
+# cmake/rexbox_recomp.cmake).
+rexbox_add_recompiled_library(rejsrf_recomp GEN_DIR "${REJSRF_RECOMP_GEN_DIR}" TITLE rejsrf_game)
+if(TARGET rejsrf_recomp)
     # Decompiled sources include the generated declarations.
     target_include_directories(rejsrf_game PRIVATE "${REJSRF_RECOMP_GEN_DIR}")
     target_compile_definitions(rejsrf_game PRIVATE REJSRF_HAS_RECOMP=1)
-    target_link_libraries(rejsrf_game PUBLIC rejsrf_recomp)
-    # Generated code calls the decompiled sub_X definitions in rejsrf_game, and
-    # rejsrf_game calls generated code: a cycle between two static libraries.
-    # Declaring both directions makes CMake repeat them on linkers that scan
-    # each library once (GNU ld); MSVC resolves the cycle on its own.
-    target_link_libraries(rejsrf_recomp PUBLIC rejsrf_game)
-else()
-    message(STATUS "reJSRF recompiled code: none (run scripts/recomp/regenerate.py)")
-    if(REJSRF_DECOMP_SOURCES)
-        # Decompiled functions only make sense next to the code they replace.
-        set_source_files_properties(${REJSRF_DECOMP_SOURCES} PROPERTIES HEADER_FILE_ONLY ON)
-    endif()
+elseif(REJSRF_DECOMP_SOURCES)
+    # Decompiled functions only make sense next to the code they replace.
+    set_source_files_properties(${REJSRF_DECOMP_SOURCES} PROPERTIES HEADER_FILE_ONLY ON)
 endif()
