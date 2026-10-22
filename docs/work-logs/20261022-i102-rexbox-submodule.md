@@ -47,7 +47,8 @@
 | stderr 차이 | ① `[kernel] KeSetTimer armed; timers do not fire yet`가 사라졌다. rexbox #12로 타이머가 실제로 울린다. 원본 동작에 가까워졌고, 이 구간 화면은 같다. ② 프로파일 안내의 CMake 옵션 이름이 `REXBOX_RECOMP_CALL_PROFILE`로 바뀌었다 |
 | 설계 §2의 우려 | 안개·정점 블렌딩(rexbox #7), Swap 즉시 반환(#18)으로 달라진 프레임은 3600까지 없었다 |
 | 사용자 설정 폴더 | `SDL_GetPrefPath("reJSRF", "reJSRF")`로 전과 같다(코드로 확인) |
-| CI | PR에서 확인 |
+| CI | 브랜치에서 수동 실행(`workflow_dispatch`, run 39713016590): Debug·Release 모두 성공. Release 작업의 일본판 앱 빌드·스모크 단계 포함 |
+| 다른 작업 폴더에서 재확인 | `git submodule update --init --recursive` 뒤 미국판 Release를 처음부터 빌드: 경고 0(D9025 5건은 기존과 같음). probe 94/55/220 실패 0, `rejsrf_decomp_check` 129 차이 0, `rejsrf_d3d8_check` 14,018 차이 0. 데모 프레임 300~1800이 v0.0.46 빌드와 바이트 단위로 같다 |
 
 ## 남은 것
 
@@ -105,7 +106,8 @@ Design: [20261022-i102](../design/20261022-i102-rexbox-submodule.md) · Work ord
 | stderr differences | ① `[kernel] KeSetTimer armed; timers do not fire yet` is gone: timers now fire (rexbox #12), which is closer to the original, and the pictures in this stretch are unchanged. ② The profile hint names the CMake option `REXBOX_RECOMP_CALL_PROFILE` |
 | The concern of design §2 | fog and vertex blending (rexbox #7) and Swap returning at once (#18) changed no frame up to 3600 |
 | User settings folder | `SDL_GetPrefPath("reJSRF", "reJSRF")`, as before (checked in code) |
-| CI | checked on the pull request |
+| CI | run by hand on the branch (`workflow_dispatch`, run 39713016590): Debug and Release both succeeded, including the Release job's Japanese app build and smoke step |
+| Rechecked in another working folder | after `git submodule update --init --recursive`, a clean US Release build: zero warnings (the five D9025 as before); probes 94/55/220 with 0 failures, `rejsrf_decomp_check` 129 with 0 differences, `rejsrf_d3d8_check` 14,018 with 0 differences; demo frames 300-1800 equal the v0.0.46 build byte for byte |
 
 ## Open
 
