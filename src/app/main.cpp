@@ -306,6 +306,8 @@ int main(int argc, char** argv)
     char title_id[64];
     std::snprintf(title_id, sizeof(title_id), " (title ID %08X)", image->certificate().title_id);
     build_info.xbe = options.xbe + title_id;
+    build_info.rexbox_version = REJSRF_REXBOX_VERSION;
+    build_info.rexbox_commit = REJSRF_REXBOX_COMMIT;
     static rejsrf::SettingsUi settings_ui(build_info, settings, language, &settings_file);
     rexbox::platform::SetOverlayBuilder([] { settings_ui.Build(); });
 
