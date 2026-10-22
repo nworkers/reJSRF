@@ -53,21 +53,47 @@ const XbeVariant* BuiltVariant();
 // overrides instead. Returns the number of bindings made.
 size_t BindTitleHle(const rexbox::xbe::XbeImage& image, rexbox::runtime::HleRegistry& registry);
 
-// The game's language: the value of the language index each build carries as
-// a constant (US: 1, Japan: 0). The index also has French (2), German (3) and
-// Spanish (4), left out because the disc carries no localization for them
-// beyond a few screens (docs/design/20261020-i104-language-option.md 3.4).
+// The game's language. Japanese and English are values of the language index
+// each build carries as a constant (US: 1, Japan: 0). The index also has
+// French (2), German (3) and Spanish (4), left out because the disc carries no
+// localization for them beyond a few screens
+// (docs/design/20261020-i104-language-option.md 3.4). Korean is not an index
+// value: it runs English mode on a game folder the JSRF-kr-patch tool made
+// (docs/design/20261023-i113-korean-language.md).
 enum class Language : uint32_t
 {
     kJapanese = 0,
     kEnglish = 1,
+    kKorean = 2,
 };
 
-constexpr uint32_t kLanguageCount = 2;
+constexpr uint32_t kLanguageCount = 3;
 
 // The language the built variant's disc runs in by itself (USA: English,
 // Japan: Japanese); the setting's default.
 Language NativeLanguage();
+
+// Whether the built variant can run `language`: Korean is patched onto the US
+// build, so the Japanese build cannot show it.
+bool LanguageAvailable(Language language);
+
+// The value the game's language index takes for `language` (Korean: English).
+uint32_t GameLanguageIndex(Language language);
+
+// Which text an XBE of the built variant's certificate carries, told from its
+// section bytes (64-bit FNV-1a hashes against the built variant's).
+enum class XbeText
+{
+    kOriginal,      // every section as on the disc
+    kKorean,        // the code as on the disc, the text data patched (JSRF-kr-patch)
+    kCodeChanged,   // a code or library section differs: the lifted code would not match
+    kOtherBuild,    // not the built variant's certificate
+};
+
+XbeText ClassifyXbeText(const rexbox::xbe::XbeImage& image);
+
+// "original", "Korean patch", ...: for messages.
+const char* XbeTextName(XbeText text);
 
 // "Japanese", "English", ...: the rejsrf.ini value and the menu label.
 const char* LanguageName(Language language);

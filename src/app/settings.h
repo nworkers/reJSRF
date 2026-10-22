@@ -40,6 +40,10 @@ struct Settings
     // (docs/design/20261020-i104-language-option.md); by default the built
     // variant's own (USA English, Japan Japanese).
     Language language = NativeLanguage();
+    // The game folder the JSRF-kr-patch tool made, used when the language is
+    // Korean; empty: "<game folder>-kr" beside the game folder
+    // (docs/design/20261023-i113-korean-language.md).
+    std::string korean_directory;
 };
 
 // rejsrf.ini next to the executable, or in the user's settings folder when

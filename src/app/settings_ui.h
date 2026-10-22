@@ -29,12 +29,22 @@ struct BuildInfo
     std::string rexbox_commit;
 };
 
+// What this run found out about the languages it could start in
+// (docs/design/20261023-i113-korean-language.md).
+struct LanguageStatus
+{
+    std::string korean_directory;  // the folder Korean runs, as resolved at start
+    std::string korean_problem;    // why Korean cannot run; empty when it can
+    bool patched_game = false;     // the game folder is the Korean patch: Korean only
+};
+
 class SettingsUi
 {
 public:
     // `running_language` is the language this run started with; the menu's
     // choice applies from the next start.
-    SettingsUi(BuildInfo build, Settings settings, Language running_language, SettingsFile* file);
+    SettingsUi(BuildInfo build, Settings settings, Language running_language, LanguageStatus languages,
+               SettingsFile* file);
 
     // The overlay's builder: runs on every present, on the thread that
     // presents.
@@ -76,6 +86,7 @@ private:
     Settings settings_;  // what rejsrf.ini holds
     SettingsFile* file_;
     Language running_language_;
+    LanguageStatus languages_;
     bool observed_ = false;
     Tracked<uint32_t> render_scale_;
     Tracked<bool> fullscreen_;
