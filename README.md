@@ -43,7 +43,7 @@ python scripts\recomp\regenerate.py    # default.xbe가 US판이면 gen\jsrf_us,
 .\build\win32_x86\src\app\Debug\rejsrf.exe "roms\Jet Set Radio Future" --xbe SegaJSRF.xbe
 ```
 
-US판과 일본판을 모두 지원합니다. 실행 파일 하나는 한 판만 실행하며, 어느 판으로 빌드할지는 `-Variant us|jp`(CMake `-DREJSRF_VARIANT=jsrf_us|jsrf_jp`)로 정합니다. 판은 파일 이름이 아니라 내용으로 식별합니다(재생성 스크립트는 MD5, 앱은 인증서). 빌드한 판과 다른 XBE를 주면 어느 판으로 빌드해야 하는지 알리고 멈춥니다. 언어(English / Japanese)는 두 판 모두 설정 메뉴의 Game 탭에서 고릅니다.
+US판과 일본판을 모두 지원합니다. 실행 파일 하나는 한 판만 실행하며, 어느 판으로 빌드할지는 `-Variant us|jp`(CMake `-DREJSRF_VARIANT=jsrf_us|jsrf_jp`)로 정합니다. 판은 파일 이름이 아니라 내용으로 식별합니다(재생성 스크립트는 MD5, 앱은 인증서). 빌드한 판과 다른 XBE를 주면 어느 판으로 빌드해야 하는지 알리고 멈춥니다. 언어(English / Japanese)는 두 판 모두 설정 메뉴의 Game 탭에서 고릅니다. US판 빌드는 [JSRF-kr-patch](https://github.com/nworkers/JSRF-kr-patch)로 직접 만든 한국어 폴더가 있으면 Korean도 고를 수 있습니다([가이드](docs/guides/win32-setup-and-build.md)).
 
 자세한 절차: [Win32 개발 환경 준비와 빌드](docs/guides/win32-setup-and-build.md)
 
@@ -93,7 +93,7 @@ See the diagram above.
 
 ## Build (Win32)
 
-See the commands above, and [Win32 development setup and build](docs/guides/win32-setup-and-build.md) for the full procedure. The argument is the **game directory** extracted from the disc. The app serves that folder as the game's `D:` and loads `default.xbe`, an Xbox title's default executable. `--xbe <file>` loads another XBE, for example `--xbe SegaJSRF.xbe` on a disc that carries Sega GT and JSRF together. Before the first build, put the game files under `roms\Jet Set Radio Future\`, build the XDK identification tool once (`-Target rexbox_xdk_symbols`) and generate the recompiled code with `python scripts\recomp\regenerate.py`. The US and Japanese builds are both supported: one executable runs one build, chosen with `-Variant us|jp` (CMake `-DREJSRF_VARIANT=jsrf_us|jsrf_jp`; the Japanese build goes to `build\win32_x86_jp`). Builds are told apart by content, never by file name (MD5 in the scripts, the certificate in the app); an XBE of the other build is explained and stopped. Both builds choose English or Japanese in the settings menu's Game tab.
+See the commands above, and [Win32 development setup and build](docs/guides/win32-setup-and-build.md) for the full procedure. The argument is the **game directory** extracted from the disc. The app serves that folder as the game's `D:` and loads `default.xbe`, an Xbox title's default executable. `--xbe <file>` loads another XBE, for example `--xbe SegaJSRF.xbe` on a disc that carries Sega GT and JSRF together. Before the first build, put the game files under `roms\Jet Set Radio Future\`, build the XDK identification tool once (`-Target rexbox_xdk_symbols`) and generate the recompiled code with `python scripts\recomp\regenerate.py`. The US and Japanese builds are both supported: one executable runs one build, chosen with `-Variant us|jp` (CMake `-DREJSRF_VARIANT=jsrf_us|jsrf_jp`; the Japanese build goes to `build\win32_x86_jp`). Builds are told apart by content, never by file name (MD5 in the scripts, the certificate in the app); an XBE of the other build is explained and stopped. Both builds choose English or Japanese in the settings menu's Game tab; the US build also offers Korean when you have made the Korean folder with [JSRF-kr-patch](https://github.com/nworkers/JSRF-kr-patch) ([guide](docs/guides/win32-setup-and-build.md)).
 
 ## Platform status
 

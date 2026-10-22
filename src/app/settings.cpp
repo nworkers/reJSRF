@@ -145,6 +145,10 @@ Settings SettingsFile::Load()
             {
                 ParseLanguage(value, &settings.language);
             }
+            else if (key == "koreangamedirectory")
+            {
+                settings.korean_directory = value;
+            }
             continue;
         }
         if (section == "input")
@@ -301,8 +305,10 @@ bool SettingsFile::Save(const Settings& settings)
          << "Vibration = " << flag(settings.vibration) << "\n"
          << "VibrationStrength = " << settings.vibration_strength << "\n"
          << "[Game]\n"
-         << "; Language: English or Japanese (from the next start).\n"
-         << "Language = " << LanguageName(settings.language) << "\n";
+         << "; Language: English, Japanese or Korean (from the next start). Korean runs the game folder\n"
+         << "; the JSRF-kr-patch tool made: KoreanGameDirectory, or \"<game folder>-kr\" when empty.\n"
+         << "Language = " << LanguageName(settings.language) << "\n"
+         << "KoreanGameDirectory = " << settings.korean_directory << "\n";
     if (WriteFile(path_, text.str()))
     {
         return true;

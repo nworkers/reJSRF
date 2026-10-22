@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <vector>
 
 namespace rejsrf
 {
@@ -58,10 +59,65 @@ constexpr std::array<XdkInternal, 1> kXdkInternals = {{
 // Japanese bss.
 constexpr uint32_t kLanguageIndexAddress = JSRF_LANGUAGE_INDEX;
 
-// Indexed by the Language value (the ending-texture switch at 0x27B87).
+// Indexed by the Language value.
 constexpr std::array<const char*, kLanguageCount> kLanguageNames = {
-    "Japanese", "English",
+    "Japanese", "English", "Korean",
 };
+
+// The built variant's sections as on the disc: 64-bit FNV-1a of each
+// section's raw bytes (hashes only; docs/design/20261023-i113-korean-language.md).
+// The text patch rewrites .rdata and .data and may add sections; every other
+// section must stay as it is, since the recompiled code was lifted from it.
+struct SectionHash
+{
+    const char* name;
+    uint64_t hash;
+};
+
+constexpr const char* kTextSections[] = {".rdata", ".data"};
+
+#if defined(REJSRF_VARIANT_JP)
+// The Japanese build: no Korean patch exists for it (the table stays empty,
+// and LanguageAvailable refuses Korean).
+constexpr std::array<SectionHash, 0> kSectionHashes = {};
+#else
+constexpr std::array<SectionHash, 11> kSectionHashes = {{
+    {".text", 0x619511F233A0A407ull},
+    {"D3D", 0xEE4754220EDB0E15ull},
+    {"DSOUND", 0xA7DA262B86E57322ull},
+    {"MMATRIX", 0x294679321E0C3838ull},
+    {"XGRPH", 0xAD9134313C4B2009ull},
+    {"XPP", 0x329E0CD7CBE7F886ull},
+    {".rdata", 0xBF3C1463F290A703ull},
+    {".data", 0x23051263BD7803BAull},
+    {"DOLBY", 0x8D52466CB67EB05Full},
+    {"$$XTIMAGE", 0xB351F8B61382FE37ull},
+    {"$$XSIMAGE", 0xCC6D4EF4188CA78Aull},
+}};
+#endif
+
+uint64_t Fnv1a64(const uint8_t* data, size_t size)
+{
+    uint64_t hash = 0xCBF29CE484222325ull;
+    for (size_t i = 0; i < size; ++i)
+    {
+        hash ^= data[i];
+        hash *= 0x100000001B3ull;
+    }
+    return hash;
+}
+
+bool IsTextSection(const char* name)
+{
+    for (const char* text : kTextSections)
+    {
+        if (std::strcmp(name, text) == 0)
+        {
+            return true;
+        }
+    }
+    return false;
+}
 
 }  // namespace
 
@@ -87,6 +143,67 @@ const XbeVariant* BuiltVariant()
 Language NativeLanguage()
 {
     return kNativeLanguage;
+}
+
+bool LanguageAvailable(Language language)
+{
+    if (language == Language::kKorean)
+    {
+        return !kSectionHashes.empty();
+    }
+    return static_cast<uint32_t>(language) < kLanguageCount;
+}
+
+uint32_t GameLanguageIndex(Language language)
+{
+    return language == Language::kKorean ? static_cast<uint32_t>(Language::kEnglish)
+                                         : static_cast<uint32_t>(language);
+}
+
+XbeText ClassifyXbeText(const rexbox::xbe::XbeImage& image)
+{
+    if (IdentifyXbe(image) != BuiltVariant())
+    {
+        return XbeText::kOtherBuild;
+    }
+    const std::vector<uint8_t>& bytes = image.bytes();
+    const auto& sections = image.sections();
+    bool text_changed = false;
+    for (const SectionHash& expected : kSectionHashes)
+    {
+        const auto section = std::find_if(sections.begin(), sections.end(),
+                                          [&](const auto& candidate) { return candidate.name == expected.name; });
+        if (section == sections.end() || uint64_t{section->raw_address} + section->raw_size > bytes.size())
+        {
+            return XbeText::kCodeChanged;
+        }
+        const bool same = Fnv1a64(bytes.data() + section->raw_address, section->raw_size) == expected.hash;
+        if (IsTextSection(expected.name))
+        {
+            text_changed |= !same;
+        }
+        else if (!same)
+        {
+            return XbeText::kCodeChanged;
+        }
+    }
+    return text_changed ? XbeText::kKorean : XbeText::kOriginal;
+}
+
+const char* XbeTextName(XbeText text)
+{
+    switch (text)
+    {
+    case XbeText::kOriginal:
+        return "original";
+    case XbeText::kKorean:
+        return "Korean patch";
+    case XbeText::kCodeChanged:
+        return "changed code";
+    case XbeText::kOtherBuild:
+        return "another build";
+    }
+    return "unknown";
 }
 
 size_t BindTitleHle(const rexbox::xbe::XbeImage& image, rexbox::runtime::HleRegistry& registry)
@@ -137,12 +254,12 @@ bool ParseLanguage(const std::string& text, Language* language)
 
 bool ApplyLanguage(const rexbox::xbe::XbeImage& image, rexbox::runtime::GuestMemory& memory, Language language)
 {
-    if (IdentifyXbe(image) != BuiltVariant() || static_cast<uint32_t>(language) >= kLanguageCount ||
+    if (IdentifyXbe(image) != BuiltVariant() || !LanguageAvailable(language) ||
         !memory.IsValid(kLanguageIndexAddress, 4))
     {
         return false;
     }
-    memory.Write32(kLanguageIndexAddress, static_cast<uint32_t>(language));
+    memory.Write32(kLanguageIndexAddress, GameLanguageIndex(language));
     std::printf("[jsrf] language: %s\n", LanguageName(language));
     return true;
 }

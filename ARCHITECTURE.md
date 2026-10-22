@@ -83,6 +83,9 @@ sequenceDiagram
 * 게스트 주소, 레지스터, HLE 함수, 스레드, 동기화, 표시, 오디오, 입력의 계약은 rexbox의 것이다(rexbox ARCHITECTURE §4).
 * **타이틀 프로파일**(`include/rejsrf/jsrf_profile.h`): 지원하는 XBE 판을 인증서로 식별하고(`BuiltVariant()`), XAPI 장치 형식 같은 XDK 변수를 생성된 `rexbox_xdk_variables[]`에서 `HleRegistry::BindVariable`로 묶고, 장치가 원본 기본 상태 루틴(`D3D_InitializeDeviceState`)을 부를 수 있게 그 주소를 묶는다.
 * **타이틀 설정**: 게임 안의 값으로 정하는 설정(지금은 언어)은 프로파일이 주소와 값의 뜻을 갖고, 앱이 XBE를 올린 뒤·진입 전에 `ApplyLanguage`로 게스트 메모리에 쓴다(US판 `0x1FC724`, 일본판 `0x251F58`; 0 = 일본어, 1 = 영어). `rexbox`는 관여하지 않는다. 설정은 `rejsrf.ini`의 `[Game] Language`와 설정 메뉴의 Game 탭이며 다음 실행부터 적용된다([design i104](docs/design/20261020-i104-language-option.md)).
+* **한국어**([design i113](docs/design/20261023-i113-korean-language.md)): `Language::kKorean`은 인덱스 값이 아니다. 게임 인덱스는 1(영어)이고, 앱이 디스크(D:)를 JSRF-kr-patch가 만든 한국어 폴더로 바꾸고 그 XBE를 올린다.
+  * 프로파일의 `ClassifyXbeText`가 섹션 바이트의 64비트 FNV-1a 해시를 US판 값과 비교한다. 결과는 원본, 한국어 패치(코드 같음, `.rdata`·`.data` 다름), 코드가 다름(거부) 셋 중 하나다. lift된 코드는 원본 코드 섹션에서 나왔으므로 데이터만 바뀐 XBE만 실행할 수 있다.
+  * 앱은 캐시 파티션(`Partition3`~`5`)을 채운 문장 세트를 `<hdd root>/rejsrf_cache_text.txt`에 적고, 세트가 바뀌면 커널을 초기화하기 전에 그 파티션을 비운다. rexbox는 바꾸지 않았다.
 * **파일**: `\Device\CdRom0` → 게임 디렉터리(읽기 전용), `\Device\Harddisk0\Partition1..5` → `<hdd root>/PartitionN`(`REJSRF_HDD_ROOT`, 기본 `./hdd`).
 
 ## 5. 빌드 구성
@@ -148,6 +151,9 @@ The app gives rexbox its identity and window title, loads and identifies the XBE
 * Guest addresses, registers, HLE functions, threads, synchronization, display, audio and input follow rexbox's contracts (rexbox ARCHITECTURE §4).
 * **Title profile** (`include/rejsrf/jsrf_profile.h`): it identifies the supported builds by certificate (`BuiltVariant()`), binds XDK variables such as the XAPI device types from the generated `rexbox_xdk_variables[]` into `HleRegistry::BindVariable`, and binds the library's default-state routine (`D3D_InitializeDeviceState`) for device creation.
 * **Title settings**: settings made by a value inside the game (today the language) belong to the profile. The app writes the value with `ApplyLanguage` after placing the XBE and before the entry (the US build's `0x1FC724`, the Japanese build's `0x251F58`; 0 = Japanese, 1 = English). rexbox takes no part. The setting is `[Game] Language` in `rejsrf.ini` and the Game tab, applied from the next start ([design i104](docs/design/20261020-i104-language-option.md)).
+* **Korean** ([design i113](docs/design/20261023-i113-korean-language.md)): `Language::kKorean` is not an index value. The game index is 1 (English); the app swaps the disc (D:) for the Korean folder JSRF-kr-patch made and loads its XBE.
+  * The profile's `ClassifyXbeText` compares 64-bit FNV-1a hashes of the section bytes with the US build's. The result is original, Korean patch (same code, `.rdata` and `.data` changed) or changed code (refused). The lifted code came from the original code sections, so only an XBE with changed data can run.
+  * The app records in `<hdd root>/rejsrf_cache_text.txt` which text set filled the cache partitions (`Partition3`-`5`), and empties them before the kernel starts when the set changes. rexbox is unchanged.
 * **Files**: `\Device\CdRom0` → the game directory (read-only), `\Device\Harddisk0\Partition1..5` → `<hdd root>/PartitionN` (`REJSRF_HDD_ROOT`, default `./hdd`).
 
 ## 5. Build configuration

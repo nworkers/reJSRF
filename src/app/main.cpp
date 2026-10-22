@@ -4,7 +4,7 @@
 // carries recompiled code, boot the entry point as the first guest thread and
 // report how the guest threads ended.
 //
-// Usage: rejsrf <game directory> [--xbe <file>]   (default: default.xbe)
+// Usage: rejsrf <game directory> [--xbe <file>] [--korean <folder>]   (default: default.xbe)
 
 #include "rejsrf/jsrf_host.h"
 #include "rejsrf/jsrf_profile.h"
@@ -38,6 +38,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -86,14 +87,18 @@ struct Options
 {
     std::string game_directory;
     std::string xbe = kDefaultXbe;
+    std::string korean_directory;  // --korean: the JSRF-kr-patch output folder
 };
 
 void PrintUsage(const char* program)
 {
     std::fprintf(stderr,
-                 "usage: %s <game directory> [--xbe <file>]\n"
+                 "usage: %s <game directory> [--xbe <file>] [--korean <folder>]\n"
                  "  <game directory>  the folder extracted from the disc (served as D:)\n"
-                 "  --xbe <file>      the XBE in that folder to load (default: %s)\n",
+                 "  --xbe <file>      the XBE in that folder to load (default: %s)\n"
+                 "  --korean <folder> the game folder the JSRF-kr-patch tool made, run when the\n"
+                 "                    language is Korean (default: rejsrf.ini KoreanGameDirectory,\n"
+                 "                    else \"<game directory>-kr\")\n",
                  program, kDefaultXbe);
 }
 
@@ -116,6 +121,19 @@ bool ParseArguments(int argc, char** argv, Options* options)
         else if (argument.rfind("--xbe=", 0) == 0)
         {
             options->xbe = argument.substr(6);
+        }
+        else if (argument == "--korean")
+        {
+            if (i + 1 >= argc)
+            {
+                std::fprintf(stderr, "error: --korean needs a folder\n");
+                return false;
+            }
+            options->korean_directory = argv[++i];
+        }
+        else if (argument.rfind("--korean=", 0) == 0)
+        {
+            options->korean_directory = argument.substr(9);
         }
         else if (argument.rfind("--", 0) == 0)
         {
@@ -163,6 +181,101 @@ std::string ListXbeFiles(const std::filesystem::path& directory)
         list += (list.empty() ? "" : ", ") + name;
     }
     return list.empty() ? "none" : list;
+}
+
+// The Korean game folder (docs/design/20261023-i113-korean-language.md):
+// --korean, else rejsrf.ini's KoreanGameDirectory, else "<game folder>-kr"
+// beside the game folder.
+std::filesystem::path KoreanDirectory(const Options& options, const rejsrf::Settings& settings,
+                                      const std::filesystem::path& game_directory)
+{
+    if (!options.korean_directory.empty())
+    {
+        return std::filesystem::absolute(options.korean_directory);
+    }
+    if (!settings.korean_directory.empty())
+    {
+        return std::filesystem::absolute(settings.korean_directory);
+    }
+    const std::filesystem::path folder = game_directory.has_filename() ? game_directory : game_directory.parent_path();
+    return folder.parent_path() / (folder.filename().string() + "-kr");
+}
+
+// Loads `directory`'s default.xbe when it is the Korean patch of the built
+// variant: the disc's code with patched text (rejsrf::ClassifyXbeText).
+// Otherwise returns nothing and says why in `problem`.
+std::optional<rexbox::xbe::XbeImage> LoadKoreanXbe(const std::filesystem::path& directory, std::string* problem)
+{
+    const std::filesystem::path xbe_path = directory / kDefaultXbe;
+    std::error_code ec;
+    if (!std::filesystem::is_regular_file(xbe_path, ec))
+    {
+        *problem = "no " + xbe_path.string() + " (make it with JSRF-kr-patch's tools/patch.py, or set "
+                   "KoreanGameDirectory in rejsrf.ini or --korean)";
+        return std::nullopt;
+    }
+    std::string error;
+    auto image = rexbox::xbe::XbeImage::Load(xbe_path, &error);
+    if (!image)
+    {
+        *problem = xbe_path.string() + ": " + error;
+        return std::nullopt;
+    }
+    const rejsrf::XbeText text = rejsrf::ClassifyXbeText(*image);
+    if (text != rejsrf::XbeText::kKorean)
+    {
+        *problem = xbe_path.string() + " is not a Korean patch of the " + rejsrf::BuiltVariant()->label +
+                   " build (" + rejsrf::XbeTextName(text) + ")";
+        return std::nullopt;
+    }
+    return image;
+}
+
+// The game copies Media files into its cache drive (Z:, one of Partition3-5)
+// and reads the copies afterwards. The Korean patch changes some of those
+// files under the same names, so the cache partitions are emptied whenever
+// the text set they were filled from changes; the game fills them again.
+// Saves (Partition1) are left alone (docs/design/20261023-i113-korean-language.md).
+void PrepareCache(const std::filesystem::path& hdd_root, const std::string& text_set)
+{
+    const std::filesystem::path marker = hdd_root / "rejsrf_cache_text.txt";
+    std::string previous;
+    if (FILE* file = std::fopen(marker.string().c_str(), "rb"))
+    {
+        char buffer[64] = {};
+        const size_t read = std::fread(buffer, 1, sizeof(buffer) - 1, file);
+        std::fclose(file);
+        previous.assign(buffer, read);
+        while (!previous.empty() && std::isspace(static_cast<unsigned char>(previous.back())))
+        {
+            previous.pop_back();
+        }
+    }
+    if (previous == text_set)
+    {
+        return;
+    }
+    std::error_code ec;
+    size_t removed = 0;
+    for (int partition = 3; partition <= 5; ++partition)
+    {
+        const std::filesystem::path directory = hdd_root / ("Partition" + std::to_string(partition));
+        for (const auto& entry : std::filesystem::directory_iterator(directory, ec))
+        {
+            removed += static_cast<size_t>(std::filesystem::remove_all(entry.path(), ec));
+        }
+    }
+    if (removed != 0)
+    {
+        std::printf("[app] cache: filled from %s text, this run reads %s; emptied Partition3-5 (%zu entries)\n",
+                    previous.empty() ? "unrecorded" : previous.c_str(), text_set.c_str(), removed);
+    }
+    std::filesystem::create_directories(hdd_root, ec);
+    if (FILE* file = std::fopen(marker.string().c_str(), "wb"))
+    {
+        std::fprintf(file, "%s\n", text_set.c_str());
+        std::fclose(file);
+    }
 }
 
 void PrintThreadReport(const rexbox::recomp::ThreadReport& report)
@@ -253,7 +366,8 @@ int main(int argc, char** argv)
         return 1;
     }
     std::string error;
-    const auto image = rexbox::xbe::XbeImage::Load(xbe_path, &error);
+    // The Korean language may swap in the Korean folder's XBE below.
+    std::optional<rexbox::xbe::XbeImage> image = rexbox::xbe::XbeImage::Load(xbe_path, &error);
     if (!image)
     {
         std::fprintf(stderr, "error: %s: %s\n", options.xbe.c_str(), error.c_str());
@@ -268,6 +382,17 @@ int main(int argc, char** argv)
         return 1;
     }
     std::printf("xbe: %s (%s)\n", variant->label, options.xbe.c_str());
+    // The recompiled code was lifted from the disc's code sections; an XBE of
+    // this build whose code differs cannot run on it
+    // (docs/design/20261023-i113-korean-language.md).
+    const rejsrf::XbeText game_text = rejsrf::ClassifyXbeText(*image);
+    if (game_text == rejsrf::XbeText::kCodeChanged)
+    {
+        std::fprintf(stderr, "error: %s has the %s build's certificate but different code; the recompiled code "
+                             "comes from the disc's, so it cannot run\n",
+                     options.xbe.c_str(), variant->label);
+        return 1;
+    }
 
     // The settings menu (Tab) and rejsrf.ini: the display starts from the
     // saved settings (docs/design/20261017-i084-settings-overlay.md).
@@ -280,9 +405,58 @@ int main(int argc, char** argv)
     {
         if (!rejsrf::ParseLanguage(language_override, &language))
         {
-            std::fprintf(stderr, "warning: REJSRF_LANGUAGE=%s is not English or Japanese; using %s\n",
+            std::fprintf(stderr, "warning: REJSRF_LANGUAGE=%s is not English, Japanese or Korean; using %s\n",
                          language_override, rejsrf::LanguageName(language));
         }
+    }
+    // Korean runs English mode on the game folder the JSRF-kr-patch tool made:
+    // its XBE carries the disc's code with patched text, and its Media the
+    // patched text and font. English and Japanese run the original folder
+    // (docs/design/20261023-i113-korean-language.md).
+    rejsrf::LanguageStatus language_status;
+    std::filesystem::path disc_directory = game_directory;
+    std::string xbe_name = options.xbe;
+    if (game_text == rejsrf::XbeText::kKorean)
+    {
+        // The game folder itself is the Korean patch: its font has no kana or
+        // kanji, so it runs in Korean only.
+        language_status.patched_game = true;
+        language_status.korean_directory = game_directory.string();
+        if (language != rejsrf::Language::kKorean)
+        {
+            std::printf("[app] %s is the Korean patch; running in Korean\n", game_directory.string().c_str());
+        }
+        language = rejsrf::Language::kKorean;
+    }
+    else if (rejsrf::LanguageAvailable(rejsrf::Language::kKorean) && variant == rejsrf::BuiltVariant())
+    {
+        const std::filesystem::path korean_directory = KoreanDirectory(options, settings, game_directory);
+        language_status.korean_directory = korean_directory.string();
+        auto korean_image = LoadKoreanXbe(korean_directory, &language_status.korean_problem);
+        if (language == rejsrf::Language::kKorean)
+        {
+            if (korean_image)
+            {
+                image = std::move(korean_image);
+                disc_directory = korean_directory;
+                xbe_name = (korean_directory / kDefaultXbe).string();
+                std::printf("[app] Korean: the disc is %s\n", korean_directory.string().c_str());
+            }
+            else
+            {
+                std::fprintf(stderr, "warning: Korean: %s; running in English\n",
+                             language_status.korean_problem.c_str());
+                language = rejsrf::Language::kEnglish;
+            }
+        }
+    }
+    else if (language == rejsrf::Language::kKorean)
+    {
+        language_status.korean_problem = std::string("the Korean patch is made for the US build; this executable "
+                                                     "is built for the ") + rejsrf::BuiltVariant()->label + " build";
+        std::fprintf(stderr, "warning: Korean: %s; running in %s\n", language_status.korean_problem.c_str(),
+                     rejsrf::LanguageName(rejsrf::NativeLanguage()));
+        language = rejsrf::NativeLanguage();
     }
     rexbox::hle::d3d8::DisplayDefaults display_defaults;
     display_defaults.render_scale = settings.render_scale;
@@ -305,10 +479,10 @@ int main(int argc, char** argv)
     build_info.commit = REJSRF_GIT_COMMIT;
     char title_id[64];
     std::snprintf(title_id, sizeof(title_id), " (title ID %08X)", image->certificate().title_id);
-    build_info.xbe = options.xbe + title_id;
+    build_info.xbe = xbe_name + title_id;
     build_info.rexbox_version = REJSRF_REXBOX_VERSION;
     build_info.rexbox_commit = REJSRF_REXBOX_COMMIT;
-    static rejsrf::SettingsUi settings_ui(build_info, settings, language, &settings_file);
+    static rejsrf::SettingsUi settings_ui(build_info, settings, language, language_status, &settings_file);
     rexbox::platform::SetOverlayBuilder([] { settings_ui.Build(); });
 
     rexbox::runtime::GuestMemory memory;
@@ -341,13 +515,14 @@ int main(int argc, char** argv)
     rexbox::hle::d3d8::RegisterD3d8Hle(registry);
     rexbox::hle::dsound::RegisterDsoundHle(registry);
     rexbox::hle::xinput::RegisterXinputHle(registry);
-    // The disc is the game directory; the hard disk lives under ./hdd unless
-    // REJSRF_HDD_ROOT names another place.
+    // The disc is the game directory (the Korean folder for Korean); the hard
+    // disk lives under ./hdd unless REJSRF_HDD_ROOT names another place.
     rexbox::hle::kernel::KernelConfig kernel_config;
-    kernel_config.game_directory = game_directory;
+    kernel_config.game_directory = disc_directory;
     const char* hdd_root = std::getenv("REJSRF_HDD_ROOT");
     kernel_config.hdd_root = hdd_root != nullptr ? std::filesystem::path(hdd_root)
                                                  : std::filesystem::current_path() / "hdd";
+    PrepareCache(kernel_config.hdd_root, language == rejsrf::Language::kKorean ? "korean" : "original");
     rexbox::hle::kernel::InitializeKernel(kernel_config);
     const auto missing_kernel = rexbox::hle::kernel::BindKernelImports(*image, memory, registry);
     const size_t title_bindings = rejsrf::BindTitleHle(*image, registry);

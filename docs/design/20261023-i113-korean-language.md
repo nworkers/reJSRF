@@ -1,6 +1,6 @@
 # 설계: 영어·일본어와 함께 한국어 (issue #113)
 
-상태: **승인됨**(사용자 결정 §7). 작업 지시: [20261023-i113](../work-orders/20261023-i113-korean-language.md)
+상태: **구현됨**(사용자 결정 §7). 작업 로그: [20261023-i113](../work-logs/20261023-i113-korean-language.md) · 작업 지시: [20261023-i113](../work-orders/20261023-i113-korean-language.md)
 
 근거: [JSRF-kr-patch](https://github.com/nworkers/JSRF-kr-patch) v0.0.12의 [reJSRF 인계 문서](https://github.com/nworkers/JSRF-kr-patch/blob/main/docs/handoff-rejsrf.md)와 [영문 모드 기반 설계 i020](https://github.com/nworkers/JSRF-kr-patch/blob/main/docs/design/20261023-i020-english-base.md), reJSRF [언어 설정 i104](20261020-i104-language-option.md), [한국어 패치 검토 i105](20261020-i105-korean-patch-review.md).
 
@@ -97,7 +97,7 @@ flowchart TD
 
 # Design: Korean beside English and Japanese (issue #113)
 
-Status: **approved** (user decisions, §7). Work order: [20261023-i113](../work-orders/20261023-i113-korean-language.md)
+Status: **implemented** (user decisions, §7). Work log: [20261023-i113](../work-logs/20261023-i113-korean-language.md) · Work order: [20261023-i113](../work-orders/20261023-i113-korean-language.md)
 
 Basis: [JSRF-kr-patch](https://github.com/nworkers/JSRF-kr-patch) v0.0.12's [handoff to reJSRF](https://github.com/nworkers/JSRF-kr-patch/blob/main/docs/handoff-rejsrf.md) and [English-mode design i020](https://github.com/nworkers/JSRF-kr-patch/blob/main/docs/design/20261023-i020-english-base.md); reJSRF's [language setting i104](20261020-i104-language-option.md) and [Korean patch review i105](20261020-i105-korean-patch-review.md).
 

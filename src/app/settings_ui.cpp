@@ -152,8 +152,13 @@ void DrawGraph(const std::vector<float>& values, float axis_max, const std::vect
 
 }  // namespace
 
-SettingsUi::SettingsUi(BuildInfo build, Settings settings, Language running_language, SettingsFile* file)
-    : build_(std::move(build)), settings_(settings), file_(file), running_language_(running_language)
+SettingsUi::SettingsUi(BuildInfo build, Settings settings, Language running_language, LanguageStatus languages,
+                       SettingsFile* file)
+    : build_(std::move(build)),
+      settings_(settings),
+      file_(file),
+      running_language_(running_language),
+      languages_(std::move(languages))
 {
 }
 
@@ -703,10 +708,27 @@ void SettingsUi::DrawGameTab()
         {
             const auto language = static_cast<Language>(index);
             const bool selected = language == settings_.language;
-            if (ImGui::Selectable(LanguageName(language), selected) && !selected)
+            // Korean needs the patched folder; a patched game folder has no
+            // kana or kanji, so it runs nothing else
+            // (docs/design/20261023-i113-korean-language.md).
+            const char* unavailable = nullptr;
+            if (!LanguageAvailable(language))
+            {
+                unavailable = "The Korean patch is made for the US build.";
+            }
+            else if (languages_.patched_game && language != Language::kKorean)
+            {
+                unavailable = "This game folder is the Korean patch; run the original folder for this language.";
+            }
+            const ImGuiSelectableFlags flags = unavailable != nullptr ? ImGuiSelectableFlags_Disabled : 0;
+            if (ImGui::Selectable(LanguageName(language), selected, flags) && !selected)
             {
                 settings_.language = language;
                 Save();
+            }
+            if (unavailable != nullptr)
+            {
+                ImGui::SetItemTooltip("%s", unavailable);
             }
             if (selected)
             {
@@ -718,8 +740,13 @@ void SettingsUi::DrawGameTab()
     ImGui::SameLine();
     ImGui::TextDisabled("(?)");
     ImGui::SetItemTooltip("Text, voice and pictures in the game's own menus and scenes.\n"
-                          "Every language comes from the same game disc.");
-    if (std::getenv("REJSRF_LANGUAGE") != nullptr)
+                          "English and Japanese come from the game disc. Korean runs the game folder\n"
+                          "the JSRF-kr-patch tool made from it (English pictures and voice, Korean text).");
+    if (languages_.patched_game)
+    {
+        ImGui::TextDisabled("This game folder is the Korean patch: running in Korean.");
+    }
+    else if (std::getenv("REJSRF_LANGUAGE") != nullptr)
     {
         ImGui::TextDisabled("REJSRF_LANGUAGE set at start: running in %s.", LanguageName(running_language_));
     }
@@ -731,6 +758,22 @@ void SettingsUi::DrawGameTab()
     else
     {
         ImGui::TextDisabled("Applies from the next start.");
+    }
+    if (!languages_.korean_directory.empty() && LanguageAvailable(Language::kKorean))
+    {
+        ImGui::SeparatorText("Korean");
+        ImGui::PushTextWrapPos(0.0f);  // paths and reasons are long
+        ImGui::TextDisabled("Folder: %s", languages_.korean_directory.c_str());
+        if (!languages_.korean_problem.empty())
+        {
+            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), "Not ready: %s", languages_.korean_problem.c_str());
+            ImGui::TextDisabled("Choosing Korean then starts in English.");
+        }
+        else
+        {
+            ImGui::TextDisabled("Ready: the Korean patch of this build.");
+        }
+        ImGui::PopTextWrapPos();
     }
 }
 
