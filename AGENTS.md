@@ -68,6 +68,7 @@ Priority order:
 * `docs/analysis/`
 * `docs/kb/`
 * `docs/guides/`
+* 런타임·HLE·플랫폼에 닿는 작업이면 rexbox의 `third_party/rexbox/ARCHITECTURE.md`와 `third_party/rexbox/AGENTS.md`
 
 ## Reference Documents
 
@@ -85,6 +86,7 @@ Read and update the relevant documents before making architectural changes.
 * `docs/analysis/`
 * `docs/kb/`
 * `docs/guides/`
+* For work touching the runtime, HLE or platform layer: rexbox's `third_party/rexbox/ARCHITECTURE.md` and `third_party/rexbox/AGENTS.md`
 
 ---
 
