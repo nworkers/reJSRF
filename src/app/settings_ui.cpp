@@ -119,7 +119,7 @@ void DrawGraph(const std::vector<float>& values, float axis_max, const std::vect
 {
     const float scale = ImGui::GetStyle().FontScaleMain;
     const float graph_width = 240.0f * scale;
-    const float graph_height = 64.0f * scale;
+    const float graph_height = 32.0f * scale;  // three tick labels still fit (#111)
     const float pad = ImGui::GetFontSize() * 0.5f;  // room for the top and bottom labels
     const ImVec2 origin = ImGui::GetCursorScreenPos();
     ImGui::Dummy(ImVec2(graph_width + label_width, graph_height + pad * 2.0f));
@@ -362,6 +362,8 @@ void SettingsUi::DrawInfoTab()
         Row("Configuration", build_.identity);
         Row("Commit", build_.commit);
         Row("Game", build_.xbe);
+        Row("rexbox", "v" + build_.rexbox_version);
+        Row("rexbox commit", build_.rexbox_commit);
         ImGui::EndTable();
     }
     ImGui::SeparatorText("Driver");

@@ -25,6 +25,8 @@ struct BuildInfo
     std::string identity;  // platform and configuration
     std::string commit;
     std::string xbe;  // file and title ID
+    std::string rexbox_version;  // the shared runtime, third_party/rexbox
+    std::string rexbox_commit;
 };
 
 class SettingsUi
