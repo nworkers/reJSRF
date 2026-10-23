@@ -79,6 +79,27 @@ std::string BuildIdentity()
     return identity;
 }
 
+// Debug builds report every unresolved stub that runs: xboxrecomp's generated
+// stubs print a [STUB] line the first time each one is reached when
+// RECOMP_STUB_LOG is set, read when the first stub runs. A value the user set
+// (0 included) is left alone; Release builds set nothing
+// (docs/design/20261023-i115-xboxrecomp-v0.16.md).
+void EnableStubLogInDebug()
+{
+#if !defined(NDEBUG)
+    if (std::getenv("RECOMP_STUB_LOG") != nullptr)
+    {
+        return;
+    }
+#if defined(_WIN32)
+    _putenv_s("RECOMP_STUB_LOG", "1");
+#else
+    setenv("RECOMP_STUB_LOG", "1", 0);
+#endif
+    std::fprintf(stderr, "[app] RECOMP_STUB_LOG=1 (Debug build): unresolved stubs that run are reported\n");
+#endif
+}
+
 // An Xbox title starts from default.xbe; --xbe names another one in the game
 // directory.
 constexpr const char* kDefaultXbe = "default.xbe";
@@ -554,6 +575,7 @@ int main(int argc, char** argv)
     const bool flat_dispatch = rejsrf::InitializeRecompiledDispatch();
     std::printf("boot: entry %08X, %s dispatch\n", image->entry_point(), flat_dispatch ? "flat" : "searched");
     std::fflush(stdout);
+    EnableStubLogInDebug();
     if (!rexbox::hle::kernel::StartInitialThread(*image, &error))
     {
         std::fprintf(stderr, "error: %s\n", error.c_str());

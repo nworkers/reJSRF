@@ -2,13 +2,15 @@
 
 **미해결 스텁**은 lift된 코드가 부르거나 점프하지만 디스어셈블러가 함수로 찾지 못한 주소다. 생성기는 반환 주소(와 `ret N`의 인자)만 pop하는 함수를 만든다. 스텁이 실행되면 원본이 그 주소에서 하던 일이 빠진다. 목록은 `gen/jsrf_us/gen/recomp_stubs_unresolved.c`에 있고, 재생성할 때마다 바뀔 수 있다.
 
-## 1. 실행 중 보고 (i055부터)
+## 1. 실행 중 보고 (i055부터, i115에서 upstream 방식으로)
 
-* 스텁은 `RECOMP_UNRESOLVED_STUB(va)`를 부른다. reJSRF는 `RECOMP_STUB_REPORT`를 정의하므로, 스텁이 처음 불릴 때 한 번 보고한다.
+* i115부터: 생성된 스텁 파일의 `RECOMP_STUB_HIT`가, 환경 변수 `RECOMP_STUB_LOG`가 비어 있지 않고 `0`이 아니면, 스텁마다 처음 한 번 보고한다(xboxrecomp upstream). reJSRF 앱은 **Debug 빌드에서만** 이 값을 1로 넣는다(이미 설정돼 있으면 그대로). Release 빌드에서 보려면 `RECOMP_STUB_LOG=1`을 직접 준다.
 
   ```
-  [recomp] unresolved stub <va> called; its code was skipped (returns to <ret>)
+  [STUB] unresolved 0x<va> reached, return 0x<ret> esp 0x<esp>
   ```
+
+* i055~i102: fork 커밋 `5aae5df`로 스텁이 `RECOMP_UNRESOLVED_STUB(va)`를 불러, 항상 `[recomp] unresolved stub <va> called; its code was skipped (returns to <ret>)`를 썼다. i115에서 되돌렸다.
 
 * **확인됨**(i055, RTX 4090): 로고와 데모 95초 동안 보고가 0건이었다.
 
@@ -102,7 +104,14 @@
 * **확인됨**: v0.15.0 + 표 항목 복구([function-discovery](function-discovery.md), 설계 i093)로 다시 생성하면 스텁이 74개에서 **28개**로 준다. 26개는 알려진 함수 본문 안(§3의 alias 구조 한계), 2개는 어느 섹션에도 없는 주소(`0x3F0383B6`, `0x621075D4`)다.
 * **확인됨**: #93의 B 갈래 5개 중 `0xB67B7`, `0xB7FE2`, `0xF7722`, `0xF7726`는 남아 있다. `ret` 뒤 점프 표 자료를 명령으로 읽은 가짜 분기라 실행되지 않는다(v0.14.0부터 맞게 거절).
 * **확인됨**: lift 요약의 `RECOMP_UNIMPL`에서 `in`·`out`·`popfd`가 사라졌다(v0.15.0의 포트 I/O와 `g_eflags`). 남은 것은 `enter` 40, `daa`/`das`/`aas`/`aad`, `outsb` 13, `sti`/`cli`/`iretd`/`ljmp`/`arpl`/`lcall` 등 자료를 코드로 읽은 본문이다([unlifted-instructions](unlifted-instructions.md)).
-* 스텁 보고는 그대로 `RECOMP_STUB_REPORT`로 켜진다. 생성된 스텁 파일의 `RECOMP_STUB_HIT`가 `recomp_unresolved_stub_log(va)`를 먼저 부른다(fork `5aae5df`).
+* 이때 스텁 보고는 `RECOMP_STUB_REPORT`로 켜졌다(fork `5aae5df`). i115에서 upstream 방식으로 바꿨다(§1).
+
+## 5. xboxrecomp v0.16.0 병합 뒤 (i115)
+
+* **확인됨**: fork `rejsrf` `6acdc0c`(v0.16.0 병합)로 다시 생성하면 스텁이 28개에서 **19개**가 된다. 미국판과 일본판의 목록이 같다.
+* 없어진 10개: `0x27CCD`, `0xA82D1`, `0xB67B7`, `0xB7FE2`, `0xF7722`, `0xF7726`, `0x127E61`, `0x127E69`, `0x127E6D`, `0x127E71`. #93의 B 갈래 넷(`0xB67B7` …)도 여기 들어 있다.
+* 새로 생긴 1개: `0x115FE5`. v0.16.0이 점프 표를 함수로 읽은 가짜 분기다([function-discovery §3a](function-discovery.md)). 실행되지 않는다.
+* **확인됨**: Release 빌드를 `RECOMP_STUB_LOG=1`로 3,600프레임(약 60초) 돌렸을 때 `[STUB]` 줄은 0건, `indirect call ... has no target`도 0건이었다.
 
 ---
 
@@ -110,13 +119,15 @@
 
 An **unresolved stub** is an address that lifted code calls or jumps to but the disassembler did not find as a function. The generator emits a function that pops only the return address (and the arguments of a `ret N`). When a stub runs, whatever the original does at that address is skipped. The list is in `gen/jsrf_us/gen/recomp_stubs_unresolved.c` and can change with every regeneration.
 
-## 1. Reporting at run time (from i055)
+## 1. Reporting at run time (from i055; the upstream way from i115)
 
-* Each stub calls `RECOMP_UNRESOLVED_STUB(va)`. reJSRF defines `RECOMP_STUB_REPORT`, so a stub reports once, the first time it is called:
+* From i115: the generated stub file's `RECOMP_STUB_HIT` reports each stub once, the first time it runs, when the environment variable `RECOMP_STUB_LOG` is set, non-empty and not `0` (xboxrecomp upstream). The reJSRF app sets it to 1 **in Debug builds only** (a value already set stays); in Release, give `RECOMP_STUB_LOG=1` yourself:
 
   ```
-  [recomp] unresolved stub <va> called; its code was skipped (returns to <ret>)
+  [STUB] unresolved 0x<va> reached, return 0x<ret> esp 0x<esp>
   ```
+
+* i055 to i102: the fork commit `5aae5df` made stubs call `RECOMP_UNRESOLVED_STUB(va)`, which always wrote `[recomp] unresolved stub <va> called; its code was skipped (returns to <ret>)`; i115 reverted it.
 
 * **Confirmed** (i055, RTX 4090): no reports over 95 s of logos and demo.
 
@@ -210,4 +221,11 @@ Notes:
 * **Confirmed**: regenerated on v0.15.0 with the table-entry recovery ([function-discovery](function-discovery.md), design i093), the stubs drop from 74 to **28**: 26 inside known function bodies (§3's alias limit) and 2 outside every section (`0x3F0383B6`, `0x621075D4`).
 * **Confirmed**: of #93's five B-branch stubs, `0xB67B7`, `0xB7FE2`, `0xF7722` and `0xF7726` remain. They are false branches decoded from jump-table data after a `ret` and never run (rightly refused since v0.14.0).
 * **Confirmed**: `in`, `out` and `popfd` are gone from the lift's `RECOMP_UNIMPL` (v0.15.0's port I/O and `g_eflags`). What remains (`enter` 40, `daa`/`das`/`aas`/`aad`, `outsb` 13, `sti`/`cli`/`iretd`/`ljmp`/`arpl`/`lcall`) is in bodies that are data decoded as code ([unlifted-instructions](unlifted-instructions.md)).
-* Stub reporting still turns on with `RECOMP_STUB_REPORT`: the generated stub file's `RECOMP_STUB_HIT` calls `recomp_unresolved_stub_log(va)` first (fork `5aae5df`).
+* Stub reporting then turned on with `RECOMP_STUB_REPORT` (fork `5aae5df`); i115 moved it to the upstream way (§1).
+
+## 5. After merging xboxrecomp v0.16.0 (i115)
+
+* **Confirmed**: regenerated on the fork's `rejsrf` `6acdc0c` (v0.16.0 merged), the stubs go from 28 to **19**; the US and Japanese lists are the same.
+* The 10 gone: `0x27CCD`, `0xA82D1`, `0xB67B7`, `0xB7FE2`, `0xF7722`, `0xF7726`, `0x127E61`, `0x127E69`, `0x127E6D`, `0x127E71`, including #93's four B-branch stubs (`0xB67B7` ...).
+* The 1 new: `0x115FE5`, a false branch from a jump table v0.16.0 reads as a function ([function-discovery §3a](function-discovery.md)); it never runs.
+* **Confirmed**: a Release build run for 3,600 frames (about 60 s) with `RECOMP_STUB_LOG=1` printed no `[STUB]` line and no `indirect call ... has no target`.
