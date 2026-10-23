@@ -99,13 +99,11 @@ sequenceDiagram
 * `REJSRF_RECOMP_GEN_DIR`(기본 `gen/<REJSRF_VARIANT>/gen`)이 없으면 `rejsrf_recomp`, `rejsrf_decomp_check`, `rejsrf_d3d8_check`를 만들지 않는다(CI). rexbox probe는 항상 빌드되고 CI에서 실행된다. 생성 코드 진단 옵션은 rexbox의 `REXBOX_RECOMP_CALL_PROFILE`(직접 호출 프로파일; `REXBOX_WATCHDOG`가 덤프)과 `REXBOX_RECOMP_ABI_CHECK`다.
 * 실행 시 환경 변수: 런타임의 것은 모두 `REXBOX_` 접두사이고 rexbox ARCHITECTURE §5에 있다. reJSRF 앱의 것은 `REJSRF_HDD_ROOT`(HDD 루트)와 `REJSRF_LANGUAGE`(그 실행의 언어)다.
 * `third_party/rexbox`(submodule, reexec/rexbox v0.0.9 `b2f2653`, MIT)는 자기 submodule로 SDL3 release-3.4.18(zlib, 정적), Dear ImGui v1.93.0(MIT), SMAA(MIT), XbSymbolDatabase(MIT, 도구에만)를 가져온다. 그 안의 xboxrecomp(upstream v0.15.0)는 reJSRF가 쓰지 않는다.
-* `third_party/xboxrecomp`는 포크 `nworkers/xboxrecomp`의 `rejsrf` 브랜치(`5aae5df`)를 가리킨다(`THIRD_PARTY_NOTICES.md`). 이 브랜치는 upstream v0.15.0(`6376eb8`)에 다음을 합친 것이다.
-  * i093의 디스어셈블러 수정(표 항목 복구, 바이트 인덱스 표; upstream PR [#236](https://github.com/sp00nznet/xboxrecomp/pull/236))
+* `third_party/xboxrecomp`는 포크 `nworkers/xboxrecomp`의 `rejsrf` 브랜치(`6acdc0c`)를 가리킨다(`THIRD_PARTY_NOTICES.md`). 이 브랜치는 upstream v0.16.0(`f0f8a46`, i093의 디스어셈블러 수정이 PR [#236](https://github.com/sp00nznet/xboxrecomp/pull/236)으로 들어 있음)에 다음을 합친 것이다.
   * i044의 성능 개선(upstream PR을 보류한 `perf/mem-base-local`, 우리 fork에만 두는 `perf/xmm-intrinsics`)
   * C4310 수정 `fix/fp-cc-cast`
-  * 미해결 스텁 보고: 생성된 스텁 파일의 `RECOMP_STUB_HIT`가 `RECOMP_STUB_REPORT`일 때 `recomp_unresolved_stub_log(va)`를 먼저 부른다(fork 전용, rexbox가 정의를 건다)
 
-  이전 핀(v0.13.1)은 `rejsrf-v0.13`에 남아 있다. upstream v0.15.0으로 옮기는 것은 나중 일이다([설계 i093](docs/design/20261020-i093-xboxrecomp-v0.15.md), [i102](docs/design/20261022-i102-rexbox-submodule.md)).
+  미해결 스텁 보고는 upstream 방식이다. 생성된 스텁 파일의 `RECOMP_STUB_HIT`가 환경 변수 `RECOMP_STUB_LOG`가 있을 때 스텁마다 처음 한 번 `[STUB] ...` 줄을 쓰고, 앱은 Debug 빌드에서만 이 값을 1로 넣는다([설계 i115](docs/design/20261023-i115-xboxrecomp-v0.16.md)). 이전 핀은 `rejsrf-v0.15`(v0.15.0 기반)와 `rejsrf-v0.13`(v0.13.1 기반)에 남아 있다.
 * HLE 대상은 `src/game/jsrf/recomp/hle_libraries.json`의 `libraries`(라이브러리 전체)와 `functions`(개별 함수)로 고른다. 재생성은 식별된 XDK 변수 표 `rexbox_xdk_variables[]`도 생성한다.
 
 ---
@@ -173,11 +171,9 @@ The app gives rexbox its identity and window title, loads and identifies the XBE
 * **No generated code**: without `REJSRF_RECOMP_GEN_DIR` (default `gen/<REJSRF_VARIANT>/gen`), `rejsrf_recomp` and the title tools are not created (CI). The rexbox probes are always built and run in CI. The generated-code diagnostics are rexbox's options `REXBOX_RECOMP_CALL_PROFILE` and `REXBOX_RECOMP_ABI_CHECK`.
 * **Environment variables**: the runtime's all carry the `REXBOX_` prefix and are listed in rexbox ARCHITECTURE §5. The app's own are `REJSRF_HDD_ROOT` and `REJSRF_LANGUAGE`.
 * **`third_party/rexbox`** (submodule, reexec/rexbox v0.0.9 `b2f2653`, MIT) brings its own submodules: SDL3 release-3.4.18 (zlib, static), Dear ImGui v1.93.0 (MIT), SMAA (MIT) and XbSymbolDatabase (MIT, tools only). Its own xboxrecomp (upstream v0.15.0) is not used by reJSRF.
-* **`third_party/xboxrecomp`** points at the fork's `rejsrf` branch (`5aae5df`): upstream v0.15.0 plus
-  * i093's disassembler fixes (upstream PR [#236](https://github.com/sp00nznet/xboxrecomp/pull/236))
+* **`third_party/xboxrecomp`** points at the fork's `rejsrf` branch (`6acdc0c`): upstream v0.16.0 (`f0f8a46`, which carries i093's disassembler fixes as PR [#236](https://github.com/sp00nznet/xboxrecomp/pull/236)) plus
   * i044's performance branches
   * the C4310 fix
-  * the unresolved-stub report under `RECOMP_STUB_REPORT`, which rexbox defines
 
-  The previous pin stays on `rejsrf-v0.13`. Moving to upstream v0.15.0 is later work ([design i093](docs/design/20261020-i093-xboxrecomp-v0.15.md), [i102](docs/design/20261022-i102-rexbox-submodule.md)).
+  Unresolved stubs report the upstream way: the generated stub file's `RECOMP_STUB_HIT` writes a `[STUB] ...` line the first time each stub runs when the environment variable `RECOMP_STUB_LOG` is set, and the app sets it to 1 in Debug builds only ([design i115](docs/design/20261023-i115-xboxrecomp-v0.16.md)). Earlier pins stay on `rejsrf-v0.15` (on v0.15.0) and `rejsrf-v0.13` (on v0.13.1).
 * **HLE targets** are chosen in `hle_libraries.json` by `libraries` and single `functions`, and regeneration also emits the `rexbox_xdk_variables[]` table.
