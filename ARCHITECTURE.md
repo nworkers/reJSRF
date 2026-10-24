@@ -25,7 +25,7 @@ flowchart BT
 
 | 타깃 | 경로 | 책임 | 상태 |
 |---|---|---|---|
-| rexbox 타깃 | `third_party/rexbox/` | 플랫폼(SDL3 + OpenGL), XBE, 런타임, 재컴파일 ABI 어댑터, HLE(kernel, xapi, d3d8, dsound, xinput), `imgui`; 도구 `rexbox_xbe_info`, `rexbox_xdk_symbols`, probe 세 개(kernel, dsound, d3d8; CTest) | rexbox v0.0.9, [rexbox ARCHITECTURE](third_party/rexbox/ARCHITECTURE.md) |
+| rexbox 타깃 | `third_party/rexbox/` | 플랫폼(SDL3 + OpenGL), XBE, 런타임, 재컴파일 ABI 어댑터, HLE(kernel, xapi, d3d8, dsound, xinput), `imgui`; 도구 `rexbox_xbe_info`, `rexbox_xdk_symbols`, probe 세 개(kernel, dsound, d3d8; CTest) | rexbox v0.0.11, [rexbox ARCHITECTURE](third_party/rexbox/ARCHITECTURE.md) |
 | `rejsrf_game` | `src/game/jsrf/`, `include/rejsrf/` | 프로파일(XBE 판 식별, HLE 주소 바인딩, 언어), 판별 자료 주소(`jsrf_addresses.h`), 디컴파일 함수, 함수 탐색 seed(`recomp/seed_functions.json` 손으로 20개(실행에서 닿은 `observed` 1개 포함), `recomp/seed_pointer_targets.json` 포인터로만 참조되는 함수 162개: `scripts/recomp/find_pointer_targets.py`) | 디컴파일 22개(`decomp/mmatrix.c`: MMATRIX 행렬 스택 21개, 이식 가능한 C, i073), 호스트 어댑터 2개(`decomp/adxm_lock.c`, CRI ADXM 잠금 콜백과 SVM "모두 풀기" 루프, i068·i091·i100; `decomp/camera_frustum.c`, Hor+ 와이드에서 절두체 컬링의 가로 시야, i097; 호스트 훅은 `include/rejsrf/jsrf_host.h`) |
 | `rejsrf_recomp` | `gen/<변형>/gen/`(`jsrf_us` 또는 `jsrf_jp`, gitignore) | lift된 C 9,526개 함수. rexbox의 `rexbox_add_recompiled_library`로 만든다 | `gen/`이 있을 때만 |
 | `rejsrf` | `src/app/` | 게임 디렉터리의 `default.xbe`(또는 `--xbe <파일>`)를 읽어 내용으로 식별, 부팅 orchestration과 스레드 보고, 설정 오버레이 화면과 `rejsrf.ini` | 로고 시퀀스와 3D 어트랙트 데모 |
@@ -100,7 +100,7 @@ sequenceDiagram
 * **빌드 변형**: `REJSRF_VARIANT=jsrf_us|jsrf_jp`(기본 `jsrf_us`)가 실행 파일이 돌릴 디스크를 정한다. 실행 파일 하나는 한 판만 돌린다. 두 판은 함수 주소가 같아 seed와 디컴파일 함수 이름을 공유하고(재생성 때 `function_fingerprints.json`으로 확인), 자료 주소만 `include/rejsrf/jsrf_addresses.h`에서 `REJSRF_VARIANT_JP`로 갈린다. 프로파일의 `BuiltVariant()`와 `NativeLanguage()`가 그 판을 알려 준다. 판은 파일 이름이 아니라 내용(앱은 인증서, 스크립트는 MD5)으로 식별한다([design i108](docs/design/20261020-i108-japanese-variant.md)).
 * `REJSRF_RECOMP_GEN_DIR`(기본 `gen/<REJSRF_VARIANT>/gen`)이 없으면 `rejsrf_recomp`, `rejsrf_decomp_check`, `rejsrf_d3d8_check`를 만들지 않는다(CI). rexbox probe는 항상 빌드되고 CI에서 실행된다. 생성 코드 진단 옵션은 rexbox의 `REXBOX_RECOMP_CALL_PROFILE`(직접 호출 프로파일; `REXBOX_WATCHDOG`가 덤프)과 `REXBOX_RECOMP_ABI_CHECK`다.
 * 실행 시 환경 변수: 런타임의 것은 모두 `REXBOX_` 접두사이고 rexbox ARCHITECTURE §5에 있다. reJSRF 앱의 것은 `REJSRF_HDD_ROOT`(HDD 루트)와 `REJSRF_LANGUAGE`(그 실행의 언어)다.
-* `third_party/rexbox`(submodule, reexec/rexbox v0.0.9 `b2f2653`, MIT)는 자기 submodule로 SDL3 release-3.4.18(zlib, 정적), Dear ImGui v1.93.0(MIT), SMAA(MIT), XbSymbolDatabase(MIT, 도구에만)를 가져온다. rexbox는 xboxrecomp를 갖지 않는다(rexbox issue #26).
+* `third_party/rexbox`(submodule, reexec/rexbox v0.0.11 `d532817`, MIT)는 자기 submodule로 SDL3 release-3.4.18(zlib, 정적), Dear ImGui v1.93.0(MIT), SMAA(MIT), XbSymbolDatabase(MIT, 도구에만)를 가져온다. rexbox는 xboxrecomp를 갖지 않는다(rexbox issue #26).
 * `third_party/xboxrecomp`는 포크 `nworkers/xboxrecomp`의 `rejsrf` 브랜치(`6acdc0c`)를 가리킨다(`THIRD_PARTY_NOTICES.md`). 이 브랜치는 upstream v0.16.0(`f0f8a46`, i093의 디스어셈블러 수정이 PR [#236](https://github.com/sp00nznet/xboxrecomp/pull/236)으로 들어 있음)에 다음을 합친 것이다.
   * i044의 성능 개선(upstream PR을 보류한 `perf/mem-base-local`, 우리 fork에만 두는 `perf/xmm-intrinsics`)
   * C4310 수정 `fix/fp-cc-cast`
@@ -118,7 +118,7 @@ This records the structure of the code as implemented now. reJSRF holds only the
 
 The diagram and table above apply.
 
-* **rexbox** (v0.0.9) supplies:
+* **rexbox** (v0.0.11) supplies:
   * `rexbox_platform` (SDL3 + OpenGL), `rexbox_xbe`, `rexbox_runtime`, `rexbox_recomp`, the HLE modules and `imgui`
   * the tools `rexbox_xbe_info` and `rexbox_xdk_symbols`, and three probes (kernel, DSOUND, D3D8) registered with CTest
 * **`rejsrf_game`** (`src/game/jsrf/`, `include/rejsrf/`) holds:
@@ -172,7 +172,7 @@ The app gives rexbox its identity and window title, loads and identifies the XBE
   * A build is identified by content (certificate in the app, MD5 in the scripts), never by file name ([design i108](docs/design/20261020-i108-japanese-variant.md)).
 * **No generated code**: without `REJSRF_RECOMP_GEN_DIR` (default `gen/<REJSRF_VARIANT>/gen`), `rejsrf_recomp` and the title tools are not created (CI). The rexbox probes are always built and run in CI. The generated-code diagnostics are rexbox's options `REXBOX_RECOMP_CALL_PROFILE` and `REXBOX_RECOMP_ABI_CHECK`.
 * **Environment variables**: the runtime's all carry the `REXBOX_` prefix and are listed in rexbox ARCHITECTURE §5. The app's own are `REJSRF_HDD_ROOT` and `REJSRF_LANGUAGE`.
-* **`third_party/rexbox`** (submodule, reexec/rexbox v0.0.9 `b2f2653`, MIT) brings its own submodules: SDL3 release-3.4.18 (zlib, static), Dear ImGui v1.93.0 (MIT), SMAA (MIT) and XbSymbolDatabase (MIT, tools only). rexbox holds no xboxrecomp (rexbox issue #26).
+* **`third_party/rexbox`** (submodule, reexec/rexbox v0.0.11 `d532817`, MIT) brings its own submodules: SDL3 release-3.4.18 (zlib, static), Dear ImGui v1.93.0 (MIT), SMAA (MIT) and XbSymbolDatabase (MIT, tools only). rexbox holds no xboxrecomp (rexbox issue #26).
 * **`third_party/xboxrecomp`** points at the fork's `rejsrf` branch (`6acdc0c`): upstream v0.16.0 (`f0f8a46`, which carries i093's disassembler fixes as PR [#236](https://github.com/sp00nznet/xboxrecomp/pull/236)) plus
   * i044's performance branches
   * the C4310 fix

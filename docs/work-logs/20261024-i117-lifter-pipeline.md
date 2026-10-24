@@ -5,7 +5,7 @@
 ## 한 일
 
 1. 기준: 변경 전 코드로 미국판·일본판을 생성하고 검사 스크립트 출력을 저장했다(같은 xboxrecomp, 같은 XBE).
-2. `third_party/rexbox`를 rexbox issue #26 브랜치(`bac8e80`)로 올렸다.
+2. `third_party/rexbox`를 rexbox issue #26 브랜치(`bac8e80`, `5c997b6`)로 올려 검증하고, #26이 머지된 뒤 v0.0.11(`d532817`)에 고정했다.
 3. `scripts/recomp/lifter.py`(새 파일)
    * xboxrecomp 다섯 단계(parse, disasm, func_id, abi, lift)를 `third_party/xboxrecomp`(fork `rejsrf`)로 실행한다.
    * 출력 읽기: `disasm/functions.json` → 함수 시작, `/* ret N */` → `lifted_rets`, `recomp_dispatch.c` → `lifted_addresses`.
@@ -31,7 +31,7 @@
 ## 남은 것
 
 * 사용자 재생성은 필요 없다(생성 코드와 ABI가 같다).
-* rexbox #26 머지·태그 뒤 `third_party/rexbox`를 태그 커밋으로 맞추고 버전 표기(`ARCHITECTURE.md`, `THIRD_PARTY_NOTICES.md`)를 고친다.
+* (끝남) rexbox #26이 v0.0.11(`d532817`)로 머지되어 `third_party/rexbox`와 버전 표기(`ARCHITECTURE.md`, `THIRD_PARTY_NOTICES.md`)를 맞췄다.
 * CI: PR에서 확인.
 
 ---
@@ -43,7 +43,7 @@ Design: [20261024-i117](../design/20261024-i117-lifter-pipeline.md) · Work orde
 ## Done
 
 1. Baseline: the US and Japanese variants generated with the code before the change, and the check scripts' output saved (same xboxrecomp, same XBEs).
-2. `third_party/rexbox` moved to the rexbox issue #26 branch (`bac8e80`).
+2. `third_party/rexbox` moved to the rexbox issue #26 branch (`bac8e80`, `5c997b6`) for verification, then to v0.0.11 (`d532817`) once #26 was merged.
 3. `scripts/recomp/lifter.py` (new)
    * runs xboxrecomp's five steps (parse, disasm, func_id, abi, lift) from `third_party/xboxrecomp` (fork `rejsrf`).
    * reads the output: `disasm/functions.json` → function starts, `/* ret N */` → `lifted_rets`, `recomp_dispatch.c` → `lifted_addresses`.
@@ -69,5 +69,5 @@ Design: [20261024-i117](../design/20261024-i117-lifter-pipeline.md) · Work orde
 ## Open
 
 * Users need not regenerate (the generated code and the ABI are unchanged).
-* After rexbox #26 is merged and tagged, move `third_party/rexbox` to the tag commit and fix the version notes (`ARCHITECTURE.md`, `THIRD_PARTY_NOTICES.md`).
+* (Done) rexbox #26 was merged as v0.0.11 (`d532817`); `third_party/rexbox` and the version notes (`ARCHITECTURE.md`, `THIRD_PARTY_NOTICES.md`) match it.
 * CI: checked on the pull request.
