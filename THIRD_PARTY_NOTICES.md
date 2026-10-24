@@ -8,7 +8,7 @@ reJSRF is MIT licensed. The third-party code below is included in, or ported int
 
 * 출처 / Source: https://github.com/reexec/rexbox
 * 라이선스 / License: MIT (Copyright (c) 2026 rexbox contributors (reJSRF contributors)). 전문은 `third_party/rexbox/LICENSE`. / Full text in `third_party/rexbox/LICENSE`.
-* 포함 방식 / How included: git submodule `third_party/rexbox`, v0.0.13 (`5582630`). reJSRF에서 이력째 분리된 타이틀 비의존 Xbox 런타임(플랫폼 계층, XBE, 런타임, 재컴파일 ABI 어댑터, HLE, 도구, lifter를 모르는 재컴파일 보조 스크립트)이다. 아래 SDL3, Dear ImGui, SMAA, XbSymbolDatabase는 rexbox의 submodule(`third_party/rexbox/third_party/`)로 들어온다. rexbox 자체의 서드파티 고지는 `third_party/rexbox/THIRD_PARTY_NOTICES.md`에 있다. / The title-agnostic Xbox runtime split out of reJSRF with its history (platform layer, XBE, runtime, lifter ABI adapter, HLE, tools, lifter-agnostic recompilation helper scripts). SDL3, Dear ImGui, SMAA and XbSymbolDatabase below come in as rexbox's submodules (`third_party/rexbox/third_party/`); rexbox's own notices are in `third_party/rexbox/THIRD_PARTY_NOTICES.md`.
+* 포함 방식 / How included: git submodule `third_party/rexbox`, v0.0.14 (`befa752`). reJSRF에서 이력째 분리된 타이틀 비의존 Xbox 런타임(플랫폼 계층, XBE, 런타임, 재컴파일 ABI 어댑터, HLE, 도구, lifter를 모르는 재컴파일 보조 스크립트)이다. 아래 SDL3, Dear ImGui, SMAA, XbSymbolDatabase는 rexbox의 submodule(`third_party/rexbox/third_party/`)로 들어온다. rexbox 자체의 서드파티 고지는 `third_party/rexbox/THIRD_PARTY_NOTICES.md`에 있다. / The title-agnostic Xbox runtime split out of reJSRF with its history (platform layer, XBE, runtime, lifter ABI adapter, HLE, tools, lifter-agnostic recompilation helper scripts). SDL3, Dear ImGui, SMAA and XbSymbolDatabase below come in as rexbox's submodules (`third_party/rexbox/third_party/`); rexbox's own notices are in `third_party/rexbox/THIRD_PARTY_NOTICES.md`.
 
 ## xboxrecomp
 
