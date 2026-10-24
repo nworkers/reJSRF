@@ -326,6 +326,7 @@ If the requirement is a simple question or confirmation request, answer it direc
 * tag는 로컬까지만 만들고 원격 push는 사용자가 직접 수행한다.
 * 머지가 완료되면 현재 작업 브랜치를 삭제한다.
 * 릴리스 노트(`docs/release-notes/v<version>.md`)에는 해결된 issue 번호와 그 커밋 ID를 함께 적는다.
+* `main`에 push되면 Actions(`ci.yml`)가 빌드와 probe를 검증한다. 태그를 push하면 Actions(`release.yml`)가 태그가 `VERSION`과 같고 `main` 위에 있는지 확인한 뒤 모든 호스트에서 같은 빌드·probe를 하고, `docs/release-notes/v<version>.md`가 있으면 그 내용으로 GitHub Release를 만든다(소스만; 빌드 산출물은 게임 데이터가 필요하므로 붙이지 않는다). 그러므로 릴리스 노트는 태그를 push하기 전에 `main`에 머지되어 있어야 한다.
 
 ## Git Workflow Rules
 
@@ -345,6 +346,7 @@ If the requirement is a simple question or confirmation request, answer it direc
 * Create tags locally only; the user pushes them to the remote.
 * Delete the task branch after the merge is complete.
 * Release notes (`docs/release-notes/v<version>.md`) record the resolved issue numbers together with their commit IDs.
+* A push to `main` is verified by Actions (`ci.yml`): the build and the probes. A pushed tag is verified by Actions (`release.yml`): the tag must equal `VERSION` and sit on `main`, the same build and probes run on every host, and when `docs/release-notes/v<version>.md` exists a GitHub Release is created with it as the body (source only; no built artifacts, since a build needs game data). The release note must therefore be merged into `main` before the tag is pushed.
 
 ---
 
