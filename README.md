@@ -53,7 +53,7 @@ US판과 일본판을 모두 지원합니다. 실행 파일 하나는 한 판만
 |---|---|
 | Win32 x86 | 빌드됨. 로고 시퀀스와 3D 어트랙트 데모를 SDL3/OpenGL 창에 그리고 음악을 낸다(고정 기능 그리기; 프로그래머블 셰이더는 아직) |
 | Win64 | 예정 |
-| Linux x86 / x64 | 예정 |
+| Linux x64 / x86 | 빌드됨. Win32와 같은 화면과 소리를 낸다(WSL2 Ubuntu 24.04에서 확인; `scripts/build_linux.sh`, [가이드](docs/guides/linux-setup-and-build.md)) |
 | Web (wasm32) | 예정 |
 | Android | 예정 |
 
@@ -97,7 +97,7 @@ See the commands above, and [Win32 development setup and build](docs/guides/win3
 
 ## Platform status
 
-Win32 x86 builds; it draws the logo sequence and the 3D attract demo in the SDL3/OpenGL window and plays the music (fixed-function drawing; programmable shaders not yet). Win64, Linux x86/x64, the web (wasm32) and Android are planned.
+Win32 x86 builds; it draws the logo sequence and the 3D attract demo in the SDL3/OpenGL window and plays the music (fixed-function drawing; programmable shaders not yet). Linux x64 and x86 build and run the same screens and sound (checked on WSL2 Ubuntu 24.04; `scripts/build_linux.sh`, [guide](docs/guides/linux-setup-and-build.md)). Win64, the web (wasm32) and Android are planned.
 
 ## Contributing and working rules
 

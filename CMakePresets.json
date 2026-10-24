@@ -1,0 +1,87 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 25, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "linux-base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" }
+    },
+    {
+      "name": "linux-x86-base",
+      "hidden": true,
+      "inherits": "linux-base",
+      "cacheVariables": { "CMAKE_C_FLAGS": "-m32", "CMAKE_CXX_FLAGS": "-m32" }
+    },
+    {
+      "name": "linux-x64-debug",
+      "displayName": "Linux x64 Debug (GCC or Clang, Ninja)",
+      "inherits": "linux-base",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+    },
+    {
+      "name": "linux-x64-release",
+      "displayName": "Linux x64 Release",
+      "inherits": "linux-base",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    },
+    {
+      "name": "linux-x86-debug",
+      "displayName": "Linux x86 Debug (-m32; needs gcc-multilib and the 32-bit development libraries)",
+      "inherits": "linux-x86-base",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+    },
+    {
+      "name": "linux-x86-release",
+      "displayName": "Linux x86 Release (-m32)",
+      "inherits": "linux-x86-base",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    },
+    {
+      "name": "linux-x64-debug-jp",
+      "displayName": "Linux x64 Debug, Japanese disc",
+      "inherits": "linux-x64-debug",
+      "cacheVariables": { "REJSRF_VARIANT": "jsrf_jp" }
+    },
+    {
+      "name": "linux-x64-release-jp",
+      "displayName": "Linux x64 Release, Japanese disc",
+      "inherits": "linux-x64-release",
+      "cacheVariables": { "REJSRF_VARIANT": "jsrf_jp" }
+    },
+    {
+      "name": "linux-x86-debug-jp",
+      "displayName": "Linux x86 Debug, Japanese disc",
+      "inherits": "linux-x86-debug",
+      "cacheVariables": { "REJSRF_VARIANT": "jsrf_jp" }
+    },
+    {
+      "name": "linux-x86-release-jp",
+      "displayName": "Linux x86 Release, Japanese disc",
+      "inherits": "linux-x86-release",
+      "cacheVariables": { "REJSRF_VARIANT": "jsrf_jp" }
+    }
+  ],
+  "buildPresets": [
+    { "name": "linux-x64-debug", "configurePreset": "linux-x64-debug" },
+    { "name": "linux-x64-release", "configurePreset": "linux-x64-release" },
+    { "name": "linux-x86-debug", "configurePreset": "linux-x86-debug" },
+    { "name": "linux-x86-release", "configurePreset": "linux-x86-release" },
+    { "name": "linux-x64-debug-jp", "configurePreset": "linux-x64-debug-jp" },
+    { "name": "linux-x64-release-jp", "configurePreset": "linux-x64-release-jp" },
+    { "name": "linux-x86-debug-jp", "configurePreset": "linux-x86-debug-jp" },
+    { "name": "linux-x86-release-jp", "configurePreset": "linux-x86-release-jp" }
+  ],
+  "testPresets": [
+    { "name": "linux-x64-debug", "configurePreset": "linux-x64-debug", "output": { "outputOnFailure": true } },
+    { "name": "linux-x64-release", "configurePreset": "linux-x64-release", "output": { "outputOnFailure": true } },
+    { "name": "linux-x86-debug", "configurePreset": "linux-x86-debug", "output": { "outputOnFailure": true } },
+    { "name": "linux-x86-release", "configurePreset": "linux-x86-release", "output": { "outputOnFailure": true } },
+    { "name": "linux-x64-debug-jp", "configurePreset": "linux-x64-debug-jp", "output": { "outputOnFailure": true } },
+    { "name": "linux-x64-release-jp", "configurePreset": "linux-x64-release-jp", "output": { "outputOnFailure": true } },
+    { "name": "linux-x86-debug-jp", "configurePreset": "linux-x86-debug-jp", "output": { "outputOnFailure": true } },
+    { "name": "linux-x86-release-jp", "configurePreset": "linux-x86-release-jp", "output": { "outputOnFailure": true } }
+  ]
+}
