@@ -1,6 +1,6 @@
 # reJSRF 아키텍처
 
-현재 구현된 코드의 구조를 기록한다. reJSRF는 타이틀 계층(JSRF 프로파일, 디컴파일 함수, 생성 코드), 앱, 타이틀 도구만 갖는다. 타이틀을 모르는 Xbox 런타임(플랫폼 계층, XBE, 런타임, 재컴파일 ABI 어댑터, HLE 모듈, 범용 도구와 probe, 재컴파일 파이프라인 스크립트)은 submodule [`third_party/rexbox`](https://github.com/reexec/rexbox)에 있고, 그 구조와 계약은 rexbox의 [ARCHITECTURE.md](third_party/rexbox/ARCHITECTURE.md)에 있다([설계 i102](docs/design/20261022-i102-rexbox-submodule.md)). 결정의 근거는 [설계 i001](docs/design/20261012-i001-project-bootstrap.md), [i002](docs/design/20261012-i002-recomp-pipeline.md), [i006](docs/design/20261012-i006-xdk-symbol-binding.md), [i108](docs/design/20261020-i108-japanese-variant.md)에 있다.
+현재 구현된 코드의 구조를 기록한다. reJSRF는 타이틀 계층(JSRF 프로파일, 디컴파일 함수, 생성 코드), 앱, 타이틀 도구만 갖는다. 타이틀을 모르는 Xbox 런타임(플랫폼 계층, XBE, 런타임, 재컴파일 ABI 어댑터, HLE 모듈, 범용 도구와 probe, lifter를 모르는 재컴파일 보조 스크립트)은 submodule [`third_party/rexbox`](https://github.com/reexec/rexbox)에 있고, 그 구조와 계약은 rexbox의 [ARCHITECTURE.md](third_party/rexbox/ARCHITECTURE.md)에 있다([설계 i102](docs/design/20261022-i102-rexbox-submodule.md)). 결정의 근거는 [설계 i001](docs/design/20261012-i001-project-bootstrap.md), [i002](docs/design/20261012-i002-recomp-pipeline.md), [i006](docs/design/20261012-i006-xdk-symbol-binding.md), [i108](docs/design/20261020-i108-japanese-variant.md)에 있다.
 
 ## 1. 레이어와 CMake 타깃
 
@@ -16,7 +16,7 @@ flowchart BT
     GAME --> RB
     GAME <--> GEN
     GEN --> RB
-    XR -. "REXBOX_XBOXRECOMP_DIR (ABI header)" .-> RB
+    XR -. "scripts/recomp/lifter.py → gen/ (lifted C + ABI header)" .-> GEN
     APP --> GAME
     APP --> RB
     TOOLS --> GAME
@@ -25,7 +25,7 @@ flowchart BT
 
 | 타깃 | 경로 | 책임 | 상태 |
 |---|---|---|---|
-| rexbox 타깃 | `third_party/rexbox/` | 플랫폼(SDL3 + OpenGL), XBE, 런타임, 재컴파일 ABI 어댑터, HLE(kernel, xapi, d3d8, dsound, xinput), `imgui`; 도구 `rexbox_xbe_info`, `rexbox_xdk_symbols`, probe 세 개(kernel, dsound, d3d8; CTest) | rexbox v0.0.9, [rexbox ARCHITECTURE](third_party/rexbox/ARCHITECTURE.md) |
+| rexbox 타깃 | `third_party/rexbox/` | 플랫폼(SDL3 + OpenGL), XBE, 런타임, 재컴파일 ABI 어댑터, HLE(kernel, xapi, d3d8, dsound, xinput), `imgui`; 도구 `rexbox_xbe_info`, `rexbox_xdk_symbols`, probe 세 개(kernel, dsound, d3d8; CTest) | rexbox v0.0.11, [rexbox ARCHITECTURE](third_party/rexbox/ARCHITECTURE.md) |
 | `rejsrf_game` | `src/game/jsrf/`, `include/rejsrf/` | 프로파일(XBE 판 식별, HLE 주소 바인딩, 언어), 판별 자료 주소(`jsrf_addresses.h`), 디컴파일 함수, 함수 탐색 seed(`recomp/seed_functions.json` 손으로 20개(실행에서 닿은 `observed` 1개 포함), `recomp/seed_pointer_targets.json` 포인터로만 참조되는 함수 162개: `scripts/recomp/find_pointer_targets.py`) | 디컴파일 22개(`decomp/mmatrix.c`: MMATRIX 행렬 스택 21개, 이식 가능한 C, i073), 호스트 어댑터 2개(`decomp/adxm_lock.c`, CRI ADXM 잠금 콜백과 SVM "모두 풀기" 루프, i068·i091·i100; `decomp/camera_frustum.c`, Hor+ 와이드에서 절두체 컬링의 가로 시야, i097; 호스트 훅은 `include/rejsrf/jsrf_host.h`) |
 | `rejsrf_recomp` | `gen/<변형>/gen/`(`jsrf_us` 또는 `jsrf_jp`, gitignore) | lift된 C 9,526개 함수. rexbox의 `rexbox_add_recompiled_library`로 만든다 | `gen/`이 있을 때만 |
 | `rejsrf` | `src/app/` | 게임 디렉터리의 `default.xbe`(또는 `--xbe <파일>`)를 읽어 내용으로 식별, 부팅 orchestration과 스레드 보고, 설정 오버레이 화면과 `rejsrf.ini` | 로고 시퀀스와 3D 어트랙트 데모 |
@@ -37,18 +37,20 @@ flowchart BT
 ```mermaid
 flowchart LR
     XBE["roms/.../default.xbe"] --> WRAP["scripts/recomp/regenerate.py<br/>(build by MD5, fingerprints)"]
-    WRAP --> REGEN["rexbox scripts/recomp/regenerate.py"]
+    WRAP --> REGEN["scripts/recomp/lifter.py"]
     SEEDS["src/game/jsrf/recomp/*.json (seeds, hle_libraries, extra symbols, variants)"] --> REGEN
     SYM["rexbox_xdk_symbols (XbSymbolDatabase)"] --> REGEN
     DECOMP["src/game/jsrf/decomp/*.c"] --> REGEN
+    HELP["rexbox scripts/recomp/<br/>hle_overrides.py, xbe_variant.py"] --> REGEN
     REGEN --> TOOLS["third_party/xboxrecomp tools (fork)"]
     TOOLS --> GEN["gen/(variant)/gen/*.c + recomp_types.h"]
-    GEN --> CMAKE["CMake: rejsrf_recomp<br/>ABI header hash must match the pin"]
+    GEN --> CMAKE["CMake: rejsrf_recomp<br/>+ rejsrf_recomp_abi (rexbox recomp_abi.c, same header)"]
 ```
 
-* `scripts/recomp/regenerate.py`는 rexbox 파이프라인의 wrapper다. XBE의 MD5로 판을 정하고(`jsrf_variant.py`, `variants.json`), 미국판이 아니면 함수 지문을 확인한 뒤(`variant_fingerprints.py`, `function_fingerprints.json`), rexbox `regenerate.run(...)`을 reJSRF 경로와 fork xboxrecomp로 부른다.
+* `scripts/recomp/regenerate.py`는 XBE의 MD5로 판을 정하고(`jsrf_variant.py`, `variants.json`), 미국판이 아니면 함수 지문을 확인한 뒤(`variant_fingerprints.py`, `function_fingerprints.json`), `lifter.run(...)`을 reJSRF 경로로 부른다.
+* `scripts/recomp/lifter.py`가 lifter의 모든 것을 가진다([설계 i117](docs/design/20261024-i117-lifter-pipeline.md)). fork xboxrecomp(`third_party/xboxrecomp`)의 다섯 단계(parse, disasm, func_id, abi, lift)를 실행하고, 그 출력(`disasm/functions.json`, `/* ret N */`, `recomp_dispatch.c`)을 읽고, 심볼 이름(`sub_%08X`, `sub_%08X_gen`)을 정한다. XDK 식별, HLE override 생성, 판 확인은 rexbox의 `hle_overrides.py`, `xbe_variant.py`에 평범한 데이터를 넘겨 맡긴다. rexbox는 lifter를 모른다.
 * HLE 대상 라이브러리(`hle_libraries.json`, 지금은 D3D8·D3D8LTCG)의 함수마다 `rexbox_hle_overrides.c`에 override `sub_X`가 생성된다. override는 `rexbox_hle_enter(slot)`로 같은 이름의 HLE export를 부르고, 없으면 실행을 멈춰 `stopped at unimplemented XDK function <library> <name>`을 보고한다. 원본은 `sub_X_gen`으로 남는다(`REXBOX_HLE_FALLBACK=lifted`이면 원본을 실행하고 기록하는 진단 모드).
-* `scripts/recomp/check_hle_pops.py`(D3D8·XInput·DSOUND export의 pop 수와 lift 원본의 `ret n` 대조)와 `find_pointer_targets.py`(데이터·즉시값으로만 참조되는 함수 시작 → seed 파일)도 rexbox 스크립트에 reJSRF 경로를 넘기는 wrapper다.
+* `scripts/recomp/check_hle_pops.py`(D3D8·XInput·DSOUND export의 pop 수와 lift 원본의 `ret n` 대조)와 `find_pointer_targets.py`(데이터·즉시값으로만 참조되는 함수 시작 → seed 파일)는 `lifter.py`로 lift 결과를 읽고 rexbox의 `hle_pops.py`, `pointer_targets.py`(`xbe_variant.py`)로 비교·탐색한다.
 
 ## 3. 실행 흐름
 
@@ -91,14 +93,14 @@ sequenceDiagram
 ## 5. 빌드 구성
 
 * 루트 `CMakeLists.txt`
-  * `REXBOX_XBOXRECOMP_DIR`를 reJSRF의 `third_party/xboxrecomp`로, `REXBOX_BUILD_TOOLS=ON`으로 정한다.
+  * `third_party/xboxrecomp`가 있는지 경로로 확인하고, `REXBOX_BUILD_TOOLS=ON`으로 정한다.
   * `add_subdirectory(third_party/rexbox)`와 `rexbox_apply_host_flags()`를 부른다(MSVC: `/utf-8 /permissive- /EHa`, `NOMINMAX WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS`).
-  * 우리 타깃에는 `rexbox_strict_warnings`(`/W4`)와 라이선스 가드 `rexbox_check_license`를 건다. 생성 코드는 `/w /bigobj /MP`로 빌드한다.
+  * 우리 타깃에는 `rexbox_strict_warnings`(`/W4`)를 건다. 생성 코드는 `/w /bigobj /MP`로 빌드한다. rexbox의 `recomp_abi.c`는 OBJECT 타깃 `rejsrf_recomp_abi`에서 생성 코드 옆의 `recomp_types.h`로 `/W4`로 컴파일된다. xboxrecomp의 LGPL 파일을 막는 CMake 가드는 없고, AGENTS.md의 라이선스 규칙이 이를 정한다.
 * `rejsrf`는 `/LARGEADDRESSAWARE`로 링크하고 이미지 기본 스택은 1 MiB로 둔다. 기본값이 크면 크기를 지정하지 않은 모든 스레드(오디오, SDL, GL 드라이버)가 그만큼 예약해 32비트 주소 공간이 바닥난다(issue #25). 게스트 스레드의 64 MiB 스택은 rexbox의 `CreateHostThread`가 명시한다. 원본을 메인 스레드에서 실행하는 `rejsrf_d3d8_check`만 `/STACK:64MB`를 쓴다. `rejsrf.map`은 `REXBOX_SAMPLE` 결과를 함수 이름으로 묶을 때 쓴다(rexbox `scripts/perf/resolve_samples.py`).
 * **빌드 변형**: `REJSRF_VARIANT=jsrf_us|jsrf_jp`(기본 `jsrf_us`)가 실행 파일이 돌릴 디스크를 정한다. 실행 파일 하나는 한 판만 돌린다. 두 판은 함수 주소가 같아 seed와 디컴파일 함수 이름을 공유하고(재생성 때 `function_fingerprints.json`으로 확인), 자료 주소만 `include/rejsrf/jsrf_addresses.h`에서 `REJSRF_VARIANT_JP`로 갈린다. 프로파일의 `BuiltVariant()`와 `NativeLanguage()`가 그 판을 알려 준다. 판은 파일 이름이 아니라 내용(앱은 인증서, 스크립트는 MD5)으로 식별한다([design i108](docs/design/20261020-i108-japanese-variant.md)).
 * `REJSRF_RECOMP_GEN_DIR`(기본 `gen/<REJSRF_VARIANT>/gen`)이 없으면 `rejsrf_recomp`, `rejsrf_decomp_check`, `rejsrf_d3d8_check`를 만들지 않는다(CI). rexbox probe는 항상 빌드되고 CI에서 실행된다. 생성 코드 진단 옵션은 rexbox의 `REXBOX_RECOMP_CALL_PROFILE`(직접 호출 프로파일; `REXBOX_WATCHDOG`가 덤프)과 `REXBOX_RECOMP_ABI_CHECK`다.
 * 실행 시 환경 변수: 런타임의 것은 모두 `REXBOX_` 접두사이고 rexbox ARCHITECTURE §5에 있다. reJSRF 앱의 것은 `REJSRF_HDD_ROOT`(HDD 루트)와 `REJSRF_LANGUAGE`(그 실행의 언어)다.
-* `third_party/rexbox`(submodule, reexec/rexbox v0.0.9 `b2f2653`, MIT)는 자기 submodule로 SDL3 release-3.4.18(zlib, 정적), Dear ImGui v1.93.0(MIT), SMAA(MIT), XbSymbolDatabase(MIT, 도구에만)를 가져온다. 그 안의 xboxrecomp(upstream v0.15.0)는 reJSRF가 쓰지 않는다.
+* `third_party/rexbox`(submodule, reexec/rexbox v0.0.12 `a018038`, MIT)는 자기 submodule로 SDL3 release-3.4.18(zlib, 정적), Dear ImGui v1.93.0(MIT), SMAA(MIT), XbSymbolDatabase(MIT, 도구에만)를 가져온다. rexbox는 xboxrecomp를 갖지 않는다(rexbox issue #26).
 * `third_party/xboxrecomp`는 포크 `nworkers/xboxrecomp`의 `rejsrf` 브랜치(`6acdc0c`)를 가리킨다(`THIRD_PARTY_NOTICES.md`). 이 브랜치는 upstream v0.16.0(`f0f8a46`, i093의 디스어셈블러 수정이 PR [#236](https://github.com/sp00nznet/xboxrecomp/pull/236)으로 들어 있음)에 다음을 합친 것이다.
   * i044의 성능 개선(upstream PR을 보류한 `perf/mem-base-local`, 우리 fork에만 두는 `perf/xmm-intrinsics`)
   * C4310 수정 `fix/fp-cc-cast`
@@ -110,13 +112,13 @@ sequenceDiagram
 
 # reJSRF Architecture
 
-This records the structure of the code as implemented now. reJSRF holds only the title layer (the JSRF profile, decompiled functions, generated code), the app and the title tools. The title-agnostic Xbox runtime (platform layer, XBE, runtime, lifter ABI adapter, HLE modules, generic tools and probes, the recompilation pipeline scripts) is the submodule [`third_party/rexbox`](https://github.com/reexec/rexbox), whose structure and contracts are in rexbox's [ARCHITECTURE.md](third_party/rexbox/ARCHITECTURE.md) ([design i102](docs/design/20261022-i102-rexbox-submodule.md)). The reasons are in [design i001](docs/design/20261012-i001-project-bootstrap.md), [i002](docs/design/20261012-i002-recomp-pipeline.md), [i006](docs/design/20261012-i006-xdk-symbol-binding.md) and [i108](docs/design/20261020-i108-japanese-variant.md).
+This records the structure of the code as implemented now. reJSRF holds only the title layer (the JSRF profile, decompiled functions, generated code), the app and the title tools. The title-agnostic Xbox runtime (platform layer, XBE, runtime, lifter ABI adapter, HLE modules, generic tools and probes, lifter-agnostic recompilation helper scripts) is the submodule [`third_party/rexbox`](https://github.com/reexec/rexbox), whose structure and contracts are in rexbox's [ARCHITECTURE.md](third_party/rexbox/ARCHITECTURE.md) ([design i102](docs/design/20261022-i102-rexbox-submodule.md)). The reasons are in [design i001](docs/design/20261012-i001-project-bootstrap.md), [i002](docs/design/20261012-i002-recomp-pipeline.md), [i006](docs/design/20261012-i006-xdk-symbol-binding.md) and [i108](docs/design/20261020-i108-japanese-variant.md).
 
 ## 1. Layers and CMake targets
 
 The diagram and table above apply.
 
-* **rexbox** (v0.0.9) supplies:
+* **rexbox** (v0.0.11) supplies:
   * `rexbox_platform` (SDL3 + OpenGL), `rexbox_xbe`, `rexbox_runtime`, `rexbox_recomp`, the HLE modules and `imgui`
   * the tools `rexbox_xbe_info` and `rexbox_xdk_symbols`, and three probes (kernel, DSOUND, D3D8) registered with CTest
 * **`rejsrf_game`** (`src/game/jsrf/`, `include/rejsrf/`) holds:
@@ -132,7 +134,7 @@ The diagram and table above apply.
 
 ## 2. Generating the recompiled code
 
-`scripts/recomp/regenerate.py` wraps rexbox's pipeline. It picks the build from the XBE's MD5 (`jsrf_variant.py`, `variants.json`); for a build other than the US one it checks the function fingerprints (`variant_fingerprints.py`, `function_fingerprints.json`); then it calls rexbox's `regenerate.run(...)` with reJSRF's paths and the fork xboxrecomp. For every function of the libraries in `hle_libraries.json` (now D3D8 and D3D8LTCG), an override `sub_X` in `rexbox_hle_overrides.c` calls the HLE export of the same name through `rexbox_hle_enter(slot)`, or stops and reports `stopped at unimplemented XDK function <library> <name>`; the original stays as `sub_X_gen` (`REXBOX_HLE_FALLBACK=lifted` runs and logs it instead). `check_hle_pops.py` (export pop counts against the originals' `ret n`) and `find_pointer_targets.py` (functions referenced only from data or immediates → the seed file) are wrappers over rexbox's scripts too.
+`scripts/recomp/regenerate.py` picks the build from the XBE's MD5 (`jsrf_variant.py`, `variants.json`); for a build other than the US one it checks the function fingerprints (`variant_fingerprints.py`, `function_fingerprints.json`); then it calls `lifter.run(...)` with reJSRF's paths. `scripts/recomp/lifter.py` holds everything about the lifter ([design i117](docs/design/20261024-i117-lifter-pipeline.md)): it runs the five steps (parse, disasm, func_id, abi, lift) of the fork xboxrecomp (`third_party/xboxrecomp`), reads their output (`disasm/functions.json`, `/* ret N */`, `recomp_dispatch.c`) and owns the symbol names (`sub_%08X`, `sub_%08X_gen`); XDK identification, the HLE overrides and the build check go to rexbox's `hle_overrides.py` and `xbe_variant.py` as plain data. rexbox knows no lifter. For every function of the libraries in `hle_libraries.json` (now D3D8 and D3D8LTCG), an override `sub_X` in `rexbox_hle_overrides.c` calls the HLE export of the same name through `rexbox_hle_enter(slot)`, or stops and reports `stopped at unimplemented XDK function <library> <name>`; the original stays as `sub_X_gen` (`REXBOX_HLE_FALLBACK=lifted` runs and logs it instead). `check_hle_pops.py` (export pop counts against the originals' `ret n`) and `find_pointer_targets.py` (functions referenced only from data or immediates → the seed file) read the lifted output through `lifter.py` and compare or scan with rexbox's `hle_pops.py` and `pointer_targets.py` (`xbe_variant.py`).
 
 ## 3. Execution flow
 
@@ -157,9 +159,9 @@ The app gives rexbox its identity and window title, loads and identifies the XBE
 ## 5. Build configuration
 
 * **Root `CMakeLists.txt`**
-  * It sets `REXBOX_XBOXRECOMP_DIR` to reJSRF's `third_party/xboxrecomp` and `REXBOX_BUILD_TOOLS=ON`.
+  * It checks by path that `third_party/xboxrecomp` is present and sets `REXBOX_BUILD_TOOLS=ON`.
   * It calls `add_subdirectory(third_party/rexbox)` and `rexbox_apply_host_flags()` (MSVC: `/utf-8 /permissive- /EHa`, `NOMINMAX WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS`).
-  * Our targets get `rexbox_strict_warnings` (`/W4`) and the license guard `rexbox_check_license`. Generated code builds with `/w /bigobj /MP`.
+  * Our targets get `rexbox_strict_warnings` (`/W4`). Generated code builds with `/w /bigobj /MP`. rexbox's `recomp_abi.c` compiles in the OBJECT target `rejsrf_recomp_abi` at `/W4` against the `recomp_types.h` next to the generated code. No CMake guard blocks xboxrecomp's LGPL files; AGENTS.md's license rule does.
 * **Linking**
   * `rejsrf` links with `/LARGEADDRESSAWARE` and keeps the image default stack at 1 MiB (issue #25); guest threads get their 64 MiB stacks from rexbox's `CreateHostThread`.
   * Only `rejsrf_d3d8_check` uses `/STACK:64MB`.
@@ -170,7 +172,7 @@ The app gives rexbox its identity and window title, loads and identifies the XBE
   * A build is identified by content (certificate in the app, MD5 in the scripts), never by file name ([design i108](docs/design/20261020-i108-japanese-variant.md)).
 * **No generated code**: without `REJSRF_RECOMP_GEN_DIR` (default `gen/<REJSRF_VARIANT>/gen`), `rejsrf_recomp` and the title tools are not created (CI). The rexbox probes are always built and run in CI. The generated-code diagnostics are rexbox's options `REXBOX_RECOMP_CALL_PROFILE` and `REXBOX_RECOMP_ABI_CHECK`.
 * **Environment variables**: the runtime's all carry the `REXBOX_` prefix and are listed in rexbox ARCHITECTURE §5. The app's own are `REJSRF_HDD_ROOT` and `REJSRF_LANGUAGE`.
-* **`third_party/rexbox`** (submodule, reexec/rexbox v0.0.9 `b2f2653`, MIT) brings its own submodules: SDL3 release-3.4.18 (zlib, static), Dear ImGui v1.93.0 (MIT), SMAA (MIT) and XbSymbolDatabase (MIT, tools only). Its own xboxrecomp (upstream v0.15.0) is not used by reJSRF.
+* **`third_party/rexbox`** (submodule, reexec/rexbox v0.0.12 `a018038`, MIT) brings its own submodules: SDL3 release-3.4.18 (zlib, static), Dear ImGui v1.93.0 (MIT), SMAA (MIT) and XbSymbolDatabase (MIT, tools only). rexbox holds no xboxrecomp (rexbox issue #26).
 * **`third_party/xboxrecomp`** points at the fork's `rejsrf` branch (`6acdc0c`): upstream v0.16.0 (`f0f8a46`, which carries i093's disassembler fixes as PR [#236](https://github.com/sp00nznet/xboxrecomp/pull/236)) plus
   * i044's performance branches
   * the C4310 fix

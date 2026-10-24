@@ -268,7 +268,7 @@ If the requirement is a simple question or confirmation request, answer it direc
 
 * 프로젝트 라이선스는 `MIT License`다.
 * 서드파티 오픈소스는 MIT, BSD, zlib, ISC, Apache-2.0, Boost 같은 허용적 라이선스만 빌드에 포함한다.
-* GPL, LGPL, AGPL 같은 전염성 라이선스의 코드는 컴파일·링크하지 않고 저장소에 복사하지도 않는다. rexbox의 라이선스 가드(`rexbox_check_license`, `REXBOX_COPYLEFT_PATHS`)가 우리 타깃과 생성 코드에서 xboxrecomp의 LGPL 파일을 막는다.
+* GPL, LGPL, AGPL 같은 전염성 라이선스의 코드는 컴파일·링크하지 않고 저장소에 복사하지도 않는다. xboxrecomp의 LGPL 파일(`src/apu/*`, `src/nv2a/nv2a_core.c`, `src/nv2a/nv2a_regs.h`, `src/nv2a/nv2a_state.h`, 그것을 include하는 `include/xbox/xboxrecomp.h`)은 어떤 타깃의 소스 목록이나 include 경로에도 넣지 않는다. 우리 타깃은 생성 코드와 그 옆의 MIT 헤더(`gen/<변형>/gen/recomp_types.h`)만 컴파일한다. 이 규칙을 강제하는 CMake 가드는 없다([설계 i117](docs/design/20261024-i117-lifter-pipeline.md)).
 * 전염성 라이선스 프로젝트(xemu, Cxbx-Reloaded 등)는 동작을 이해하는 지식 출처로만 참고하고, 코드를 옮기지 않는다.
 * 라이선스가 명시되지 않았거나 LLM 기여를 금지한 프로젝트(예: Codeberg `KeybadeBlox/JSRF-Decompilation`)의 코드는 가져오지 않는다. 공개 문서의 사실은 출처를 달아 참고할 수 있다.
 * 서드파티 코드를 가져오면 같은 작업에서 `THIRD_PARTY_NOTICES.md`를 갱신한다. 예외가 필요하면 먼저 문서화하고 사용자 확인을 받는다.
@@ -278,7 +278,7 @@ If the requirement is a simple question or confirmation request, answer it direc
 
 * The project license is the `MIT License`.
 * Only permissively licensed third-party code (MIT, BSD, zlib, ISC, Apache-2.0, Boost, ...) is built into the project.
-* Copyleft code (GPL, LGPL, AGPL) is neither compiled, linked, nor copied into the repository. rexbox's license guard (`rexbox_check_license`, `REXBOX_COPYLEFT_PATHS`) blocks xboxrecomp's LGPL files in our targets and the generated code.
+* Copyleft code (GPL, LGPL, AGPL) is neither compiled, linked, nor copied into the repository. xboxrecomp's LGPL files (`src/apu/*`, `src/nv2a/nv2a_core.c`, `src/nv2a/nv2a_regs.h`, `src/nv2a/nv2a_state.h`, and `include/xbox/xboxrecomp.h`, which includes them) never go into any target's source list or include path. Our targets compile only the generated code and the MIT header next to it (`gen/<variant>/gen/recomp_types.h`). No CMake guard enforces this rule ([design i117](docs/design/20261024-i117-lifter-pipeline.md)).
 * Copyleft projects (xemu, Cxbx-Reloaded, ...) are consulted only as sources of knowledge about behavior; their code is not carried over.
 * Do not take code from projects with no stated license or that forbid LLM contributions (for example Codeberg `KeybadeBlox/JSRF-Decompilation`). Facts from their public documents may be used with attribution.
 * When bringing in third-party code, update `THIRD_PARTY_NOTICES.md` in the same task. If an exception is needed, document it and confirm with the user first.

@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Regenerate the lifted C for the Jet Set Radio Future build of an XBE (gen/<variant>/).
 
-A wrapper over rexbox's scripts/recomp/regenerate.py (the pipeline: XDK
-identification, parse, disasm, func_id, abi, HLE and decompiled overrides,
-lift) that adds what only this title knows and fills in its paths:
+A wrapper over this project's pipeline (lifter.py: XDK identification,
+parse, disasm, func_id, abi, HLE and decompiled overrides, lift) that adds what only this title knows and fills in its paths:
 
 * The build: the XBE (default.xbe, or the one --xbe names) is identified by
   its MD5 (src/game/jsrf/recomp/variants.json, jsrf_variant.py), never by its
@@ -14,8 +13,8 @@ lift) that adds what only this title knows and fills in its paths:
   they hold the same code there (docs/design/20261020-i108-japanese-variant.md),
   and the run stops if not.
 * The lifter: this project's own xboxrecomp pin (third_party/xboxrecomp, the
-  fork's rejsrf branch), so the generated code matches the ABI header the
-  build compiles rexbox_recomp against.
+  fork's rejsrf branch). The generated code carries its ABI header, which
+  rexbox's side of the ABI compiles against.
 
 The generated code is derived from the game's bytes and is never committed.
 
@@ -31,9 +30,9 @@ import sys
 from jsrf_variant import identify_xbe
 from variant_fingerprints import check as check_fingerprints
 
-ROOT = pathlib.Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "third_party" / "rexbox" / "scripts" / "recomp"))
-import regenerate as rexbox_regenerate  # noqa: E402  (rexbox's; this file runs as __main__)
+import lifter
+
+ROOT = lifter.ROOT
 
 TITLE = ROOT / "src" / "game" / "jsrf"
 DEFAULT_XBE = ROOT / "roms" / "Jet Set Radio Future" / "default.xbe"
@@ -47,8 +46,8 @@ def main():
     args, rest = parser.parse_known_args()
     if "-h" in rest or "--help" in rest:
         parser.print_help()
-        print("\nrexbox's options (passed through):")
-        return rexbox_regenerate.run(["--help"])
+        print("\nthe pipeline's options (passed through):")
+        return lifter.run(["--help"])
 
     xbe = args.xbe.resolve()
     if not xbe.is_file():
@@ -66,7 +65,7 @@ def main():
                      + "\n  ".join(problems))
         print("    named functions: all hold the USA code at the same address", flush=True)
 
-    return rexbox_regenerate.run(
+    return lifter.run(
         ["--xbe", str(xbe), "--variant", variant] + rest,
         title_dir=TITLE / "recomp",
         override_dirs=[TITLE / "decomp"],

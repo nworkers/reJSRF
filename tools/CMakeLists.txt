@@ -7,7 +7,6 @@
 if(TARGET rejsrf_recomp)
     add_executable(rejsrf_decomp_check decomp_check/main.cpp)
     target_link_libraries(rejsrf_decomp_check PRIVATE rejsrf_game)
-    rexbox_check_license(rejsrf_decomp_check)
     rexbox_strict_warnings(rejsrf_decomp_check)
 
     # Compares the D3D8 HLE exports with the lifted XDK originals they
@@ -17,6 +16,5 @@ if(TARGET rejsrf_recomp)
     if(MSVC)
         target_link_options(rejsrf_d3d8_check PRIVATE /STACK:67108864)
     endif()
-    rexbox_check_license(rejsrf_d3d8_check)
     rexbox_strict_warnings(rejsrf_d3d8_check)
 endif()
