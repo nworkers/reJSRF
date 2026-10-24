@@ -79,3 +79,63 @@ jobs:
           & .\build\win32_x86_jp\src\app\Release\rejsrf.exe docs
           if ($LASTEXITCODE -ne 1) { throw "directory: expected exit code 1, got $LASTEXITCODE" }
           exit 0
+
+  linux:
+    name: Linux ${{ matrix.arch }} ${{ matrix.configuration }} build
+    # Pinned like the Windows image. x86 is a -m32 build on the multilib
+    # toolchain with the i386 development libraries SDL3 compiles against
+    # (docs/design/20261025-i119-linux.md, rexbox's design i004).
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        arch: [x64, x86]
+        configuration: [debug, release]
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Install the toolchain and SDL3's development libraries
+        run: |
+          set -e
+          libraries="libasound2-dev libpulse-dev libx11-dev libxext-dev libxcursor-dev libxi-dev libxrandr-dev libxss-dev libxtst-dev libxfixes-dev libxkbcommon-dev libwayland-dev libdecor-0-dev libdrm-dev libgbm-dev libgl-dev libegl-dev"
+          if [ "${{ matrix.arch }}" = "x86" ]; then
+            sudo dpkg --add-architecture i386
+            sudo apt-get update
+            i386=""
+            for p in $libraries; do
+              i386="$i386 $p:i386"
+            done
+            sudo apt-get install -y gcc-multilib g++-multilib ninja-build $i386
+          else
+            sudo apt-get update
+            sudo apt-get install -y ninja-build $libraries
+          fi
+
+      - name: Build and run the probes (ctest)
+        run: bash scripts/build_linux.sh ${{ matrix.arch }} ${{ matrix.configuration }}
+
+      - name: Smoke - app rejects a file and a directory without an XBE
+        run: |
+          app=build/linux-${{ matrix.arch }}-${{ matrix.configuration }}/src/app/rejsrf
+          set +e
+          "$app" LICENSE; code=$?
+          [ "$code" = 1 ] || { echo "file: expected exit code 1, got $code"; exit 1; }
+          "$app" docs; code=$?
+          [ "$code" = 1 ] || { echo "directory: expected exit code 1, got $code"; exit 1; }
+
+      # The Japanese-disc variant: its own tree, so the REJSRF_VARIANT_JP
+      # branches compile on GCC too. x64 Release only.
+      - name: Build - Japanese variant (app)
+        if: matrix.arch == 'x64' && matrix.configuration == 'release'
+        run: bash scripts/build_linux.sh x64 release jp --target rejsrf
+
+      - name: Smoke - Japanese variant rejects a directory without an XBE
+        if: matrix.arch == 'x64' && matrix.configuration == 'release'
+        run: |
+          set +e
+          build/linux-x64-release-jp/src/app/rejsrf docs; code=$?
+          [ "$code" = 1 ] || { echo "directory: expected exit code 1, got $code"; exit 1; }

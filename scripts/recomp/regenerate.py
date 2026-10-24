@@ -38,6 +38,22 @@ TITLE = ROOT / "src" / "game" / "jsrf"
 DEFAULT_XBE = ROOT / "roms" / "Jet Set Radio Future" / "default.xbe"
 
 
+def symbol_tool_candidates():
+    """Where a build of this host put rexbox_xdk_symbols, the first existing one used.
+
+    Only this host's builds: a checkout shared between Windows and WSL holds
+    both, and a Windows .exe started from Linux (WSL's interop) cannot open
+    the /mnt/... paths it is given, failing as if the XBE were not one."""
+    tools = ROOT / "build"
+    if sys.platform == "win32":
+        return [tools / "win32_x86" / "third_party" / "rexbox" / "tools" / config / "rexbox_xdk_symbols.exe"
+                for config in ("Release", "Debug")]
+    # The Linux presets (scripts/build_linux.sh), then a hand-made build folder.
+    return [tools / f"linux-{arch}-{config}" / "third_party" / "rexbox" / "tools" / "rexbox_xdk_symbols"
+            for arch in ("x64", "x86") for config in ("release", "debug")] + [
+        tools / "third_party" / "rexbox" / "tools" / "rexbox_xdk_symbols"]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0], add_help=False)
     parser.add_argument("--xbe", type=pathlib.Path, default=DEFAULT_XBE)
@@ -71,11 +87,7 @@ def main():
         override_dirs=[TITLE / "decomp"],
         gen_root=ROOT / "gen",
         xboxrecomp=ROOT / "third_party" / "xboxrecomp",
-        symbol_tool_candidates=[
-            ROOT / "build" / "win32_x86" / "third_party" / "rexbox" / "tools" / "Release" / "rexbox_xdk_symbols.exe",
-            ROOT / "build" / "win32_x86" / "third_party" / "rexbox" / "tools" / "Debug" / "rexbox_xdk_symbols.exe",
-            ROOT / "build" / "third_party" / "rexbox" / "tools" / "rexbox_xdk_symbols",
-        ],
+        symbol_tool_candidates=symbol_tool_candidates(),
         root=ROOT,
     )
 

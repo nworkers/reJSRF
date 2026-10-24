@@ -1,0 +1,126 @@
+name: Release
+
+# Tag verification and releases (docs/design/20261025-i119-linux.md section 7,
+# after rexbox's release.yml). A pushed v<major>.<minor>.<patch> tag must name
+# the VERSION file's value and sit on main; the app then builds on every host
+# as in CI (no game data in Actions, so without generated code), the rexbox
+# probes run, and when the tag has a release note,
+# docs/release-notes/v<version>.md, a GitHub Release is created with that note
+# as its body. Source only: no built artifacts are attached, since a playable
+# build needs the user's own game data (GitHub adds the source archives).
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  verify-win32:
+    name: Verify the tag (Win32 x86 ${{ matrix.configuration }})
+    runs-on: windows-2022
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        configuration: [Debug, Release]
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          # The whole history, so the tag's commit can be checked against main.
+          fetch-depth: 0
+
+      - name: Check the tag against VERSION and main
+        shell: powershell
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $version = (Get-Content VERSION -TotalCount 1).Trim()
+          if ($tag -ne "v$version") { throw "tag $tag does not match VERSION $version" }
+          git fetch --quiet origin main:refs/remotes/origin/main
+          git merge-base --is-ancestor $env:GITHUB_SHA refs/remotes/origin/main
+          if ($LASTEXITCODE -ne 0) { throw "tag $tag is not on main" }
+          Write-Host "tag $tag matches VERSION and is on main"
+
+      - name: Build
+        shell: powershell
+        run: .\scripts\build_win32_x86.ps1 -Configuration ${{ matrix.configuration }}
+
+      - name: Probes (CTest)
+        shell: powershell
+        run: ctest --test-dir build\win32_x86 -C ${{ matrix.configuration }} --output-on-failure
+
+  verify-linux:
+    name: Verify the tag (Linux ${{ matrix.arch }} ${{ matrix.configuration }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        arch: [x64, x86]
+        configuration: [debug, release]
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Check the tag against VERSION and main
+        run: |
+          set -e
+          tag="${{ github.ref_name }}"
+          version="$(head -n 1 VERSION | tr -d '[:space:]')"
+          if [ "$tag" != "v$version" ]; then echo "tag $tag does not match VERSION $version"; exit 1; fi
+          git fetch --quiet origin main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main; then echo "tag $tag is not on main"; exit 1; fi
+          echo "tag $tag matches VERSION and is on main"
+
+      - name: Install the toolchain and SDL3's development libraries
+        run: |
+          set -e
+          libraries="libasound2-dev libpulse-dev libx11-dev libxext-dev libxcursor-dev libxi-dev libxrandr-dev libxss-dev libxtst-dev libxfixes-dev libxkbcommon-dev libwayland-dev libdecor-0-dev libdrm-dev libgbm-dev libgl-dev libegl-dev"
+          if [ "${{ matrix.arch }}" = "x86" ]; then
+            sudo dpkg --add-architecture i386
+            sudo apt-get update
+            i386=""
+            for p in $libraries; do
+              i386="$i386 $p:i386"
+            done
+            sudo apt-get install -y gcc-multilib g++-multilib ninja-build $i386
+          else
+            sudo apt-get update
+            sudo apt-get install -y ninja-build $libraries
+          fi
+
+      - name: Build and run the probes (ctest)
+        run: bash scripts/build_linux.sh ${{ matrix.arch }} ${{ matrix.configuration }}
+
+  release:
+    name: Create the release from the release note
+    needs: [verify-win32, verify-linux]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Create the GitHub Release when the release note exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          note="docs/release-notes/${TAG}.md"
+          if [ ! -f "$note" ]; then
+            echo "no release note at $note; the tag is verified but no release is created"
+            exit 0
+          fi
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "release $TAG already exists; nothing to do"
+            exit 0
+          fi
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --title "reJSRF $TAG" --notes-file "$note"
+          echo "created release $TAG from $note (source archives only)"
