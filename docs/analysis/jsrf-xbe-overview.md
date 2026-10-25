@@ -6,20 +6,25 @@ This is what `rexbox_xbe_info` (issue #1) read from the two XBEs of the user's d
 
 ## 1. 빌드 변형 / Build variants
 
-| 항목 / Field | US판 / USA `default.xbe` | 일본판 / Japan `default.xbe` |
-|---|---|---|
-| 지역 / Region | 1 (North America) | 2 (Japan) |
-| MD5 | `f4e366bfdceee551a09f42219c90d84e` | `d8490cdb75bd47b36c62effdf1461ae0` |
-| SHA-1 | `86ffb4081ffb1a8a5da2e03d3838382ce31d7ae8` | `178dd80cb800846778c4827f12e2a7a17a52dab1` |
-| 크기 / Size | 2,281,472 | 2,281,472 |
-| 인증서 시각 / Certificate time | `3C5881D9` | `3C56850C` |
-| 이미지 시각 / Image time | `3C558EA7` | `3C559627` |
-| TLS index 주소 / address | `00264850` | `00264838` |
-| `.data` raw size | `00044574` | `00044554` |
-| 프로파일 레이블 / Profile label | `USA (region 1)` — **1차 타깃 / primary** | `Japan (region 2)` — 식별만 / recognized only |
+| 항목 / Field | US판 / USA `default.xbe` | 일본판 / Japan `default.xbe` | 한국 번들 / Korea bundle `SegaJSRF.xbe` |
+|---|---|---|---|
+| 지역 / Region | 1 (North America) | 2 (Japan) | 2 (Asia / Japan) |
+| MD5 | `f4e366bfdceee551a09f42219c90d84e` | `d8490cdb75bd47b36c62effdf1461ae0` | `8bf3c450e9c1cc39730d4025ef987e2c` |
+| SHA-1 | `86ffb4081ffb1a8a5da2e03d3838382ce31d7ae8` | `178dd80cb800846778c4827f12e2a7a17a52dab1` | `33adb802ce61d24d5243cc8a2c9a0d5c84319c7e` |
+| 크기 / Size | 2,281,472 | 2,281,472 | 2,281,472 |
+| 인증서 버전 / Cert version | `00000001` | `00000001` | `00000007` |
+| 인증서 시각 / Certificate time | `3C5881D9` | `3C56850C` | `3E44325E` |
+| 이미지 시각 / Image time | `3C558EA7` | `3C559627` | `3C44170F` |
+| 진입점 / Entry point | `00148023` | `00148023` | `00147FF3` (-0x30) |
+| TLS index 주소 / address | `00264850` | `00264838` | `00264810` (-0x40) |
+| `.data` raw size | `00044574` | `00044554` | `00044574` (US와 같음) |
+| 언어 / Native Language | 영어 / English (1) | 일본어 / Japanese (0) | 영어 / English (1, `0x001FC6E4`) |
+| 프로파일 레이블 / Profile label | `USA (region 1)` — **1차 타깃 / primary** | `Japan (region 2)` — 지원됨 / supported | `Korea bundle (SegaJSRF.xbe)` — issue #124 |
 
-* **확인됨**: 두 빌드는 title id `5345000A`, 인증서 버전 1, XDK 4134, 진입점 `00148023`, 섹션 배치, 커널 import 120개가 같다.
-* **확인됨**: 두 파일은 146,461바이트가 다르고 그 차이는 `.text` 영역(파일 오프셋 `0x1000`부터)에도 있다. 따라서 한 빌드에서 얻은 함수 주소를 다른 빌드에 그대로 쓸 수 없다.
+* **확인됨**: 세 빌드는 title id `5345000A`, XDK 4134, 커널 import 120개가 같다.
+* **확인됨**: 한국 번들(`Sega GT 2002 + JSRF - Jet Set Radio Future (Kor)`)의 `SegaJSRF.xbe`는 게임 코드가 영문(Language index 1)이다.
+* **확인됨**: `SegaJSRF.xbe`의 섹션 크기는 `.text`가 0x30 줄어든 것(`0x17BB00`) 외에 XDK 섹션 및 `.rdata`, `.data`의 크기가 US판과 완전히 일치한다.
+* **확인됨**: `SegaJSRF.xbe`의 225개 named function(seed, extra symbols, decomp)은 주소 시프트 규칙(`va < 0x00074EC3`는 그대로, `0x00074EC3 <= va < 0x18CB40`는 -0x30, `va >= 0x18CB40`는 -0x40)을 적용하면 지문이 100% 일치한다(불일치 0개).
 * **확인됨**: `default.xbe`의 MD5는 [dplewis/jsrf](https://github.com/dplewis/jsrf)가 "JSRF (USA)"로 명시한 MD5와 같다. US판을 1차 타깃으로 정한 근거다. [jsrf-recomp](https://github.com/andeecollard/jsrf-recomp)도 US판과 같은 진입점 `0x00148023`을 쓴다.
 * **미확정**: 이 디스크가 어느 발매판(일본판인지, 지역 변형을 함께 담은 판인지)인지, 그리고 런처가 어느 XBE를 고르는지.
   * **확인됨**(i104): 덤프에는 `default.xbe`(US)와 같은 `default_eng.xbe`, 그리고 `default_jpn.xbe`가 같은 `Media`와 함께 있다. 두 빌드의 차이는 [language](language.md)에 있다.

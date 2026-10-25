@@ -20,27 +20,27 @@
 
 #include <string.h>
 
-extern void sub_001BA8A0_gen(void);
-extern void sub_001BA8F0_gen(void);
-extern void sub_001BA950_gen(void);
-extern void sub_001BA9B0_gen(void);
-extern void sub_001BA9C0_gen(void);
-extern void sub_001BAA00_gen(void);
-extern void sub_001BAA50_gen(void);
-extern void sub_001BAA60_gen(void);
-extern void sub_001BAAA0_gen(void);
-extern void sub_001BAAE0_gen(void);
-extern void sub_001BAB20_gen(void);
-extern void sub_001BABA0_gen(void);
-extern void sub_001BAC00_gen(void);
-extern void sub_001BAC50_gen(void);
-extern void sub_001BAC70_gen(void);
-extern void sub_001BADB0_gen(void);
-extern void sub_001BB270_gen(void);
-extern void sub_001BB2B0_gen(void);
-extern void sub_001BB2E0_gen(void);
-extern void sub_001BB330_gen(void);
-extern void sub_001BB380_gen(void);
+extern void JSRF_DECOMP_001BA8A0_gen(void);
+extern void JSRF_DECOMP_001BA8F0_gen(void);
+extern void JSRF_DECOMP_001BA950_gen(void);
+extern void JSRF_DECOMP_001BA9B0_gen(void);
+extern void JSRF_DECOMP_001BA9C0_gen(void);
+extern void JSRF_DECOMP_001BAA00_gen(void);
+extern void JSRF_DECOMP_001BAA50_gen(void);
+extern void JSRF_DECOMP_001BAA60_gen(void);
+extern void JSRF_DECOMP_001BAAA0_gen(void);
+extern void JSRF_DECOMP_001BAAE0_gen(void);
+extern void JSRF_DECOMP_001BAB20_gen(void);
+extern void JSRF_DECOMP_001BABA0_gen(void);
+extern void JSRF_DECOMP_001BAC00_gen(void);
+extern void JSRF_DECOMP_001BAC50_gen(void);
+extern void JSRF_DECOMP_001BAC70_gen(void);
+extern void JSRF_DECOMP_001BADB0_gen(void);
+extern void JSRF_DECOMP_001BB270_gen(void);
+extern void JSRF_DECOMP_001BB2B0_gen(void);
+extern void JSRF_DECOMP_001BB2E0_gen(void);
+extern void JSRF_DECOMP_001BB330_gen(void);
+extern void JSRF_DECOMP_001BB380_gen(void);
 
 /* Guest globals the library uses (per build: rejsrf/jsrf_addresses.h). */
 #define kStackCell JSRF_MMATRIX_STACK_CELL      /* -> cell holding the current matrix address */
@@ -144,7 +144,7 @@ static __inline uint32_t CurrentMatrix(uintptr_t base)
 #define RET() (g_esp += 4u)
 
 /* 0x001BA8A0: M = identity. eax = M, ecx = 0, edx = 1.0f. */
-void sub_001BA8A0(void)
+void JSRF_DECOMP_001BA8A0(void)
 {
     GUEST_BASE();
     const uint32_t m = CurrentMatrix(base);
@@ -160,7 +160,7 @@ void sub_001BA8A0(void)
 }
 
 /* 0x001BA8F0, ecx = source: M = [ecx]. xmm0..3 = the rows. */
-void sub_001BA8F0(void)
+void JSRF_DECOMP_001BA8F0(void)
 {
     GUEST_BASE();
     const uint32_t m = CurrentMatrix(base);
@@ -182,7 +182,7 @@ void sub_001BA8F0(void)
 }
 
 /* 0x001BA950, ecx = destination: [ecx] = M. */
-void sub_001BA950(void)
+void JSRF_DECOMP_001BA950(void)
 {
     GUEST_BASE();
     const uint32_t m = CurrentMatrix(base);
@@ -204,7 +204,7 @@ void sub_001BA950(void)
 }
 
 /* 0x001BA9B0: eax = M. */
-void sub_001BA9B0(void)
+void JSRF_DECOMP_001BA9B0(void)
 {
     GUEST_BASE();
     g_eax = CurrentMatrix(base);
@@ -213,7 +213,7 @@ void sub_001BA9B0(void)
 
 /* 0x001BA9C0: push a copy of M. edx = the stack cell, eax = old M,
  * ecx = new M. */
-void sub_001BA9C0(void)
+void JSRF_DECOMP_001BA9C0(void)
 {
     GUEST_BASE();
     const uint32_t cell = MEM32(kStackCell);
@@ -239,7 +239,7 @@ void sub_001BA9C0(void)
 }
 
 /* 0x001BAA00: push an identity matrix. eax = new M, ecx = 0, edx = 1.0f. */
-void sub_001BAA00(void)
+void JSRF_DECOMP_001BAA00(void)
 {
     GUEST_BASE();
     const uint32_t cell = MEM32(kStackCell);
@@ -257,7 +257,7 @@ void sub_001BAA00(void)
 }
 
 /* 0x001BAA50: pop. eax = the stack cell, ecx = new M. */
-void sub_001BAA50(void)
+void JSRF_DECOMP_001BAA50(void)
 {
     const uint32_t cell = MEM32(kStackCell);
     const uint32_t m = MEM32(cell) - 0x40;
@@ -286,7 +286,7 @@ static __inline uint32_t Translate(uintptr_t base, uint32_t x_addr, uint32_t y_a
 }
 
 /* 0x001BAA60, cdecl (float x, float y, float z): translate M. eax = M. */
-void sub_001BAA60(void)
+void JSRF_DECOMP_001BAA60(void)
 {
     GUEST_BASE();
     const uint32_t esp = g_esp;
@@ -295,7 +295,7 @@ void sub_001BAA60(void)
 }
 
 /* 0x001BAAA0, ecx = const float v[3]: translate M by v. eax = M. */
-void sub_001BAAA0(void)
+void JSRF_DECOMP_001BAAA0(void)
 {
     GUEST_BASE();
     const uint32_t v = g_ecx;
@@ -305,7 +305,7 @@ void sub_001BAAA0(void)
 
 /* 0x001BAAE0, ecx = const float v[3]: R3 = (R3 - x*R0) - (y*R1 + z*R2).
  * eax = M. */
-void sub_001BAAE0(void)
+void JSRF_DECOMP_001BAAE0(void)
 {
     GUEST_BASE();
     const uint32_t m = CurrentMatrix(base);
@@ -328,7 +328,7 @@ void sub_001BAAE0(void)
 
 /* 0x001BAB20, ecx = float out[3], edx = const float in[3] or NULL: out =
  * in transformed by M (with translation); a NULL in copies R3.xyz. eax = M. */
-void sub_001BAB20(void)
+void JSRF_DECOMP_001BAB20(void)
 {
     GUEST_BASE();
     const uint32_t m = CurrentMatrix(base);
@@ -370,7 +370,7 @@ void sub_001BAB20(void)
  * dst_stride; int src_stride; }*, edx = count (do-while, so 0 means 2^32):
  * dst[i] (16 bytes) = src[i] transformed by M. ebx, esi and edi are pushed
  * and restored; eax = the dst after the last, ecx = src_stride, edx = 0. */
-void sub_001BABA0(void)
+void JSRF_DECOMP_001BABA0(void)
 {
     GUEST_BASE();
     const uint32_t args = g_ecx;
@@ -412,7 +412,7 @@ void sub_001BABA0(void)
 
 /* 0x001BAC00, ecx = float out[3], edx = const float in[3]: out = in rotated
  * by M without translation, ((x*R0 + y*R1) + z*R2). eax = M. */
-void sub_001BAC00(void)
+void JSRF_DECOMP_001BAC00(void)
 {
     GUEST_BASE();
     const uint32_t m = CurrentMatrix(base);
@@ -489,7 +489,7 @@ static __inline void Rotate(uintptr_t base, RotateState* state, uint32_t row_p, 
 }
 
 /* 0x001BB2E0, ecx = angle: rotate about X (rows 1 and 2). */
-void sub_001BB2E0(void)
+void JSRF_DECOMP_001BB2E0(void)
 {
     GUEST_BASE();
     RotateState state = {g_eax, g_ecx};
@@ -500,7 +500,7 @@ void sub_001BB2E0(void)
 }
 
 /* 0x001BB330, ecx = angle: rotate about Y (rows 0 and 2). */
-void sub_001BB330(void)
+void JSRF_DECOMP_001BB330(void)
 {
     GUEST_BASE();
     RotateState state = {g_eax, g_ecx};
@@ -511,7 +511,7 @@ void sub_001BB330(void)
 }
 
 /* 0x001BB380, ecx = angle: rotate about Z (rows 0 and 1). */
-void sub_001BB380(void)
+void JSRF_DECOMP_001BB380(void)
 {
     GUEST_BASE();
     RotateState state = {g_eax, g_ecx};
@@ -525,7 +525,7 @@ void sub_001BB380(void)
  * Y, then X, through 0x001BB380, 0x001BB330 and 0x001BB2E0. The pushes and
  * return addresses it leaves below esp are written as the original does;
  * edx ends as the Y angle. */
-void sub_001BAC50(void)
+void JSRF_DECOMP_001BAC50(void)
 {
     GUEST_BASE();
     const uint32_t angles = g_ecx;
@@ -554,7 +554,7 @@ void sub_001BAC50(void)
  * scratch matrix W at [kWorkMatrix] from p, the angle's (a, b) and the vector
  * at [kWorkVector], then sets M's upper 3x3 rows to (rows of a matrix made
  * from W) times M. kWorkScalar keeps b. eax = M, ecx = W, edx = the vector. */
-void sub_001BAC70(void)
+void JSRF_DECOMP_001BAC70(void)
 {
     GUEST_BASE();
     const uint32_t p = g_ecx;
@@ -626,7 +626,7 @@ void sub_001BAC70(void)
  * (a30*R0 + a31*R1) + (a32*R2 + a33*R3)). The rows of M are read first; A's
  * rows are read as each result row is stored, as the original does. eax = M,
  * xmm4..7 = the old rows. */
-void sub_001BADB0(void)
+void JSRF_DECOMP_001BADB0(void)
 {
     GUEST_BASE();
     const uint32_t m = CurrentMatrix(base);
@@ -668,7 +668,7 @@ void sub_001BADB0(void)
 
 /* 0x001BB270, ecx = const float s[3]: R0..R2 scaled by s.x, s.y, s.z.
  * eax = M. */
-void sub_001BB270(void)
+void JSRF_DECOMP_001BB270(void)
 {
     GUEST_BASE();
     const uint32_t m = CurrentMatrix(base);
@@ -687,7 +687,7 @@ void sub_001BB270(void)
 }
 
 /* 0x001BB2B0, cdecl (float s): R0..R2 scaled by s. eax = M. */
-void sub_001BB2B0(void)
+void JSRF_DECOMP_001BB2B0(void)
 {
     GUEST_BASE();
     const uint32_t m = CurrentMatrix(base);

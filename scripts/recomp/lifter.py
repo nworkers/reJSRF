@@ -52,6 +52,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "third_party" / "rexbox" / "scripts" / "recomp"))
 from hle_overrides import find_symbol_tool, identify_symbols, write_hle_overrides  # noqa: E402  (rexbox's)
 from xbe_variant import check_xbe  # noqa: E402  (rexbox's)
+from variant_fingerprints import translate_va
 
 XBOXRECOMP = ROOT / "third_party" / "xboxrecomp"
 
@@ -96,16 +97,34 @@ def run_step(name, xboxrecomp, args):
     print(f"    {name}: {time.monotonic() - started:.1f}s", flush=True)
 
 
-def seed_files(title_dir):
+def seed_files(title_dir, variant=None, out_dir=None):
     """Seed files are the JSON lists in the title's recomp directory."""
     seeds = []
+    needs_mapping = (variant == "jsrf_bundle_kor")
+    mapped_seed_dir = None
+    if needs_mapping and out_dir is not None:
+        mapped_seed_dir = out_dir / "seeds"
+        mapped_seed_dir.mkdir(parents=True, exist_ok=True)
     for path in sorted(title_dir.glob("*.json")) if title_dir.is_dir() else []:
-        if isinstance(json.loads(path.read_text(encoding="utf-8")), list):
-            seeds.append(path)
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(data, list):
+            if needs_mapping and mapped_seed_dir is not None:
+                mapped_data = []
+                for entry in data:
+                    item = dict(entry)
+                    va = int(item["start"], 16)
+                    target_va = translate_va(va, variant)
+                    item["start"] = f"0x{target_va:08X}"
+                    mapped_data.append(item)
+                target_path = mapped_seed_dir / path.name
+                target_path.write_text(json.dumps(mapped_data, indent=2), encoding="utf-8")
+                seeds.append(target_path)
+            else:
+                seeds.append(path)
     return seeds
 
 
-def collect_overrides(out_dir, hle_overrides, override_dirs, root):
+def collect_overrides(out_dir, hle_overrides, override_dirs, root, variant=None):
     """Concatenate the HLE overrides and every decompiled source for the lifter's scan."""
     sources = sorted(p for d in override_dirs if d.is_dir() for p in d.rglob("*.c"))
     target = out_dir / "overrides.c"
@@ -117,7 +136,12 @@ def collect_overrides(out_dir, hle_overrides, override_dirs, root):
             except ValueError:
                 label = source.as_posix()
             out.write(f"\n/* ---- {label} ---- */\n")
-            out.write(source.read_text(encoding="utf-8"))
+            content = source.read_text(encoding="utf-8")
+            if source != hle_overrides:
+                content = re.sub(r"\b(?:sub_|JSRF_DECOMP_)([0-9A-Fa-f]{8})(_gen)?\b",
+                                 lambda m: f"sub_{translate_va(int(m.group(1), 16), variant):08X}{m.group(2) or ''}",
+                                 content)
+            out.write(content)
     print(f"    overrides: HLE + {len(sources)} decompiled source file(s)")
     return target
 
@@ -181,9 +205,24 @@ def run(argv=None, **defaults):
     if gen_dir.exists():
         shutil.rmtree(gen_dir)
 
-    symbols = identify_symbols(tool, xbe, out, args.title_dir / "xdk_symbols_extra.json")
+    extra_symbols_path = args.title_dir / "xdk_symbols_extra.json"
+    if args.variant == "jsrf_bundle_kor" and extra_symbols_path.is_file():
+        extra_data = json.loads(extra_symbols_path.read_text(encoding="utf-8"))
+        mapped_extra = dict(extra_data)
+        mapped_symbols = []
+        for sym in extra_data.get("symbols", []):
+            item = dict(sym)
+            va = int(item["address"], 16)
+            item["address"] = f"0x{translate_va(va, args.variant):08X}"
+            mapped_symbols.append(item)
+        mapped_extra["symbols"] = mapped_symbols
+        target_extra = out / "xdk_symbols_extra.json"
+        target_extra.write_text(json.dumps(mapped_extra, indent=2), encoding="utf-8")
+        extra_symbols_path = target_extra
+
+    symbols = identify_symbols(tool, xbe, out, extra_symbols_path)
     run_step("parse", xboxrecomp, ["tools.xbe_parser", xbe, "--json", out / "analysis.json", "--quiet"])
-    seeds = seed_files(args.title_dir)
+    seeds = seed_files(args.title_dir, variant=args.variant, out_dir=out)
     seed_args = [arg for seed in seeds for arg in ("--seed-functions", seed)]
     print(f"    seeds: {len(seeds)} file(s)")
     run_step("disasm", xboxrecomp, ["tools.disasm", xbe, "--analysis-json", out / "analysis.json",
@@ -198,7 +237,8 @@ def run(argv=None, **defaults):
 
     hle_overrides = write_hle_overrides(symbols, function_starts(out / "disasm"), out,
                                         args.title_dir / "hle_libraries.json", entry_name, lifted_name)
-    overrides = collect_overrides(out, hle_overrides, [pathlib.Path(d) for d in override_dirs], root)
+    overrides = collect_overrides(out, hle_overrides, [pathlib.Path(d) for d in override_dirs], root,
+                                  variant=args.variant)
     run_step("lift", xboxrecomp, ["tools.recomp", xbe, "--all", "--split", args.split,
                                   "--disasm-dir", out / "disasm", "--func-id-dir", out / "func-id",
                                   "--abi-dir", out / "abi", "--gen-dir", gen_dir,

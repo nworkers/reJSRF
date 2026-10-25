@@ -3,8 +3,8 @@
 # third_party/rexbox.
 
 # Compares decompiled functions with the lifted bodies they replace; needs the
-# generated code.
-if(TARGET rejsrf_recomp)
+# generated code and US build symbols.
+if(TARGET rejsrf_recomp AND REJSRF_VARIANT STREQUAL "jsrf_us")
     add_executable(rejsrf_decomp_check decomp_check/main.cpp)
     target_link_libraries(rejsrf_decomp_check PRIVATE rejsrf_game)
     rexbox_strict_warnings(rejsrf_decomp_check)

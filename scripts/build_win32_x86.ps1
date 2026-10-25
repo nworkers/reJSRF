@@ -8,7 +8,7 @@
 param(
     [ValidateSet("Debug", "Release", "RelWithDebInfo", "MinSizeRel")]
     [string]$Configuration = "Debug",
-    [ValidateSet("us", "jp")]
+    [ValidateSet("us", "jp", "bundle_kor", "kor")]
     [string]$Variant = "us",
     [string[]]$Target = @()
 )
@@ -16,7 +16,9 @@ param(
 $ErrorActionPreference = "Stop"
 
 $Root = Resolve-Path (Join-Path $PSScriptRoot "..")
-$BuildDir = Join-Path $Root $(if ($Variant -eq "jp") { "build\win32_x86_jp" } else { "build\win32_x86" })
+$variantName = if ($Variant -in @("bundle_kor", "kor")) { "jsrf_bundle_kor" } elseif ($Variant -eq "jp") { "jsrf_jp" } else { "jsrf_us" }
+$buildFolder = if ($Variant -in @("bundle_kor", "kor")) { "build\win32_x86_bundle_kor" } elseif ($Variant -eq "jp") { "build\win32_x86_jp" } else { "build\win32_x86" }
+$BuildDir = Join-Path $Root $buildFolder
 $VsWhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
 
 function Resolve-CMake
@@ -107,7 +109,7 @@ if (Test-Path $cache)
     }
 }
 
-& $cmake -S $Root -B $BuildDir -G $generator -A Win32 "-DREJSRF_VARIANT=jsrf_$Variant"
+& $cmake -S $Root -B $BuildDir -G $generator -A Win32 "-DREJSRF_VARIANT=$variantName"
 if ($LASTEXITCODE -ne 0)
 {
     throw "CMake configure failed."

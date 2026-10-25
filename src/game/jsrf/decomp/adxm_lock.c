@@ -18,15 +18,16 @@
  * thread's depth instead (issue #100). */
 
 #include "recomp_types.h"
+#include "rejsrf/jsrf_addresses.h"
 #include "rexbox/runtime/guest_lock.h"
 
 #include <stdio.h>
 
-extern void sub_0013B0A0_gen(void);
-extern void sub_0013B0E0_gen(void);
-extern void sub_00147CC0(void); /* XAPI SetThreadPriority, stdcall (HANDLE, int) */
-extern void sub_00147D12(void); /* XAPI GetThreadPriority, stdcall (HANDLE) */
-extern void sub_00141B80(void); /* SVM_Unlock: the unlock callback through its pointer */
+extern void JSRF_DECOMP_0013B0A0_gen(void);
+extern void JSRF_DECOMP_0013B0E0_gen(void);
+extern void JSRF_DECOMP_00147CC0(void); /* XAPI SetThreadPriority, stdcall (HANDLE, int) */
+extern void JSRF_DECOMP_00147D12(void); /* XAPI GetThreadPriority, stdcall (HANDLE) */
+extern void JSRF_DECOMP_00141B80(void); /* SVM_Unlock: the unlock callback through its pointer */
 
 static RexboxGuestLock g_adxm_lock = {"CRI ADXM lock", 0};
 
@@ -43,7 +44,7 @@ static int32_t CurrentThreadPriority(void)
 {
     PUSH32(g_esp, CURRENT_THREAD);
     PUSH32(g_esp, 0); /* return address; ret 4 pops it with the argument */
-    sub_00147D12();
+    JSRF_DECOMP_00147D12();
     return (int32_t)g_eax;
 }
 
@@ -52,21 +53,21 @@ static void SetCurrentThreadPriority(int32_t priority)
     PUSH32(g_esp, (uint32_t)priority);
     PUSH32(g_esp, CURRENT_THREAD);
     PUSH32(g_esp, 0);
-    sub_00147CC0();
+    JSRF_DECOMP_00147CC0();
 }
 
 /* 0x0013B0A0, cdecl: void (void* unused)
  *
  * Lock: at count 0, saves the caller's priority, raises it to TIME_CRITICAL
  * and resumes the ADXM safe thread; then count + 1. */
-void sub_0013B0A0(void)
+void JSRF_DECOMP_0013B0A0(void)
 {
     rexbox_guest_lock_enter(&g_adxm_lock);
     if (t_depth++ == 0)
     {
         t_priority = CurrentThreadPriority();
     }
-    sub_0013B0A0_gen();
+    JSRF_DECOMP_0013B0A0_gen();
 }
 
 /* 0x0013B0E0, cdecl: void (void* unused)
@@ -74,9 +75,9 @@ void sub_0013B0A0(void)
  * Unlock: count - 1; at 0, suspends the safe thread and restores the saved
  * priority. That saved priority may be another thread's when two left out
  * of order, so a thread done with the lock takes back its own. */
-void sub_0013B0E0(void)
+void JSRF_DECOMP_0013B0E0(void)
 {
-    sub_0013B0E0_gen();
+    JSRF_DECOMP_0013B0E0_gen();
     if (t_depth != 0 && --t_depth == 0)
     {
         const int32_t priority = CurrentThreadPriority();
@@ -102,13 +103,13 @@ void sub_0013B0E0(void)
  * with nothing to release, and the loop never ends (issue #100). This
  * thread's own depth is what it holds, so release that, and lower a
  * priority left behind. */
-void sub_001437B0(void)
+void JSRF_DECOMP_001437B0(void)
 {
     uint32_t released = 0;
     while (t_depth != 0)
     {
         PUSH32(g_esp, 0); /* return address */
-        sub_00141B80();
+        JSRF_DECOMP_00141B80();
         ++released;
     }
     const int32_t priority = CurrentThreadPriority();

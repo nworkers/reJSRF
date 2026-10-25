@@ -19,6 +19,8 @@ target_link_libraries(rejsrf_game PUBLIC rexbox_recomp)
 # sources pick its data addresses (include/rejsrf/jsrf_addresses.h).
 if(REJSRF_VARIANT STREQUAL "jsrf_jp")
     target_compile_definitions(rejsrf_game PUBLIC REJSRF_VARIANT_JP=1)
+elseif(REJSRF_VARIANT STREQUAL "jsrf_bundle_kor")
+    target_compile_definitions(rejsrf_game PUBLIC REJSRF_VARIANT_BUNDLE_KOR=1)
 endif()
 
 # The generated code (rejsrf_recomp), built by rexbox against the pinned

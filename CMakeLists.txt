@@ -39,13 +39,13 @@ add_subdirectory(third_party/rexbox)
 rexbox_apply_host_flags()
 message(STATUS "reJSRF platform: ${REXBOX_PLATFORM}/${REXBOX_ARCH}")
 
-# The XBE build this tree is built for: the USA or the Japanese disc. One
-# executable runs one build; the other is a separate build directory
-# (docs/design/20261020-i108-japanese-variant.md).
-set(REJSRF_VARIANT "jsrf_us" CACHE STRING "XBE build to build for: jsrf_us (USA) or jsrf_jp (Japan)")
-set_property(CACHE REJSRF_VARIANT PROPERTY STRINGS jsrf_us jsrf_jp)
-if(NOT REJSRF_VARIANT MATCHES "^(jsrf_us|jsrf_jp)$")
-    message(FATAL_ERROR "REJSRF_VARIANT must be jsrf_us or jsrf_jp, not '${REJSRF_VARIANT}'")
+# The XBE build this tree is built for: the USA, Japanese, or Korea combo disc.
+# One executable runs one build; the others are separate build directories
+# (docs/design/20261020-i108-japanese-variant.md, docs/design/20261026-i124-bundle-variant.md).
+set(REJSRF_VARIANT "jsrf_us" CACHE STRING "XBE build to build for: jsrf_us (USA), jsrf_jp (Japan), or jsrf_bundle_kor (Korea bundle)")
+set_property(CACHE REJSRF_VARIANT PROPERTY STRINGS jsrf_us jsrf_jp jsrf_bundle_kor)
+if(NOT REJSRF_VARIANT MATCHES "^(jsrf_us|jsrf_jp|jsrf_bundle_kor)$")
+    message(FATAL_ERROR "REJSRF_VARIANT must be jsrf_us, jsrf_jp, or jsrf_bundle_kor, not '${REJSRF_VARIANT}'")
 endif()
 message(STATUS "reJSRF variant: ${REJSRF_VARIANT}")
 
@@ -54,7 +54,7 @@ message(STATUS "reJSRF variant: ${REJSRF_VARIANT}")
 set(REJSRF_RECOMP_GEN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/gen/${REJSRF_VARIANT}/gen" CACHE PATH
     "Directory of generated recompiled C (recomp_dispatch.c and friends)")
 # A tree reconfigured for the other variant still caches the old default.
-if(REJSRF_RECOMP_GEN_DIR MATCHES "/gen/jsrf_(us|jp)/gen$"
+if(REJSRF_RECOMP_GEN_DIR MATCHES "/gen/jsrf_(us|jp|bundle_kor)/gen$"
    AND NOT REJSRF_RECOMP_GEN_DIR STREQUAL "${CMAKE_CURRENT_SOURCE_DIR}/gen/${REJSRF_VARIANT}/gen")
     set(REJSRF_RECOMP_GEN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/gen/${REJSRF_VARIANT}/gen" CACHE PATH
         "Directory of generated recompiled C (recomp_dispatch.c and friends)" FORCE)

@@ -24,16 +24,21 @@ namespace
 // Both share title id 5345000A, XDK 4134 and the entry point. Their code sits
 // at the same addresses but their data moved, so one executable runs one of
 // them (docs/design/20261020-i108-japanese-variant.md).
-constexpr std::array<XbeVariant, 2> kVariants = {{
+constexpr std::array<XbeVariant, 3> kVariants = {{
     // The USA retail build (MD5 f4e366bfdceee551a09f42219c90d84e).
     {"jsrf_us", "US", "USA (region 1)", 0x5345000A, 0x3C5881D9, 0x00000001, 0x3C558EA7},
     // The Japan-region build (MD5 d8490cdb75bd47b36c62effdf1461ae0).
     {"jsrf_jp", "JP", "Japan (region 2)", 0x5345000A, 0x3C56850C, 0x00000001, 0x3C559627},
+    // The Korea combo disc build (MD5 8bf3c450e9c1cc39730d4025ef987e2c).
+    {"jsrf_bundle_kor", "KOR_BUNDLE", "Korea bundle (SegaJSRF.xbe)", 0x5345000A, 0x3E44325E, 0x00000007, 0x3C44170F},
 }};
 
 #if defined(REJSRF_VARIANT_JP)
 constexpr size_t kBuiltVariant = 1;
 constexpr Language kNativeLanguage = Language::kJapanese;
+#elif defined(REJSRF_VARIANT_BUNDLE_KOR)
+constexpr size_t kBuiltVariant = 2;
+constexpr Language kNativeLanguage = Language::kEnglish;
 #else
 constexpr size_t kBuiltVariant = 0;
 constexpr Language kNativeLanguage = Language::kEnglish;
@@ -51,7 +56,7 @@ struct XdkInternal
 // and the screen-space offset through the public setters, so the HLE device
 // runs it to start from the original defaults.
 constexpr std::array<XdkInternal, 1> kXdkInternals = {{
-    {"D3D_InitializeDeviceState", 0x001919C0},
+    {"D3D_InitializeDeviceState", JSRF_D3D_INITIALIZE_DEVICE_STATE},
 }};
 
 // The language index, read through the getter sub_00043700 at 191 sites
@@ -76,8 +81,8 @@ struct SectionHash
 
 constexpr const char* kTextSections[] = {".rdata", ".data"};
 
-#if defined(REJSRF_VARIANT_JP)
-// The Japanese build: no Korean patch exists for it (the table stays empty,
+#if defined(REJSRF_VARIANT_JP) || defined(REJSRF_VARIANT_BUNDLE_KOR)
+// No Korean patch exists for this build (the table stays empty,
 // and LanguageAvailable refuses Korean).
 constexpr std::array<SectionHash, 0> kSectionHashes = {};
 #else

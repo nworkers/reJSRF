@@ -8,6 +8,10 @@
     "jsrf_jp": {
       "label": "Japan (region 2)",
       "md5": "d8490cdb75bd47b36c62effdf1461ae0"
+    },
+    "jsrf_bundle_kor": {
+      "label": "Korea bundle (SegaJSRF.xbe)",
+      "md5": "8bf3c450e9c1cc39730d4025ef987e2c"
     }
   }
 }

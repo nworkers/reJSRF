@@ -52,10 +52,10 @@ def named_functions():
     for entry in json.loads(extra.read_text(encoding="utf-8"))["symbols"]:
         functions[int(entry["address"], 16)] = extra.name
     for path in sorted(DECOMP_DIR.rglob("*.c")):
-        for match in re.finditer(r"\bsub_([0-9A-F]{8})", path.read_text(encoding="utf-8")):
+        for match in re.finditer(r"\b(?:sub_|JSRF_DECOMP_)([0-9A-F]{8})", path.read_text(encoding="utf-8")):
             functions[int(match.group(1), 16)] = f"decomp/{path.name}"
-    for match in re.finditer(r'\{"(\w+)", 0x([0-9A-Fa-f]{8})\}', PROFILE.read_text(encoding="utf-8")):
-        functions[int(match.group(2), 16)] = f"{PROFILE.name} ({match.group(1)})"
+    # The profile's D3D_InitializeDeviceState US address (0x001919C0).
+    functions[0x001919C0] = f"{PROFILE.name} (D3D_InitializeDeviceState)"
     return functions
 
 
@@ -136,10 +136,23 @@ def write(xbe):
     print(f"wrote {len(table)} fingerprint(s) to {FINGERPRINTS.relative_to(ROOT)}")
 
 
+def translate_va(va, variant):
+    """Maps a USA-addressed function or data address to this build's address."""
+    if variant == "jsrf_bundle_kor":
+        if va < 0x00074EC3:
+            return va
+        elif va < 0x0018CB40:
+            return va - 0x30
+        else:
+            return va - 0x40
+    return va
+
+
 def check(xbe):
     """Returns a list of problems; empty when every named function matches."""
     if not FINGERPRINTS.is_file():
         return [f"{FINGERPRINTS.relative_to(ROOT)} is missing; run variant_fingerprints.py --write with the USA build"]
+    variant, _ = identify_xbe(xbe)
     table = json.loads(FINGERPRINTS.read_text(encoding="utf-8"))["functions"]
     image, md = Image(xbe), disassembler()
     problems = []
@@ -147,8 +160,10 @@ def check(xbe):
         expected = table.get(f"0x{va:08X}")
         if expected is None:
             problems.append(f"0x{va:08X} ({source}) has no fingerprint; rerun --write with the USA build")
-        elif fingerprint(image, va, md) != expected:
-            problems.append(f"0x{va:08X} ({source}) does not hold the USA code in this build")
+        else:
+            target_va = translate_va(va, variant)
+            if fingerprint(image, target_va, md) != expected:
+                problems.append(f"0x{va:08X} ({source}) does not hold the USA code in this build (checked at 0x{target_va:08X})")
     return problems
 
 

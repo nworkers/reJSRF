@@ -379,6 +379,19 @@ int main(int argc, char** argv)
                      options.game_directory.c_str());
         return 1;
     }
+    if (options.xbe == kDefaultXbe)
+    {
+        const std::filesystem::path bundle_xbe = game_directory / "SegaJSRF.xbe";
+        if (std::string(rejsrf::BuiltVariant()->tag) == "KOR_BUNDLE" && std::filesystem::is_regular_file(bundle_xbe, ec))
+        {
+            options.xbe = "SegaJSRF.xbe";
+        }
+        else if (!std::filesystem::is_regular_file(game_directory / kDefaultXbe, ec) &&
+                 std::filesystem::is_regular_file(bundle_xbe, ec))
+        {
+            options.xbe = "SegaJSRF.xbe";
+        }
+    }
     const std::filesystem::path xbe_path = game_directory / options.xbe;
     if (!std::filesystem::is_regular_file(xbe_path, ec))
     {
