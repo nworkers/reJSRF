@@ -64,6 +64,35 @@ function Resolve-VisualStudioGenerator
     throw "No supported Visual Studio with the x86/x64 C++ tools was found (2022 or 2026)."
 }
 
+# rexbox carries its own submodules (SDL, imgui, smaa, XbSymbolDatabase), so a
+# plain `git submodule update --init` leaves them empty and the configure stops
+# inside rexbox. Say the recursive command before CMake runs. A tree without
+# git metadata (an exported source) skips the check.
+function Test-Submodules
+{
+    if (-not (Test-Path (Join-Path $Root ".git")))
+    {
+        return
+    }
+    $git = Get-Command git -ErrorAction SilentlyContinue
+    if ($git -eq $null)
+    {
+        return
+    }
+    $status = & $git.Source -C $Root submodule status --recursive
+    if ($LASTEXITCODE -ne 0)
+    {
+        return
+    }
+    # A line starting with "-" is a registered submodule that is not checked out.
+    $missing = @($status | Where-Object { $_ -match "^-" } | ForEach-Object { ($_ -split "\s+")[1] })
+    if ($missing.Count -gt 0)
+    {
+        throw ("Submodule(s) not checked out: " + ($missing -join ", ") + "; run: git submodule update --init --recursive")
+    }
+}
+
+Test-Submodules
 $cmake = Resolve-CMake
 $generator = Resolve-VisualStudioGenerator
 

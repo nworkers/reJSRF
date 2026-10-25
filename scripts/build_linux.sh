@@ -48,6 +48,19 @@ if [ "$variant" = "jp" ]; then
 fi
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
+# rexbox carries its own submodules (SDL, imgui, smaa, XbSymbolDatabase), so a
+# plain `git submodule update --init` leaves them empty and the configure stops
+# inside rexbox. Say the recursive command before CMake runs. A tree without
+# git metadata (an exported source) skips the check. A line starting with "-"
+# is a registered submodule that is not checked out.
+if [ -e .git ] && command -v git >/dev/null 2>&1; then
+    missing="$(git submodule status --recursive | awk '/^-/ { print $2 }')"
+    if [ -n "$missing" ]; then
+        echo "submodule(s) not checked out: $(echo "$missing" | xargs)" >&2
+        echo "run: git submodule update --init --recursive" >&2
+        exit 2
+    fi
+fi
 cmake --preset "$preset"
 if [ ${#targets[@]} -gt 0 ]; then
     cmake --build --preset "$preset" --parallel --target "${targets[@]}"
